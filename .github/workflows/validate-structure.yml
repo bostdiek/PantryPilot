@@ -1,0 +1,55 @@
+name: Validate Directory Structure
+
+on:
+  push:
+    branches:
+      - main
+      - bostdiek/scaffold
+  pull_request:
+    branches:
+      - main
+      - bostdiek/scaffold
+
+jobs:
+  structure:
+    runs-on: ubuntu-latest
+    steps:
+  - uses: actions/checkout@v4
+      - name: Validate directories and files
+        run: |
+          set -e
+
+          REQUIRED_DIRS=(
+            "apps/backend/src"
+            "apps/frontend/src"
+            "shared/types"
+            "shared/utils"
+            "db"
+          )
+          for dir in "${REQUIRED_DIRS[@]}"; do
+            if [ ! -d "$dir" ]; then
+              echo "❌ Missing directory: $dir"
+              exit 1
+            else
+              echo "✅ Found directory: $dir"
+            fi
+          done
+
+          REQUIRED_FILES=(
+            "apps/backend/src/main.py"
+            "apps/frontend/src/main.tsx"
+            "shared/types/.gitkeep"
+            "shared/utils/.gitkeep"
+            "db/schema.sql"
+            "db/entrypoint.sh"
+            "Makefile"
+            "docker-compose.yml"
+          )
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing file: $file"
+              exit 1
+            else
+              echo "✅ Found file: $file"
+            fi
+          done
