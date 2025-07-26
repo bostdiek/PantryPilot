@@ -16,6 +16,9 @@ pantrypilot/
 │   │   │   ├── crud/                 # Database operations/services
 │   │   │   └── dependencies/         # FastAPI dependencies
 │   │   ├── alembic/                  # DB migrations
+│   │   │   ├── env.py                # Migration environment setup
+│   │   │   └── versions/             # Auto-generated migration scripts
+│   │   ├── alembic.ini               # Alembic configuration file
 │   │   ├── tests/                    # Backend unit & integration tests
 │   │   ├── Dockerfile
 │   │   └── requirements.txt or pyproject.toml
