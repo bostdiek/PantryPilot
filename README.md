@@ -1,4 +1,7 @@
 # PantryPilot
+
+[![CI](https://github.com/bryanostdiek/pantrypilot/actions/workflows/ci.yml/badge.svg)](https://github.com/bryanostdiek/pantrypilot/actions/workflows/ci.yml)
+
 Helps families plan the weekly meals and grocery list
 
 ## Proposed structure
