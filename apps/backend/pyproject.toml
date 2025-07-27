@@ -9,3 +9,33 @@ dependencies = [
     "fastapi>=0.116.1",
     "uvicorn>=0.35.0",
 ]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.2.0",
+    "pytest>=8.4.1",
+    "ruff>=0.12.5",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # bugbear
+    "UP",   # pyupgrade
+    "C90",  # mccabe complexity
+]
+ignore = []
+fix = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-width = 4
+
+[tool.ruff.isort]
+known-first-party = ["backend"]
+combine-as-imports = true
+lines-after-imports = 2
