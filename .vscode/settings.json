@@ -57,5 +57,13 @@
     "[scss]": {
         "editor.formatOnSave": true
     },
+    "tailwindCSS.includeLanguages": {
+        "typescript": "typescript",
+        "typescriptreact": "typescriptreact"
+    },
+    "tailwindCSS.experimental.classRegex": [
+        ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
+        ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
+    ],
     "python-envs.pythonProjects": []
 }
