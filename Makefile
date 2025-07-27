@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help up down reset-db lint test test-backend test-coverage setup-dev
+.PHONY: help up down reset-db lint test test-backend test-coverage
 
 help:
 	@echo "Available targets:"
@@ -11,11 +11,6 @@ help:
 	@echo "  test          - Run all tests"
 	@echo "  test-backend  - Run backend tests"
 	@echo "  test-coverage - Run backend tests with coverage report"
-	@echo "  setup-dev     - Set up development environment"
-
-setup-dev:
-	# Setup the development environment with uv
-	cd apps/backend && uv venv && uv pip install -e . && uv pip install pytest pytest-cov httpx pre-commit ruff
 
 up:
 	# Start services using Docker Compose
@@ -33,14 +28,14 @@ reset-db:
 
 lint:
 	# Run linters
-	cd apps/backend && source .venv/bin/activate && python -m ruff check .
+	cd apps/backend && uv run ruff check .
 
 test: test-backend
 
 test-backend:
 	# Run backend tests
-	cd apps/backend && source .venv/bin/activate && python -m pytest
+	cd apps/backend && uv run pytest
 
 test-coverage:
 	# Run backend tests with coverage
-	cd apps/backend && source .venv/bin/activate && python -m pytest --cov=src --cov-report=term --cov-report=html
+	cd apps/backend && uv run pytest --cov=src --cov-report=term --cov-report=html

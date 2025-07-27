@@ -11,13 +11,12 @@
         "--cov-report=html",
         "apps/backend/tests"
     ],
-    "python.testing.pytestPath": "${workspaceFolder}/apps/backend/scripts/run_pytest.sh",
-    "python.defaultInterpreterPath": "${workspaceFolder}/apps/backend/.venv/bin/python",
     "[python]": {
         "editor.formatOnSave": true,
         "editor.codeActionsOnSave": {
             "source.organizeImports": "explicit",
             "source.fixAll": "explicit"
         }
-    }
+    },
+    "python-envs.pythonProjects": []
 }
