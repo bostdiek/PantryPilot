@@ -1,0 +1,23 @@
+{
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/apps/backend/src"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+    "python.testing.nosetestsEnabled": false,
+    "python.testing.pytestArgs": [
+        "--cov=src",
+        "--cov-report=term",
+        "--cov-report=html",
+        "apps/backend/tests"
+    ],
+    "python.testing.pytestPath": "${workspaceFolder}/apps/backend/scripts/run_pytest.sh",
+    "python.defaultInterpreterPath": "${workspaceFolder}/apps/backend/.venv/bin/python",
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit",
+            "source.fixAll": "explicit"
+        }
+    }
+}

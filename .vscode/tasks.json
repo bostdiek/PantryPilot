@@ -1,0 +1,48 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Test: Run All Tests",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run pytest",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Test: Run with Coverage",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run pytest --cov=src --cov-report=term --cov-report=html",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Test: Run Current File",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run pytest ${relativeFile} -v",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        },
+        {
+            "label": "Lint: Run Ruff",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run ruff check .",
+            "group": "test",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ]
+}
