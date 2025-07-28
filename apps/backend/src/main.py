@@ -1,5 +1,6 @@
+import logging
 import os
-import re
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,20 +10,19 @@ from api.v1.api import api_router
 
 def validate_cors_origins(origins_str: str) -> list[str]:
     """Validate and sanitize CORS origins."""
+
     origins = [origin.strip() for origin in origins_str.split(",") if origin.strip()]
     validated_origins = []
 
-    # Basic URL pattern validation
-    url_pattern = re.compile(
-        r"^https?://[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*"
-        r"(:[0-9]{1,5})?$"
-    )
+    def is_valid_url(url: str) -> bool:
+        parsed = urlparse(url)
+        return bool(parsed.scheme in {"http", "https"} and parsed.netloc)
 
     for origin in origins:
-        if url_pattern.match(origin):
+        if is_valid_url(origin):
             validated_origins.append(origin)
         else:
-            print(f"Warning: Invalid CORS origin '{origin}' ignored")
+            logging.warning(f"Invalid CORS origin '{origin}' ignored")
 
     return validated_origins
 
