@@ -1,5 +1,5 @@
 export default {
   plugins: {
-    autoprefixer: {},
+    // Tailwind CSS v4 handles autoprefixing automatically
   },
 };
