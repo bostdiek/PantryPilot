@@ -86,7 +86,13 @@ BEGIN
     IF current_database() LIKE '%dev%' OR current_database() LIKE '%development%' THEN
         -- Create readonly user for potential read replicas or reporting
         IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'pantrypilot_readonly') THEN
-            CREATE USER pantrypilot_readonly WITH PASSWORD 'readonly_password_change_me';
+            -- Use environment variable for password, or generate a random one for development
+            PERFORM set_config('readonly_user_password',
+                COALESCE(current_setting('readonly_user_password', true),
+                md5(random()::text || clock_timestamp()::text)),
+                false);
+
+            CREATE USER pantrypilot_readonly WITH PASSWORD current_setting('readonly_user_password');
             GRANT CONNECT ON DATABASE pantrypilot_dev TO pantrypilot_readonly;
             GRANT USAGE ON SCHEMA public TO pantrypilot_readonly;
             -- Grant SELECT on all existing tables

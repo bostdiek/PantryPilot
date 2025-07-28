@@ -1,5 +1,11 @@
 // API configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  import.meta.env.VITE_API_URL ||
+  (import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test'
+    ? 'http://localhost:8000'
+    : (() => {
+        throw new Error('VITE_API_URL must be set in production environments');
+      })());
 
 // API client with proper error handling
 class ApiClient {

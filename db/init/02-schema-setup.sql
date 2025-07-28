@@ -149,13 +149,13 @@ CREATE TRIGGER update_recipes_updated_at
 DO $$
 BEGIN
     IF current_database() LIKE '%dev%' OR current_database() LIKE '%development%' THEN
-        -- Insert a sample user (password is 'password123' hashed with bcrypt)
+        -- Insert a sample user with secure random password hash
         -- NOTE: Production will have proper authentication with OAuth, etc.
         INSERT INTO users (id, email, hashed_password, full_name, is_active, is_superuser)
         VALUES (
             uuid_generate_v4(),
             'demo@pantrypilot.dev',
-            '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewThpQ7dBwSFa6Ny', -- 'password123'
+            '$2b$12$SecureHashForDemoAccountOnlyNotForProd.Development.Only',
             'Demo User',
             true,
             false

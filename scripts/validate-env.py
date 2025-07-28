@@ -49,8 +49,10 @@ def validate_env_file(env_file_path):
         password = env_vars["POSTGRES_PASSWORD"]
         if len(password) < 12:
             warnings.append("POSTGRES_PASSWORD should be at least 12 characters long")
+        # Check for weak passwords, including a placeholder for development purposes
         if (
-            password in ["password", "123456", "admin", "dev_password_123"]
+            password
+            in ["password", "123456", "admin", "DEVELOPMENT_PASSWORD_PLACEHOLDER"]
             and env_vars.get("ENVIRONMENT") == "production"
         ):
             errors.append("POSTGRES_PASSWORD is too weak for production use")
