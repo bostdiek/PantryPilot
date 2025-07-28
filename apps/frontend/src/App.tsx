@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import reactLogo from './assets/react.svg';
-import viteLogo from '/vite.svg';
 import './App.css';
+import reactLogo from './assets/react.svg';
+import { useApiTest } from './hooks/useApiTest';
+import viteLogo from '/vite.svg';
 
 function App() {
   const [count, setCount] = useState(0);
+  const { status: apiStatus, isLoading, testConnection } = useApiTest();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-100">
@@ -27,6 +29,18 @@ function App() {
           >
             count is {count}
           </button>
+          <button
+            onClick={testConnection}
+            disabled={isLoading}
+            className="mb-4 ml-2 rounded bg-green-500 px-4 py-2 font-bold text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {isLoading ? 'Testing...' : 'Test API'}
+          </button>
+          {apiStatus && (
+            <div className="mb-4 rounded bg-gray-100 p-2 text-sm">
+              {apiStatus}
+            </div>
+          )}
           <p className="mb-4 text-gray-600">
             Edit <code className="rounded bg-gray-200 px-1">src/App.tsx</code>{' '}
             and save to test HMR

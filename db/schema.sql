@@ -1,2 +1,0 @@
--- db/schema.sql stub
--- Add your database schema definitions here
