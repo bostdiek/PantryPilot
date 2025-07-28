@@ -217,6 +217,4 @@ db-maintenance:
 	./db/maintenance.sh -e $(ENV) $(CMD)
 
 db-shell:
-	# Open PostgreSQL shell (ENV=$(ENV))
-	@echo "🐘 Opening PostgreSQL shell for $(ENV) environment..."
-	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec db psql -U $$POSTGRES_USER -d $$POSTGRES_DB
+	docker compose --env-file .env.dev -f docker-compose.yml -f docker-compose.dev.yml exec db psql -U pantrypilot_dev -d pantrypilot_dev
