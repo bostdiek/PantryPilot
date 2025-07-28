@@ -4,6 +4,24 @@
 
 Helps families plan the weekly meals and grocery list
 
+> **🚧 Current Status**: This project is in early development with Docker Compose setup and basic database schema for demonstration purposes. The current database schema is **for testing and development workflow validation only**. The actual production schema for the AI-powered recipe recommendation system will be designed collaboratively based on specific requirements for ingredient analysis, recipe matching, and machine learning integration.
+
+## Quick Start
+
+```bash
+# Start development environment
+make up
+
+# View logs
+make logs
+
+# Run database health check
+make db-maintenance CMD=health
+
+# Stop services
+make down
+```
+
 ## Proposed structure
 
 ```text

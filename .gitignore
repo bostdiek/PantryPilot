@@ -150,6 +150,12 @@ venv.bak/
 .env.local
 .env.staging
 
+# Database backups (but not initialization scripts)
+backups/
+backups/*.sql
+backups/*.sql.gz
+backups/*.sql.meta
+
 # Spyder project settings
 .spyderproject
 .spyproject

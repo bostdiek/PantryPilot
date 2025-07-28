@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean
 
 # Environment detection
 ENV ?= dev
@@ -29,6 +29,12 @@ help:
 	@echo "  reset-db-dev       - Reset development database"
 	@echo "  reset-db-prod      - Reset production database"
 	@echo ""
+	@echo "Database Management:"
+	@echo "  db-backup          - Create database backup (ENV=dev default)"
+	@echo "  db-restore FILE=   - Restore database from backup file"
+	@echo "  db-maintenance CMD= - Run database maintenance (analyze, vacuum, stats, etc.)"
+	@echo "  db-shell           - Open PostgreSQL shell (ENV=dev default)"
+	@echo ""
 	@echo "Development:"
 	@echo "  install            - Install all dependencies"
 	@echo "  install-backend    - Install backend dependencies"
@@ -56,6 +62,8 @@ help:
 	@echo "  make ENV=prod up     # Start in production mode"
 	@echo "  make logs            # View development logs"
 	@echo "  make ENV=prod logs   # View production logs"
+	@echo "  make db-backup       # Backup development database"
+	@echo "  make db-maintenance CMD=stats  # Show database statistics"
 
 # Environment and Docker Compose targets
 validate-env:
@@ -182,3 +190,33 @@ clean:
 	# Clean build artifacts and caches
 	cd apps/backend && rm -rf .pytest_cache __pycache__ .coverage htmlcov .mypy_cache .ruff_cache
 	cd apps/frontend && rm -rf node_modules/.cache dist coverage
+
+# Database management targets
+db-backup:
+	# Create database backup (ENV=$(ENV))
+	@echo "🗄️ Creating database backup for $(ENV) environment..."
+	./db/backup.sh -e $(ENV)
+
+db-restore:
+	# Restore database from backup file (ENV=$(ENV), FILE=backup.sql)
+	@if [ -z "$(FILE)" ]; then \
+		echo "❌ Error: FILE parameter required. Usage: make db-restore FILE=backup.sql"; \
+		exit 1; \
+	fi
+	@echo "🔄 Restoring database from $(FILE) to $(ENV) environment..."
+	./db/restore.sh -e $(ENV) $(FILE)
+
+db-maintenance:
+	# Run database maintenance command (ENV=$(ENV), CMD=stats)
+	@if [ -z "$(CMD)" ]; then \
+		echo "❌ Error: CMD parameter required. Usage: make db-maintenance CMD=stats"; \
+		echo "Available commands: analyze, vacuum, stats, health, slow-queries, connections, size, all"; \
+		exit 1; \
+	fi
+	@echo "🔧 Running database maintenance: $(CMD) on $(ENV) environment..."
+	./db/maintenance.sh -e $(ENV) $(CMD)
+
+db-shell:
+	# Open PostgreSQL shell (ENV=$(ENV))
+	@echo "🐘 Opening PostgreSQL shell for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec db psql -U $$POSTGRES_USER -d $$POSTGRES_DB
