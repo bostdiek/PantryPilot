@@ -263,10 +263,48 @@ Your project already has `useApiTest.ts`. You'll create similar hooks like:
 - `useSearch()`: Handle search and filter logic
 - `useForm()`: Manage form state and validation
 
+### Zustand: The Sweet Spot for State Management
+For your recipe app, **Zustand** offers the perfect balance between simplicity and power:
+
+**What is Zustand?**
+- **Lightweight** (~8KB) state management library
+- **No providers** or boilerplate required
+- **TypeScript-first** with excellent type inference
+- **Global state** without Context API complexity
+
+**Why Zustand for Your Project?**
+```typescript
+// Instead of prop drilling or complex Context setup:
+import { create } from 'zustand'
+
+const useRecipeStore = create((set) => ({
+  recipes: [],
+  searchTerm: '',
+  isLoading: false,
+
+  // Actions update state immutably
+  addRecipe: (recipe) => set((state) => ({
+    recipes: [...state.recipes, recipe]
+  })),
+  setSearchTerm: (term) => set({ searchTerm: term }),
+  setLoading: (loading) => set({ isLoading: loading }),
+}))
+
+// Use anywhere - component auto-rerenders when data changes
+function RecipeList() {
+  const { recipes, searchTerm } = useRecipeStore()
+  const filteredRecipes = recipes.filter(r =>
+    r.title.includes(searchTerm)
+  )
+  return <div>{/* render recipes */}</div>
+}
+```
+
 **Mental Model**: Think of state like **water in a building**:
 - Flows down from higher to lower levels
 - Pumps (callbacks) can send it back up
 - Shared pipes (context) can distribute to multiple rooms
+- **Zustand is like a smart water system** that automatically delivers water where needed
 
 ---
 
@@ -370,44 +408,319 @@ Your project uses **React Testing Library**, which focuses on testing **behavior
 
 ## Implementation Roadmap
 
-### Phase 1: Router Foundation (Week 1)
-**Goal**: Set up navigation between pages
+### Phase 1: Router Foundation + Zustand Basics (Week 1)
+**Goal**: Set up navigation between pages and basic global state
 
 **Tasks**:
-1. Install React Router
+1. Install React Router and Zustand
+```bash
+cd apps/frontend
+npm install react-router-dom zustand
+npm install @types/react-router-dom --save-dev
+```
+
 2. Create basic page components (empty shells)
-3. Set up routing structure
-4. Add navigation component
+3. Set up routing structure with React Router
+4. Create a simple Zustand store for global UI state
+5. Add navigation component
 
-**Learning Focus**: How routing works, component composition
+**Simple Zustand Store to Start**:
+```typescript
+// stores/useAppStore.ts
+import { create } from 'zustand'
 
-**Success Metric**: You can navigate between all required pages
+interface AppState {
+  currentPage: string
+  isMenuOpen: boolean
+  theme: 'light' | 'dark'
 
-### Phase 2: API Integration (Week 1-2)
-**Goal**: Connect frontend to backend
+  setCurrentPage: (page: string) => void
+  toggleMenu: () => void
+  setTheme: (theme: 'light' | 'dark') => void
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  currentPage: 'home',
+  isMenuOpen: false,
+  theme: 'light',
+
+  setCurrentPage: (currentPage) => set({ currentPage }),
+  toggleMenu: () => set((state) => ({ isMenuOpen: !state.isMenuOpen })),
+  setTheme: (theme) => set({ theme }),
+}))
+```
+
+**Learning Focus**: How routing works, component composition, basic global state patterns
+
+**Success Metric**: You can navigate between all required pages and understand how Zustand manages state
+
+### Phase 2: API Integration + Zustand Setup (Week 1-2)
+**Goal**: Connect frontend to backend with smart state management
 
 **Tasks**:
-1. Extend API client with recipe endpoints
-2. Create TypeScript interfaces for data
-3. Implement data fetching hooks
-4. Add loading and error states
+1. Install and configure Zustand for global state
+2. Extend API client with recipe endpoints
+3. Create TypeScript interfaces for data
+4. Implement Zustand stores for recipes and UI state
+5. Add loading and error states
 
-**Learning Focus**: Async operations, TypeScript, state management
+**Zustand Implementation Strategy**:
+```typescript
+// stores/useRecipeStore.ts
+import { create } from 'zustand'
+import { devtools, persist } from 'zustand/middleware'
 
-**Success Metric**: You can fetch and display data from your backend
+interface RecipeState {
+  // Server state (from PostgreSQL)
+  recipes: Recipe[]
+  currentRecipe: Recipe | null
 
-### Phase 3: Core Pages (Week 2-3)
-**Goal**: Build functional pages
+  // UI state
+  searchTerm: string
+  selectedCategory: string
+  isLoading: boolean
+  error: string | null
+
+  // Actions
+  setRecipes: (recipes: Recipe[]) => void
+  addRecipe: (recipe: Recipe) => void
+  updateRecipe: (id: string, updates: Partial<Recipe>) => void
+  deleteRecipe: (id: string) => void
+  setCurrentRecipe: (recipe: Recipe | null) => void
+  setSearchTerm: (term: string) => void
+  setSelectedCategory: (category: string) => void
+  setLoading: (loading: boolean) => void
+  setError: (error: string | null) => void
+
+  // Computed values (derived state)
+  filteredRecipes: () => Recipe[]
+}
+
+export const useRecipeStore = create<RecipeState>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        // Initial state
+        recipes: [],
+        currentRecipe: null,
+        searchTerm: "",
+        selectedCategory: "all",
+        isLoading: false,
+        error: null,
+
+        // Actions
+        setRecipes: (recipes) => set({ recipes }),
+        addRecipe: (recipe) => set((state) => ({
+          recipes: [...state.recipes, recipe]
+        })),
+        updateRecipe: (id, updates) => set((state) => ({
+          recipes: state.recipes.map(r =>
+            r.id === id ? { ...r, ...updates } : r
+          )
+        })),
+        deleteRecipe: (id) => set((state) => ({
+          recipes: state.recipes.filter(r => r.id !== id)
+        })),
+        setCurrentRecipe: (currentRecipe) => set({ currentRecipe }),
+        setSearchTerm: (searchTerm) => set({ searchTerm }),
+        setSelectedCategory: (selectedCategory) => set({ selectedCategory }),
+        setLoading: (isLoading) => set({ isLoading }),
+        setError: (error) => set({ error }),
+
+        // Computed values
+        filteredRecipes: () => {
+          const { recipes, searchTerm, selectedCategory } = get()
+          return recipes.filter(recipe => {
+            const matchesSearch = recipe.title.toLowerCase()
+              .includes(searchTerm.toLowerCase())
+            const matchesCategory = selectedCategory === "all" ||
+              recipe.category === selectedCategory
+            return matchesSearch && matchesCategory
+          })
+        }
+      }),
+      {
+        name: 'recipe-storage',
+        // Only persist user preferences, not temporary UI state
+        partialize: (state) => ({
+          searchTerm: state.searchTerm,
+          selectedCategory: state.selectedCategory
+        })
+      }
+    ),
+    { name: 'recipe-store' }
+  )
+)
+
+// Custom hooks for specific functionality
+export const useRecipeActions = () => useRecipeStore((state) => ({
+  addRecipe: state.addRecipe,
+  updateRecipe: state.updateRecipe,
+  deleteRecipe: state.deleteRecipe,
+  setCurrentRecipe: state.setCurrentRecipe,
+}))
+
+export const useRecipeFilters = () => useRecipeStore((state) => ({
+  searchTerm: state.searchTerm,
+  selectedCategory: state.selectedCategory,
+  setSearchTerm: state.setSearchTerm,
+  setSelectedCategory: state.setSelectedCategory,
+  filteredRecipes: state.filteredRecipes(),
+}))
+```
+
+**Learning Focus**: Async operations, TypeScript, global state patterns, separation of concerns
+
+**Success Metric**: You can fetch, filter, and manage recipe data across multiple components
+
+### Phase 3: Core Pages with Zustand Integration (Week 2-3)
+**Goal**: Build functional pages using global state
 
 **Tasks**:
 1. **HomePage**: Dashboard with recent recipes
-2. **RecipesPage**: List with search/filter
-3. **RecipeDetailPage**: Individual recipe view
-4. **IngredientsPage**: Ingredient management
+2. **RecipesPage**: List with search/filter using Zustand
+3. **RecipeDetailPage**: Individual recipe view with state management
+4. **IngredientsPage**: Ingredient management with global state
 
-**Learning Focus**: Component design, form handling, user interactions
+**Zustand Integration Examples**:
 
-**Success Metric**: All major user flows work
+**RecipesPage with Global State**:
+```typescript
+// pages/RecipesPage.tsx
+import { useRecipeFilters } from '../stores/useRecipeStore'
+
+function RecipesPage() {
+  const {
+    filteredRecipes,
+    searchTerm,
+    selectedCategory,
+    setSearchTerm,
+    setSelectedCategory
+  } = useRecipeFilters()
+
+  return (
+    <div className="max-w-6xl mx-auto p-6">
+      <div className="mb-6 flex gap-4">
+        <SearchInput
+          value={searchTerm}
+          onChange={setSearchTerm}
+          placeholder="Search recipes..."
+        />
+        <CategoryFilter
+          value={selectedCategory}
+          onChange={setSelectedCategory}
+          options={['all', 'breakfast', 'lunch', 'dinner', 'dessert']}
+        />
+      </div>
+
+      <RecipeGrid recipes={filteredRecipes} />
+    </div>
+  )
+}
+```
+
+**RecipeDetailPage with State Actions**:
+```typescript
+// pages/RecipeDetailPage.tsx
+import { useParams, useNavigate } from 'react-router-dom'
+import { useRecipeStore, useRecipeActions } from '../stores/useRecipeStore'
+
+function RecipeDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+
+  // Select specific recipe from store
+  const recipe = useRecipeStore((state) =>
+    state.recipes.find(r => r.id === id)
+  )
+  const { deleteRecipe, updateRecipe } = useRecipeActions()
+
+  const handleDelete = async () => {
+    if (window.confirm('Delete this recipe?')) {
+      deleteRecipe(id!)
+      navigate('/recipes')
+    }
+  }
+
+  const handleToggleFavorite = () => {
+    if (recipe) {
+      updateRecipe(recipe.id, {
+        isFavorited: !recipe.isFavorited
+      })
+    }
+  }
+
+  if (!recipe) return <NotFound />
+
+  return (
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="flex justify-between items-start mb-6">
+        <h1 className="text-3xl font-bold">{recipe.title}</h1>
+        <div className="flex gap-2">
+          <button
+            onClick={handleToggleFavorite}
+            className={`heart-icon ${recipe.isFavorited ? 'favorited' : ''}`}
+          >
+            ♥
+          </button>
+          <button
+            onClick={handleDelete}
+            className="text-red-600 hover:text-red-800"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <RecipeContent recipe={recipe} />
+    </div>
+  )
+}
+```
+
+**Custom Hook for API Integration**:
+```typescript
+// hooks/useRecipeApi.ts
+import { useRecipeStore } from '../stores/useRecipeStore'
+import { apiClient } from '../api/client'
+
+export function useRecipeApi() {
+  const { setRecipes, setLoading, setError, addRecipe } = useRecipeStore()
+
+  const fetchRecipes = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await apiClient.get<Recipe[]>('/api/v1/recipes')
+      setRecipes(response.data)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to fetch recipes')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const createRecipe = async (recipeData: CreateRecipeRequest) => {
+    setLoading(true)
+    try {
+      const response = await apiClient.post<Recipe>('/api/v1/recipes', recipeData)
+      addRecipe(response.data)
+      return response.data
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Failed to create recipe')
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { fetchRecipes, createRecipe }
+}
+```
+
+**Learning Focus**: Component design, global state integration, form handling, user interactions
+
+**Success Metric**: All major user flows work with persistent state across navigation
 
 ### Phase 4: Polish & Optimization (Week 3-4)
 **Goal**: Improve user experience
@@ -436,10 +749,49 @@ Your project uses **React Testing Library**, which focuses on testing **behavior
 ## Key Learning Resources
 
 ### When You Get Stuck
-1. **React Documentation**: https://react.dev (official React docs)
-2. **TypeScript Handbook**: https://www.typescriptlang.org/docs/
-3. **Tailwind CSS Docs**: https://tailwindcss.com/docs
-4. **Your Code**: Look at existing components for patterns
+
+1. **React Documentation**: <https://react.dev> (official React docs)
+2. **TypeScript Handbook**: <https://www.typescriptlang.org/docs/>
+3. **Tailwind CSS Docs**: <https://tailwindcss.com/docs>
+4. **Zustand Documentation**: <https://docs.pmnd.rs/zustand/getting-started/introduction>
+5. **Your Code**: Look at existing components for patterns
+
+### Zustand-Specific Learning Tips
+
+**Understanding State Updates**:
+```typescript
+// ✅ Good: Immutable updates
+set((state) => ({ recipes: [...state.recipes, newRecipe] }))
+
+// ❌ Bad: Mutating state directly
+set((state) => {
+  state.recipes.push(newRecipe) // This won't trigger re-renders!
+  return state
+})
+```
+
+**Debugging Zustand State**:
+```typescript
+// Add this to see all state changes in DevTools
+const useRecipeStore = create<RecipeState>()(
+  devtools(
+    (set) => ({ /* your store */ }),
+    { name: 'recipe-store' } // Shows up in Redux DevTools
+  )
+)
+
+// Access store outside React for debugging
+console.log('Current recipes:', useRecipeStore.getState().recipes)
+```
+
+**Performance Tips**:
+```typescript
+// ✅ Good: Select only what you need
+const recipes = useRecipeStore((state) => state.recipes)
+
+// ❌ Bad: Selecting entire state causes unnecessary re-renders
+const entireState = useRecipeStore((state) => state)
+```
 
 ### Debugging Strategies
 1. **Console.log**: Add logging to understand data flow
@@ -461,10 +813,36 @@ Your project uses **React Testing Library**, which focuses on testing **behavior
 Building a modern frontend is like **assembling a complex machine from well-designed parts**. Each piece (React, TypeScript, Tailwind, etc.) has its role, and your job is to **orchestrate them together** to create great user experiences.
 
 Remember:
+
 - **Components are your building blocks**
-- **State management is your data flow**
+- **State management is your data flow** (Zustand makes this simple!)
 - **TypeScript is your safety net**
 - **Testing is your confidence**
+
+### Zustand vs Other State Management
+
+**Use Zustand when**:
+- You need global state without Redux complexity
+- You want TypeScript-first state management
+- You're building a medium-sized app (like your recipe app)
+- You want persistence and dev tools out of the box
+
+**Use useState when**:
+- State is only needed in one component
+- Simple toggle states or form inputs
+- No sharing needed between components
+
+**Use Context + useReducer when**:
+- You need complex state logic
+- You're already invested in the React ecosystem
+- You prefer more explicit patterns
+
+**Use Redux when**:
+- You have a very large, complex application
+- You need time-travel debugging
+- Your team is already expert in Redux patterns
+
+For your recipe app, **Zustand hits the sweet spot** - powerful enough for global state, simple enough to learn quickly, and perfect for the scale of features you're building.
 
 The key to success is **starting simple and iterating**. Build one component at a time, one feature at a time, one test at a time. Before you know it, you'll have a fully functional, modern web application!
 
