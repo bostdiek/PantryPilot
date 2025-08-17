@@ -5,10 +5,10 @@ services:
   # Database - Development Configuration
   db:
     ports:
-      - "5432:5432"  # Expose database port for development tools
+      - "5432:5432" # Expose database port for development tools
     environment:
-      POSTGRES_LOG_STATEMENT: all  # Log all SQL statements for debugging
-      POSTGRES_LOG_MIN_DURATION_STATEMENT: 0  # Log all queries
+      POSTGRES_LOG_STATEMENT: all # Log all SQL statements for debugging
+      POSTGRES_LOG_MIN_DURATION_STATEMENT: 0 # Log all queries
     command: >
       postgres
       -c log_statement=all
@@ -19,12 +19,12 @@ services:
   # Backend - Development Configuration
   backend:
     build:
-      target: development  # Use development stage of Dockerfile
+      target: development # Use development stage of Dockerfile
     ports:
-      - "8000:8000"  # Expose backend port for direct access
+      - "8000:8000" # Expose backend port for direct access
     volumes:
-      - ./apps/backend:/app  # Mount source code for hot reload
-      - backend_cache:/app/.venv  # Cache virtual environment
+      - ./apps/backend:/app # Mount source code for hot reload
+      - backend_cache:/app/.venv # Cache virtual environment
     environment:
       FASTAPI_ENV: development
       FASTAPI_RELOAD: "true"
@@ -40,12 +40,12 @@ services:
   # Frontend - Development Configuration
   frontend:
     build:
-      target: development  # Use development stage of Dockerfile
+      target: development # Use development stage of Dockerfile
     ports:
-      - "5173:5173"  # Expose Vite dev server port
+      - "5173:5173" # Expose Vite dev server port
     volumes:
-      - ./apps/frontend:/app  # Mount source code for hot reload
-      - frontend_node_modules:/app/node_modules  # Cache node_modules
+      - ./apps/frontend:/app # Mount source code for hot reload
+      - frontend_node_modules:/app/node_modules # Cache node_modules
     environment:
       NODE_ENV: development
       VITE_HMR_HOST: localhost
