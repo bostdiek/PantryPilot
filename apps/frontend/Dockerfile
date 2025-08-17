@@ -24,7 +24,7 @@ RUN npm ci --include=dev
 COPY . .
 
 # Create non-root user for security
-RUN addgroup -g 1001 -S nodejs &&
+RUN addgroup -g 1001 -S nodejs && \
     adduser -S nextjs -u 1001 -G nodejs
 
 # Change ownership of the app directory
