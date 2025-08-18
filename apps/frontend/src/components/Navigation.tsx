@@ -5,40 +5,41 @@ const Navigation: React.FC = () => (
   <nav className="flex gap-4 bg-white px-4 py-2 shadow">
     <NavLink
       to="/"
-      className={({ isActive }) =>
-        'font-bold text-blue-600' + (isActive ? ' underline' : '')
+      end
+      className={(meta: { isActive: boolean }) =>
+        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
       }
     >
       Home
     </NavLink>
     <NavLink
       to="/recipes"
-      className={({ isActive }) =>
-        'font-bold text-blue-600' + (isActive ? ' underline' : '')
+      className={(meta: { isActive: boolean }) =>
+        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
       }
     >
       Recipes
     </NavLink>
     <NavLink
       to="/recipes/new"
-      className={({ isActive }) =>
-        'font-bold text-blue-600' + (isActive ? ' underline' : '')
+      className={(meta: { isActive: boolean }) =>
+        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
       }
     >
       Add Recipe
     </NavLink>
     <NavLink
       to="/meal-plan"
-      className={({ isActive }) =>
-        'font-bold text-blue-600' + (isActive ? ' underline' : '')
+      className={(meta: { isActive: boolean }) =>
+        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
       }
     >
       Meal Plan
     </NavLink>
     <NavLink
       to="/login"
-      className={({ isActive }) =>
-        'font-bold text-blue-600' + (isActive ? ' underline' : '')
+      className={(meta: { isActive: boolean }) =>
+        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
       }
     >
       Login
