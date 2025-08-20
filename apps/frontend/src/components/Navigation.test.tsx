@@ -8,8 +8,7 @@ describe('Navigation', () => {
   test('renders all navigation links', () => {
     render(
       <MemoryRouter>
-        {' '}
-        <Navigation />{' '}
+        <Navigation />
       </MemoryRouter>
     );
 
