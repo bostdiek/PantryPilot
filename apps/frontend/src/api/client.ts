@@ -1,3 +1,5 @@
+import { useAuthStore } from '../stores/useAuthStore';
+import type { ApiError, ApiResponse, HealthCheckResponse } from '../types/api';
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
 
@@ -22,35 +24,48 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  private async request<T>(
-    endpoint: string,
-    options?: RequestInit
-  ): Promise<T> {
+  private getAuthHeaders(): Record<string, string> {
+    const token = useAuthStore.getState().token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
     try {
-      const response = await fetch(url, {
-        headers: {
-          'Content-Type': 'application/json',
-          ...options?.headers,
-        },
+      const headers = {
+        'Content-Type': 'application/json',
+        ...this.getAuthHeaders(),
+        ...(options?.headers || {}),
+      };
+      const resp = await fetch(`${url}`, {
         ...options,
+        headers,
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const body = (await resp.json()) as ApiResponse<T>;
+      if (!resp.ok || body.error) {
+        const apiError: ApiError = {
+          message: body.error ?? `Request failed (${resp.status})`,
+          status: resp.status,
+        };
+        throw apiError;
       }
 
-      return await response.json();
-    } catch (error) {
-      console.error(`API request failed: ${url}`, error);
-      throw error;
+      return body.data as T;
+    } catch (err: unknown) {
+      const apiError: ApiError =
+        err instanceof Error
+          ? { message: err.message }
+          : { message: 'Unknown error' };
+      console.error(`API request failed: ${url}`, apiError);
+      throw apiError;
     }
   }
 
   // Health check endpoint
-  async healthCheck(): Promise<{ status: string; message: string }> {
-    return this.request('/api/v1/health');
+  async healthCheck(): Promise<ApiResponse<HealthCheckResponse>> {
+    return this.request<ApiResponse<HealthCheckResponse>>('api/v1/health');
   }
 }
 
