@@ -23,5 +23,4 @@ class Recipe(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    ingredients = relationship("Ingredient", back_populates="recipe")
     recipeingredients = relationship("RecipeIngredient", back_populates="recipe")
