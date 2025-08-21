@@ -57,6 +57,12 @@ help:
 	@echo "  test-frontend      - Run frontend tests"
 	@echo "  test-coverage      - Run backend tests with coverage report"
 	@echo ""
+	@echo "Cleanup and Maintenance:"
+	@echo "  clean              - Stop services and remove containers/volumes (ENV=dev default)"
+	@echo "  clean-deps         - Remove dependency volumes and rebuild with fresh deps"
+	@echo "  clean-build        - Remove build caches and rebuild everything from scratch"
+	@echo "  clean-all          - Remove ALL project Docker resources (safe - PantryPilot only)"
+	@echo ""
 	@echo "Usage Examples:"
 	@echo "  make up              # Start in development mode"
 	@echo "  make ENV=prod up     # Start in production mode"
@@ -64,6 +70,8 @@ help:
 	@echo "  make ENV=prod logs   # View production logs"
 	@echo "  make db-backup       # Backup development database"
 	@echo "  make db-maintenance CMD=stats  # Show database statistics"
+	@echo "  make clean-deps      # Fix dependency issues (like react-router-dom not found)"
+	@echo "  make clean-build     # Rebuild everything from scratch"
 
 # Environment and Docker Compose targets
 validate-env:
@@ -217,7 +225,54 @@ db-maintenance:
 	./db/maintenance.sh -e $(ENV) $(CMD)
 
 db-shell:
-	db-shell:
 	# Open PostgreSQL shell (ENV=$(ENV))
 	@echo "🐘 Opening PostgreSQL shell for $(ENV) environment..."
 	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec db psql -U $$POSTGRES_USER -d $$POSTGRES_DB
+
+# =============================================================================
+# Cleanup and Maintenance Commands
+# =============================================================================
+
+clean:
+	# Stop all services and remove containers, networks, and named volumes
+	@echo "🧹 Stopping services and cleaning up Docker resources for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	@echo "🗑️ Removing project dangling images..."
+	docker images --filter "dangling=true" --filter "reference=pantrypilot*" -q | xargs -r docker rmi
+	@echo "✅ Cleanup complete!"
+
+clean-deps:
+	# Remove dependency volumes and rebuild with fresh dependencies
+	@echo "🧹 Cleaning dependency volumes for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	@echo "📦 Removing frontend dependency volume..."
+	docker volume rm $$(docker volume ls -q | grep frontend_node_modules) 2>/dev/null || true
+	@echo "🔄 Rebuilding with fresh dependencies..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build --no-cache frontend
+	@echo "🚀 Starting services with clean dependencies..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) up -d
+	@echo "✅ Dependencies refreshed!"
+
+clean-build:
+	# Remove all build caches and rebuild everything from scratch
+	@echo "🧹 Cleaning all Docker build caches and images for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	@echo "🗑️ Removing project build cache..."
+	docker builder prune -f --filter "label=project=pantrypilot" 2>/dev/null || docker builder prune -f --filter "unused-for=1h"
+	@echo "🗑️ Removing all project images..."
+	docker images "pantrypilot*" -q | xargs -r docker rmi -f
+	@echo "🔄 Rebuilding everything from scratch..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build --no-cache
+	@echo "✅ Clean rebuild complete!"
+
+clean-all:
+	# Remove all project-related Docker resources (safe - only affects PantryPilot)
+	@echo "🧹 Cleaning all PantryPilot Docker resources for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	@echo "🗑️ Removing all project volumes..."
+	docker volume ls -q | grep -E "(pantrypilot|frontend_node_modules)" | xargs -r docker volume rm
+	@echo "🗑️ Removing all project images..."
+	docker images --filter "reference=pantrypilot*" -q | xargs -r docker rmi -f
+	@echo "🗑️ Removing project build cache..."
+	docker builder prune -f --filter "label=project=pantrypilot"
+	@echo "✅ All PantryPilot Docker resources cleaned!"
