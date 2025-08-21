@@ -1,5 +1,6 @@
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import MetaData
+from sqlalchemy.ext.declarative import declarative_base
+
 
 # Create a metadata object with naming convention for constraints
 metadata = MetaData(
@@ -13,4 +14,4 @@ metadata = MetaData(
 )
 
 # Create the declarative base class
-Base = declarative_base(metadata=metadata) 
+Base = declarative_base(metadata=metadata)

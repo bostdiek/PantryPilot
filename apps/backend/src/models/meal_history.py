@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer
 from sqlalchemy.orm import relationship
-from datetime import datetime
+
 from .base import Base
+
 
 class Meal(Base):
     __tablename__ = "meal_history"
