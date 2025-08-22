@@ -10,8 +10,10 @@ class Meal(Base):
     __tablename__ = "meal_history"
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
-    user_id=Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    recipe_id=Column(UUID(as_uuid=True), ForeignKey("recipe_names.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    recipe_id = Column(
+        UUID(as_uuid=True), ForeignKey("recipe_names.id"), nullable=False
+    )
     date_suggested = Column(DateTime, nullable=False)
     week_suggested = Column(Integer, nullable=False)
     was_cooked = Column(Boolean, nullable=False)
