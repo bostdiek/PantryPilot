@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime
 
@@ -20,8 +21,7 @@ class RecipeIngredient(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
     recipe_id=Column(UUID(as_uuid=True), ForeignKey("recipe_names.id"), nullable=False)
-    ingredient_id=Column(UUID(as_uuid=True), ForeignKey("ingredient_names.id")
-        , nullable=False)
+    ingredient_id=Column(UUID(as_uuid=True), ForeignKey("ingredient_names.id"), nullable=False)# noqa: E501
     quantity = Column(String(255), nullable=False)
     unit = Column(String(255), nullable=False)
     is_optional = Column(Boolean, default=False)
