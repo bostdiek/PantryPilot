@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
 CREATE TABLE IF NOT EXISTS meal_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+    recipe_id UUID NOT NULL REFERENCES recipe_names(id) ON DELETE CASCADE,
     date_suggested TIMESTAMP WITH TIME ZONE,
     week_suggested INTEGER,
     was_cooked BOOLEAN DEFAULT false,
