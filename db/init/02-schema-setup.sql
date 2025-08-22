@@ -74,8 +74,8 @@ CREATE TABLE IF NOT EXISTS recipe_names (
 -- substitution suggestions, nutritional calculations, etc.
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-    ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+    recipe_id UUID NOT NULL REFERENCES recipe_names(id) ON DELETE CASCADE,
+    ingredient_id UUID NOT NULL REFERENCES ingredient_names(id) ON DELETE CASCADE,
     quantity VARCHAR(255),
     unit TEXT,
     is_optional BOOLEAN DEFAULT false,

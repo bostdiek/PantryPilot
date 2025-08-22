@@ -1,6 +1,7 @@
+import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import UUID, Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -9,7 +10,7 @@ from .base import Base
 class Recipe(Base):
     __tablename__ = "recipe_names"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
     name = Column(String(255), unique=True, nullable=False, index=True)
     prep_time_minutes = Column(Integer, nullable=False)
     cook_time_minutes = Column(Integer, nullable=False)
