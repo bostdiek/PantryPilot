@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- Pantry items table (basic structure)
 -- NOTE: Production will need ingredient taxonomy, nutritional data,
 -- expiration tracking, storage conditions, purchase history, etc.
-CREATE TABLE IF NOT EXISTS pantry_items (
+CREATE TABLE IF NOT EXISTS ingredient_names (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     ingredient_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -80,6 +80,19 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
     unit TEXT,
     is_optional BOOLEAN DEFAULT false,
     user_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Meal history table (basic structure)
+-- NOTE: Production will need meal planning, tracking, and feedback loops
+CREATE TABLE IF NOT EXISTS meal_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+    date_suggested TIMESTAMP WITH TIME ZONE,
+    week_suggested INTEGER,
+    was_cooked BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
