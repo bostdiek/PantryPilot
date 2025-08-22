@@ -12,7 +12,7 @@ type Recipe = {
   difficulty: 'easy' | 'medium' | 'hard';
   tags: string[];
   imageUrl?: string; // optional
-  ovenTemperatureF?: number; //optional
+  ovenTemperatureF?: number; // optional
   createdAt: Date;
   updatedAt: Date;
 };
