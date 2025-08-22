@@ -11,9 +11,9 @@ class Recipe(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), unique=True, nullable=False, index=True)
-    prep_time = Column(Integer, nullable=False)
-    cook_time = Column(Integer, nullable=False)
-    total_time = Column(Integer, nullable=False)
+    prep_time_minutes = Column(Integer, nullable=False)
+    cook_time_minutes = Column(Integer, nullable=False)
+    total_time_minutes = Column(Integer, nullable=False)
     serving_min = Column(Integer, nullable=False)
     serving_max = Column(Integer, nullable=False)
     ethnicity = Column(String(255), nullable=False)
@@ -21,7 +21,7 @@ class Recipe(Base):
     instructions = Column(Text, nullable=False)
     user_notes = Column(Text, nullable=True)
     ai_summary = Column(Text, nullable=False)
-    link_source = Column(String(255), nullable=False)
+    link_source = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

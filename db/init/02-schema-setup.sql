@@ -58,16 +58,20 @@ CREATE TABLE IF NOT EXISTS pantry_items (
 -- Recipes table (basic structure)
 -- NOTE: Production will need cuisine types, difficulty scoring,
 -- nutritional analysis, cooking methods, equipment requirements, etc.
-CREATE TABLE IF NOT EXISTS recipes (
+CREATE TABLE IF NOT EXISTS recipe_names (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    instructions TEXT,
+    name VARCHAR(255) NOT NULL,
     prep_time_minutes INTEGER,
     cook_time_minutes INTEGER,
-    servings INTEGER,
-    difficulty_level VARCHAR(20) CHECK (difficulty_level IN ('easy', 'medium', 'hard')),
+    total_time_minutes INTEGER,
+    serving_min INTEGER,
+    serving_max INTEGER,
+    ethnicity VARCHAR(255),
+    course_type VARCHAR(255),
+    instructions TEXT,
+    user_notes TEXT,
+    ai_summary TEXT,
+    link_source TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
