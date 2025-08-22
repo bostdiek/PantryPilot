@@ -30,7 +30,11 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
-    const url = `${this.baseUrl}${endpoint}`;
+    // Ensure endpoint starts with /
+    const normalizedEndpoint = endpoint.startsWith('/')
+      ? endpoint
+      : `/${endpoint}`;
+    const url = `${this.baseUrl}${normalizedEndpoint}`;
 
     try {
       const headers = {
@@ -38,7 +42,7 @@ class ApiClient {
         ...this.getAuthHeaders(),
         ...(options?.headers || {}),
       };
-      const resp = await fetch(`${url}`, {
+      const resp = await fetch(url, {
         ...options,
         headers,
       });
@@ -65,7 +69,7 @@ class ApiClient {
 
   // Health check endpoint
   async healthCheck(): Promise<ApiResponse<HealthCheckResponse>> {
-    return this.request<ApiResponse<HealthCheckResponse>>('api/v1/health');
+    return this.request<ApiResponse<HealthCheckResponse>>('/api/v1/health');
   }
 }
 
