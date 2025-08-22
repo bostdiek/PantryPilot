@@ -16,4 +16,4 @@ class Meal(Base):
 
     # Relationships
     user = relationship("User", back_populates="meal")
-    recipe = relationship("Recipe", back_populates="meal")
+    recipe = relationship("Recipe")
