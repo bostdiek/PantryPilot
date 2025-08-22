@@ -19,4 +19,4 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-   meal = relationship("Meal", back_populates="user")
+    meal = relationship("Meal", back_populates="user")
