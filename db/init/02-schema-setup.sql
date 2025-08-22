@@ -82,11 +82,13 @@ CREATE TABLE IF NOT EXISTS recipe_names (
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-    ingredient_name VARCHAR(255) NOT NULL,
-    quantity DECIMAL(10,2),
-    unit VARCHAR(50),
+    ingredient_id UUID NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE,
+    quantity VARCHAR(255),
+    unit TEXT,
     is_optional BOOLEAN DEFAULT false,
-    notes VARCHAR(255)
+    user_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- =============================================================================

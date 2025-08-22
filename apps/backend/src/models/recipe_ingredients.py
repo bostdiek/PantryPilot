@@ -14,6 +14,7 @@ class RecipeIngredient(Base):
     ingredient_id = Column(Integer, ForeignKey("ingredient_names.id"), nullable=False)
     quantity = Column(String(255), nullable=False)
     unit = Column(String(255), nullable=False)
+    is_optional = Column(Boolean, default=False)
     user_notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
