@@ -67,6 +67,25 @@ services:
   #   networks:
   #     - pantrypilot-network
 
+  # Adminer (database web UI) - development only
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "8081:8080"
+    networks:
+      - pantrypilot-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 # Development-specific volumes
 volumes:
   backend_cache:
