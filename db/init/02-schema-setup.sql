@@ -43,14 +43,7 @@ CREATE TABLE IF NOT EXISTS users (
 -- expiration tracking, storage conditions, purchase history, etc.
 CREATE TABLE IF NOT EXISTS pantry_items (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    category VARCHAR(100),
-    quantity DECIMAL(10,2),
-    unit VARCHAR(50),
-    expiration_date DATE,
-    location VARCHAR(100),
-    notes TEXT,
+    ingredient_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
