@@ -69,7 +69,8 @@ class ApiClient {
 
   // Health check endpoint
   async healthCheck(): Promise<ApiResponse<HealthCheckResponse>> {
-    return this.request<ApiResponse<HealthCheckResponse>>('/api/v1/health');
+  async healthCheck(): Promise<HealthCheckResponse> {
+    return this.request<HealthCheckResponse>('/api/v1/health');
   }
 }
 
