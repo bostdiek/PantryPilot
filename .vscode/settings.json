@@ -65,5 +65,6 @@
         ["cva\\(([^)]*)\\)", "[\"'`]([^\"'`]*).*?[\"'`]"],
         ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
     ],
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "makefile.configureOnOpen": false
 }

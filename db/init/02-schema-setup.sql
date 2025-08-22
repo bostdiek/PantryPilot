@@ -29,11 +29,11 @@
 -- including dietary preferences, allergies, cooking skill levels, etc.
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    is_active BOOLEAN DEFAULT true,
-    is_superuser BOOLEAN DEFAULT false,
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
