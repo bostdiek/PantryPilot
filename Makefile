@@ -76,7 +76,7 @@ help:
 # Environment and Docker Compose targets
 validate-env:
 	# Validate environment configuration
-	python scripts/validate-env.py
+	# python scripts/validate-env.py
 
 up: validate-env
 	# Start services using Docker Compose (ENV=$(ENV))

@@ -29,11 +29,11 @@
 -- including dietary preferences, allergies, cooking skill levels, etc.
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username VARCHAR(255) UNIQUE NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     hashed_password VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    is_active BOOLEAN DEFAULT true,
-    is_superuser BOOLEAN DEFAULT false,
+    first_name VARCHAR(255),
+    last_name VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -41,16 +41,9 @@ CREATE TABLE IF NOT EXISTS users (
 -- Pantry items table (basic structure)
 -- NOTE: Production will need ingredient taxonomy, nutritional data,
 -- expiration tracking, storage conditions, purchase history, etc.
-CREATE TABLE IF NOT EXISTS pantry_items (
+CREATE TABLE IF NOT EXISTS ingredient_names (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    name VARCHAR(255) NOT NULL,
-    category VARCHAR(100),
-    quantity DECIMAL(10,2),
-    unit VARCHAR(50),
-    expiration_date DATE,
-    location VARCHAR(100),
-    notes TEXT,
+    ingredient_name VARCHAR(255) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -58,16 +51,20 @@ CREATE TABLE IF NOT EXISTS pantry_items (
 -- Recipes table (basic structure)
 -- NOTE: Production will need cuisine types, difficulty scoring,
 -- nutritional analysis, cooking methods, equipment requirements, etc.
-CREATE TABLE IF NOT EXISTS recipes (
+CREATE TABLE IF NOT EXISTS recipe_names (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    description TEXT,
-    instructions TEXT,
+    name VARCHAR(255) NOT NULL,
     prep_time_minutes INTEGER,
     cook_time_minutes INTEGER,
-    servings INTEGER,
-    difficulty_level VARCHAR(20) CHECK (difficulty_level IN ('easy', 'medium', 'hard')),
+    total_time_minutes INTEGER,
+    serving_min INTEGER,
+    serving_max INTEGER,
+    ethnicity VARCHAR(255),
+    course_type VARCHAR(255),
+    instructions TEXT,
+    user_notes TEXT,
+    ai_summary TEXT,
+    link_source TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -77,12 +74,27 @@ CREATE TABLE IF NOT EXISTS recipes (
 -- substitution suggestions, nutritional calculations, etc.
 CREATE TABLE IF NOT EXISTS recipe_ingredients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
-    ingredient_name VARCHAR(255) NOT NULL,
-    quantity DECIMAL(10,2),
-    unit VARCHAR(50),
+    recipe_id UUID NOT NULL REFERENCES recipe_names(id) ON DELETE CASCADE,
+    ingredient_id UUID NOT NULL REFERENCES ingredient_names(id) ON DELETE CASCADE,
+    quantity VARCHAR(255),
+    unit TEXT,
     is_optional BOOLEAN DEFAULT false,
-    notes VARCHAR(255)
+    user_notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Meal history table (basic structure)
+-- NOTE: Production will need meal planning, tracking, and feedback loops
+CREATE TABLE IF NOT EXISTS meal_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipe_id UUID NOT NULL REFERENCES recipe_names(id) ON DELETE CASCADE,
+    date_suggested TIMESTAMP WITH TIME ZONE,
+    week_suggested INTEGER,
+    was_cooked BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- =============================================================================
