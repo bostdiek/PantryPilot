@@ -7,6 +7,7 @@ import MealPlanPage from './pages/MealPlanPage';
 import RecipesDetail from './pages/RecipesDetail';
 import NewRecipePage from './pages/RecipesNewPage';
 import RecipesPage from './pages/RecipesPage';
+import ComponentShowcase from './pages/dev/ComponentShowcase';
 
 const App: React.FC = () => (
   <Router>
@@ -18,6 +19,7 @@ const App: React.FC = () => (
       <Route path="/recipes/:id" element={<RecipesDetail />} />
       <Route path="/meal-plan" element={<MealPlanPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/dev/components" element={<ComponentShowcase />} />
     </Routes>
   </Router>
 );
