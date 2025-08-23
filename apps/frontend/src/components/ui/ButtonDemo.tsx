@@ -1,4 +1,3 @@
-import { kitchenIcon, restaurantIcon } from '.';
 import { Button } from './Button';
 
 /**
@@ -33,9 +32,16 @@ export function ButtonDemo() {
       <section>
         <h2 className="mb-4 text-lg font-semibold">Buttons with Icons</h2>
         <div className="flex flex-wrap gap-4">
-          <Button leftIcon={kitchenIcon}>Left Icon</Button>
-          <Button rightIcon={restaurantIcon}>Right Icon</Button>
-          <Button leftIcon={kitchenIcon} rightIcon={restaurantIcon}>
+          <Button leftIcon="/src/components/ui/icons/kitchen.svg">
+            Left Icon
+          </Button>
+          <Button rightIcon="/src/components/ui/icons/restaurant.svg">
+            Right Icon
+          </Button>
+          <Button
+            leftIcon="/src/components/ui/icons/kitchen.svg"
+            rightIcon="/src/components/ui/icons/restaurant.svg"
+          >
             Both Icons
           </Button>
         </div>
