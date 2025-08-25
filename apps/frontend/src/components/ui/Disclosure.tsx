@@ -42,10 +42,8 @@ export interface DisclosureProps {
   panelClassName?: string;
 
   /**
-   * Custom icon to use instead of the default chevron
+   * Inline SVG component to use instead of the default chevron
    */
-  icon?: string; // deprecated: prefer inline svg component via `iconSvg`
-  /** Inline SVG component (preferred) */
   iconSvg?: ComponentType<SVGProps<SVGSVGElement>>;
 }
 

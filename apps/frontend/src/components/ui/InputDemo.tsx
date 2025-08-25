@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
-// TODO: After updating Input to accept ReactNode icons, switch to `?react` imports and pass via leftIconNode/rightIconNode.
 import { Input } from './Input';
+import CalendarIcon from './icons/calendar.svg?react';
+import SearchIcon from './icons/search.svg?react';
+import UserIcon from './icons/user.svg?react';
+import XIcon from './icons/x.svg?react';
 
 /**
  * Demo component for Input
@@ -50,7 +53,7 @@ export const InputDemo: React.FC = () => {
             value={searchValue}
             onChange={setSearchValue}
             placeholder="Search..."
-            rightIcon="/src/components/ui/icons/search.svg"
+            rightIconSvg={SearchIcon}
           />
         </div>
       </div>
@@ -149,7 +152,7 @@ export const InputDemo: React.FC = () => {
         <div className="max-w-md space-y-4">
           <Input
             label="Left Icon"
-            leftIcon="/src/components/ui/icons/user.svg"
+            leftIconSvg={UserIcon}
             value=""
             onChange={() => {}}
             placeholder="Username"
@@ -157,7 +160,7 @@ export const InputDemo: React.FC = () => {
 
           <Input
             label="Right Icon"
-            rightIcon="/src/components/ui/icons/calendar.svg"
+            rightIconSvg={CalendarIcon}
             value=""
             onChange={() => {}}
             placeholder="Select date"
@@ -165,8 +168,8 @@ export const InputDemo: React.FC = () => {
 
           <Input
             label="Both Icons"
-            leftIcon="/src/components/ui/icons/search.svg"
-            rightIcon="/src/components/ui/icons/x.svg"
+            leftIconSvg={SearchIcon}
+            rightIconSvg={XIcon}
             value=""
             onChange={() => {}}
             placeholder="Search..."

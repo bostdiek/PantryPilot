@@ -34,10 +34,14 @@ export interface InputProps {
   id?: string;
   /** Name attribute for the input (important for form submission) */
   name?: string;
-  /** Icon to display at the start of the input */
+  /** Icon to display at the start of the input (deprecated, use leftIconSvg instead) */
   leftIcon?: string;
-  /** Icon to display at the end of the input */
+  /** Icon to display at the end of the input (deprecated, use rightIconSvg instead) */
   rightIcon?: string;
+  /** React SVG component to display at the start of the input */
+  leftIconSvg?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  /** React SVG component to display at the end of the input */
+  rightIconSvg?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   /** HTML autocomplete attribute */
   autoComplete?: string;
   /** Blur event handler */
@@ -66,7 +70,9 @@ export interface InputProps {
  * ```
  */
 import clsx from 'clsx';
+import React from 'react';
 import { useId } from 'react';
+import { Icon } from './Icon';
 import { inputSizes } from './tokens';
 
 export function Input({
@@ -84,6 +90,8 @@ export function Input({
   name,
   leftIcon,
   rightIcon,
+  leftIconSvg,
+  rightIconSvg,
   autoComplete,
   onBlur,
   disabled = false,
@@ -128,6 +136,15 @@ export function Input({
             />
           </div>
         )}
+        {leftIconSvg && (
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <Icon
+              svg={leftIconSvg}
+              className="h-5 w-5 text-gray-500"
+              aria-hidden="true"
+            />
+          </div>
+        )}
 
         <input
           id={inputId}
@@ -150,8 +167,8 @@ export function Input({
             error &&
               'border-red-500 text-red-900 focus:border-red-500 focus:ring-red-500',
             disabled && 'cursor-not-allowed opacity-60',
-            leftIcon && 'pl-10',
-            rightIcon && 'pr-10'
+            (leftIcon || leftIconSvg) && 'pl-10',
+            (rightIcon || rightIconSvg) && 'pr-10'
           )}
         />
 
@@ -159,6 +176,15 @@ export function Input({
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
             <img
               src={rightIcon}
+              className="h-5 w-5 text-gray-500"
+              aria-hidden="true"
+            />
+          </div>
+        )}
+        {rightIconSvg && (
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3">
+            <Icon
+              svg={rightIconSvg}
               className="h-5 w-5 text-gray-500"
               aria-hidden="true"
             />

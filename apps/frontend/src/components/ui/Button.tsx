@@ -1,5 +1,6 @@
 import { Button as HeadlessButton } from '@headlessui/react';
 import clsx from 'clsx';
+import React from 'react';
 import type { ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { Icon } from './Icon';
@@ -50,13 +51,25 @@ export interface ButtonProps {
 
   /**
    * Left icon path (from our icons directory)
+   * @deprecated Use leftIconSvg instead
    */
   leftIcon?: string;
 
   /**
    * Right icon path (from our icons directory)
+   * @deprecated Use rightIconSvg instead
    */
   rightIcon?: string;
+
+  /**
+   * Left icon SVG component
+   */
+  leftIconSvg?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+
+  /**
+   * Right icon SVG component
+   */
+  rightIconSvg?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
   /**
    * Additional CSS classes
@@ -96,6 +109,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       loading = false,
       leftIcon,
       rightIcon,
+      leftIconSvg,
+      rightIconSvg,
       className = '',
       onClick,
       type = 'button',
@@ -159,30 +174,41 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       </svg>
     );
 
+    // Construct the combined styles
+    const combinedStyles = [
+      baseStyles,
+      variantStyles[variant],
+      sizeStyles[size],
+      fullWidth && 'w-full',
+      (disabled || loading) &&
+        'pointer-events-none cursor-not-allowed opacity-50',
+      className,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
     return (
       <HeadlessButton
         ref={ref}
         type={type}
         disabled={disabled || loading}
         onClick={onClick}
-        className={clsx(
-          baseStyles,
-          variantStyles[variant],
-          sizeStyles[size],
-          fullWidth && 'w-full',
-          (disabled || loading) &&
-            'pointer-events-none cursor-not-allowed opacity-50',
-          className
-        )}
+        className={combinedStyles}
         {...props}
       >
         {loading && <LoadingSpinner />}
         {!loading && leftIcon && (
           <Icon src={leftIcon} className={clsx('mr-2', iconSize[size])} />
         )}
+        {!loading && leftIconSvg && (
+          <Icon svg={leftIconSvg} className={clsx('mr-2', iconSize[size])} />
+        )}
         {children}
         {!loading && rightIcon && (
           <Icon src={rightIcon} className={clsx('ml-2', iconSize[size])} />
+        )}
+        {!loading && rightIconSvg && (
+          <Icon svg={rightIconSvg} className={clsx('ml-2', iconSize[size])} />
         )}
       </HeadlessButton>
     );

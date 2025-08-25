@@ -21,7 +21,27 @@ export const Stack: React.FC<StackProps> = ({
   className = '',
 }) => {
   const dirClass = direction === 'vertical' ? 'flex-col' : 'flex-row';
-  const gapClass = `gap-${gap}`;
+
+  // Predefined gap classes to ensure Tailwind includes them
+  const gapClasses = {
+    0: 'gap-0',
+    1: 'gap-1',
+    2: 'gap-2',
+    3: 'gap-3',
+    4: 'gap-4',
+    5: 'gap-5',
+    6: 'gap-6',
+    7: 'gap-7',
+    8: 'gap-8',
+    9: 'gap-9',
+    10: 'gap-10',
+    11: 'gap-11',
+    12: 'gap-12',
+  };
+
+  // Use the gap class from the mapping, or fallback to gap-4
+  const gapClass = gapClasses[gap as keyof typeof gapClasses] || gapClasses[4];
+
   return (
     <div className={clsx('flex', dirClass, gapClass, className)}>
       {children}
