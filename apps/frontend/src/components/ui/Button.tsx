@@ -1,4 +1,5 @@
 import { Button as HeadlessButton } from '@headlessui/react';
+import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { forwardRef } from 'react';
 import { Icon } from './Icon';
@@ -127,25 +128,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'text-base px-6 py-3',
     };
 
-    // Full width style
-    const widthStyle = fullWidth ? 'w-full' : '';
-
-    // Disabled style
-    const disabledStyle =
-      disabled || loading
-        ? 'opacity-50 cursor-not-allowed pointer-events-none'
-        : '';
-
-    // Combined styles
-    const combinedStyles = `
-      ${baseStyles}
-      ${variantStyles[variant]}
-      ${sizeStyles[size]}
-      ${widthStyle}
-      ${disabledStyle}
-      ${className}
-    `;
-
     // Icon size based on button size
     const iconSize = {
       sm: 'h-4 w-4',
@@ -156,7 +138,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     // Loading spinner - simple implementation
     const LoadingSpinner = () => (
       <svg
-        className={`mr-2 -ml-1 animate-spin ${iconSize[size]}`}
+        className={clsx('mr-2 -ml-1 animate-spin', iconSize[size])}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
@@ -183,16 +165,24 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         type={type}
         disabled={disabled || loading}
         onClick={onClick}
-        className={combinedStyles}
+        className={clsx(
+          baseStyles,
+          variantStyles[variant],
+          sizeStyles[size],
+          fullWidth && 'w-full',
+          (disabled || loading) &&
+            'pointer-events-none cursor-not-allowed opacity-50',
+          className
+        )}
         {...props}
       >
         {loading && <LoadingSpinner />}
         {!loading && leftIcon && (
-          <Icon src={leftIcon} className={`mr-2 ${iconSize[size]}`} />
+          <Icon src={leftIcon} className={clsx('mr-2', iconSize[size])} />
         )}
         {children}
         {!loading && rightIcon && (
-          <Icon src={rightIcon} className={`ml-2 ${iconSize[size]}`} />
+          <Icon src={rightIcon} className={clsx('ml-2', iconSize[size])} />
         )}
       </HeadlessButton>
     );

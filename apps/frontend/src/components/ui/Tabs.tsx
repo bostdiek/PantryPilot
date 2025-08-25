@@ -1,4 +1,5 @@
 import { Tab as HeadlessTab } from '@headlessui/react';
+import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { Fragment } from 'react';
 
@@ -120,21 +121,47 @@ export function Tabs({
       className={className}
     >
       <HeadlessTab.List
-        className={`flex ${vertical ? 'flex-col space-y-2' : 'space-x-2 border-b border-gray-200'} ${tabListClassName}`}
+        className={clsx(
+          'flex',
+          vertical
+            ? 'flex-col space-y-2'
+            : 'space-x-2 border-b border-gray-200',
+          tabListClassName
+        )}
       >
         {tabs.map((tab) => (
           <HeadlessTab key={tab.id} disabled={tab.disabled} as={Fragment}>
             {({ selected }) => (
               <button
-                className={` ${
-                  selected
-                    ? `bg-white ${vertical ? '' : 'border-b-2 border-blue-500'} text-blue-600 ${selectedTabClassName}`
-                    : 'text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                } ${
+                className={clsx(
+                  // Base styles
+                  'text-sm font-medium whitespace-nowrap focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none',
+
+                  // Selected state
+                  selected && [
+                    'bg-white',
+                    'text-blue-600',
+                    !vertical && 'border-b-2 border-blue-500',
+                    selectedTabClassName,
+                  ],
+
+                  // Not selected state
+                  !selected &&
+                    'text-gray-500 hover:border-gray-300 hover:text-gray-700',
+
+                  // Vertical vs horizontal styling
                   vertical
                     ? 'rounded-md px-3 py-2 text-left'
-                    : 'rounded-t-lg border-b-2 border-transparent px-4 py-2'
-                } text-sm font-medium whitespace-nowrap focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none ${tab.disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${tabClassName} `}
+                    : 'rounded-t-lg border-b-2 border-transparent px-4 py-2',
+
+                  // Disabled state
+                  tab.disabled
+                    ? 'cursor-not-allowed opacity-50'
+                    : 'cursor-pointer',
+
+                  // Custom class
+                  tabClassName
+                )}
               >
                 {tab.label}
               </button>
@@ -143,11 +170,14 @@ export function Tabs({
         ))}
       </HeadlessTab.List>
 
-      <HeadlessTab.Panels className={`mt-2 ${panelsClassName}`}>
+      <HeadlessTab.Panels className={clsx('mt-2', panelsClassName)}>
         {tabs.map((tab) => (
           <HeadlessTab.Panel
             key={tab.id}
-            className={`rounded-md p-3 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none ${panelClassName}`}
+            className={clsx(
+              'rounded-md p-3 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none',
+              panelClassName
+            )}
           >
             {tab.content}
           </HeadlessTab.Panel>

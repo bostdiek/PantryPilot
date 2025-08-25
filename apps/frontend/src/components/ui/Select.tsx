@@ -1,4 +1,5 @@
 import { Listbox, Transition } from '@headlessui/react';
+import clsx from 'clsx';
 import { Fragment } from 'react';
 import { Icon } from './Icon';
 import CheckIcon from './icons/check.svg?react';
@@ -79,26 +80,29 @@ export function Select({
                     <Listbox.Option
                       key={option.id}
                       className={({ active }) =>
-                        `relative cursor-default py-2 pr-4 pl-10 select-none ${
+                        clsx(
+                          'relative cursor-default py-2 pr-4 pl-10 select-none',
                           active ? 'bg-blue-100 text-blue-900' : 'text-gray-900'
-                        }`
+                        )
                       }
                       value={option}
                     >
                       {({ selected, active }) => (
                         <>
                           <span
-                            className={`block truncate ${
+                            className={clsx(
+                              'block truncate',
                               selected ? 'font-medium' : 'font-normal'
-                            }`}
+                            )}
                           >
                             {option.name}
                           </span>
                           {selected ? (
                             <span
-                              className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
+                              className={clsx(
+                                'absolute inset-y-0 left-0 flex items-center pl-3',
                                 active ? 'text-blue-600' : 'text-blue-600'
-                              }`}
+                              )}
                             >
                               <Icon
                                 svg={CheckIcon}

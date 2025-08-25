@@ -65,6 +65,7 @@ export interface InputProps {
  * />
  * ```
  */
+import clsx from 'clsx';
 import { useId } from 'react';
 import { inputSizes } from './tokens';
 
@@ -105,13 +106,8 @@ export function Input({
     unstyled: 'border-none shadow-none bg-transparent p-0 focus:ring-0',
   };
 
-  // Status classes (error state takes priority)
-  const statusClasses = error
-    ? 'border-red-500 text-red-900 focus:ring-red-500 focus:border-red-500'
-    : '';
-
   return (
-    <div className={`flex flex-col ${className}`}>
+    <div className={clsx('flex flex-col', className)}>
       {label && (
         <label
           htmlFor={inputId}
@@ -147,7 +143,16 @@ export function Input({
           aria-describedby={helperText || error ? helperId : undefined}
           aria-invalid={!!error}
           aria-required={required}
-          className={`w-full rounded-md transition-colors outline-none ${sizeClasses[size]} ${variantClasses[variant]} ${statusClasses} ${disabled ? 'cursor-not-allowed opacity-60' : ''} ${leftIcon ? 'pl-10' : ''} ${rightIcon ? 'pr-10' : ''} `}
+          className={clsx(
+            'w-full rounded-md transition-colors outline-none',
+            sizeClasses[size],
+            variantClasses[variant],
+            error &&
+              'border-red-500 text-red-900 focus:border-red-500 focus:ring-red-500',
+            disabled && 'cursor-not-allowed opacity-60',
+            leftIcon && 'pl-10',
+            rightIcon && 'pr-10'
+          )}
         />
 
         {rightIcon && (
@@ -164,7 +169,10 @@ export function Input({
       {(helperText || error) && (
         <p
           id={helperId}
-          className={`mt-1 text-xs ${error ? 'text-red-600' : 'text-gray-500'}`}
+          className={clsx(
+            'mt-1 text-xs',
+            error ? 'text-red-600' : 'text-gray-500'
+          )}
         >
           {error || helperText}
         </p>
