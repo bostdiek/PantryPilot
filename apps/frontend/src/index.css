@@ -1,13 +1,63 @@
 @import 'tailwindcss';
 
+/* Define our custom theme with improved colors for better contrast */
+@theme {
+  /* Typography */
+  --font-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Primary Colors - using deeper blue for better contrast */
+  --color-primary-50: oklch(97% 0.018 254);
+  --color-primary-100: oklch(93.2% 0.035 255);
+  --color-primary-200: oklch(88.2% 0.065 254);
+  --color-primary-300: oklch(80.9% 0.115 251.8);
+  --color-primary-400: oklch(70.7% 0.175 254.6);
+  --color-primary-500: oklch(62.3% 0.225 259.8); /* Main brand color */
+  --color-primary-600: oklch(54.6% 0.255 262.8);
+  --color-primary-700: oklch(48.8% 0.25 264.3);
+  --color-primary-800: oklch(42.4% 0.21 265.6);
+  --color-primary-900: oklch(37.9% 0.155 265.5);
+
+  /* Secondary/Accent Colors - using deeper teal for better contrast */
+  --color-accent-50: oklch(98.4% 0.018 180.7);
+  --color-accent-100: oklch(95.3% 0.055 180.8);
+  --color-accent-200: oklch(91% 0.1 180.4);
+  --color-accent-300: oklch(85.5% 0.145 181);
+  --color-accent-400: oklch(77.7% 0.16 181.9);
+  --color-accent-500: oklch(70.4% 0.15 182.5); /* Main accent color */
+  --color-accent-600: oklch(60% 0.13 184.7);
+  --color-accent-700: oklch(51.1% 0.105 186.3);
+  --color-accent-800: oklch(43.7% 0.085 188.2);
+  --color-accent-900: oklch(38.6% 0.07 188.4);
+
+  /* Gray Scale with better contrast */
+  --color-gray-50: oklch(98% 0.003 0);
+  --color-gray-100: oklch(95.5% 0.01 0);
+  --color-gray-200: oklch(90% 0.015 0);
+  --color-gray-300: oklch(83% 0.02 0);
+  --color-gray-400: oklch(70% 0.025 0);
+  --color-gray-500: oklch(60% 0.03 0);
+  --color-gray-600: oklch(48% 0.035 0);
+  --color-gray-700: oklch(38% 0.04 0);
+  --color-gray-800: oklch(28% 0.035 0);
+  --color-gray-900: oklch(18% 0.03 0);
+
+  /* Error/Success Colors */
+  --color-error: oklch(65% 0.24 25); /* Darker red for better contrast */
+  --color-success: oklch(70% 0.2 150); /* Darker green for better contrast */
+
+  /* Background Colors */
+  --color-bg-primary: oklch(98.5% 0.005 0);
+  --color-bg-secondary: oklch(97% 0.01 0);
+  --color-bg-accent: oklch(96% 0.015 254);
+}
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
   font-weight: 400;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: oklch(18% 0.03 0); /* Darker text for better contrast */
+  background-color: var(--color-bg-primary);
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -17,53 +67,77 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--color-primary-600); /* Using our theme color */
 }
 a:hover {
-  color: #535bf2;
+  color: var(--color-primary-800); /* Darker on hover for better contrast */
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
 }
 
 h1 {
-  font-size: 3.2em;
+  font-size: 2.5rem;
   line-height: 1.1;
+  color: var(--color-gray-900);
 }
 
 button {
-  border-radius: 8px;
+  border-radius: 0.375rem; /* 6px */
   border: 1px solid transparent;
   padding: 0.6em 1.2em;
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  transition: all 0.2s ease-in-out;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Custom button styles that override Tailwind's utility classes */
+.btn-primary {
+  background-color: var(--color-primary-600);
+  color: white;
+  border-color: var(--color-primary-700);
+}
+.btn-primary:hover {
+  background-color: var(--color-primary-700);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-primary-700);
+  border-color: var(--color-primary-600);
+}
+.btn-outline:hover {
+  background-color: var(--color-primary-50);
+}
+
+button:focus,
+button:focus-visible {
+  outline: 3px solid var(--color-primary-200);
+  outline-offset: 1px;
+}
+
+/* Card styles for better contrast and visual appearance */
+.card {
+  border: 1px solid var(--color-gray-200);
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Custom utility classes */
+.text-title {
+  color: var(--color-gray-900);
+  font-weight: 600;
+}
+
+.text-body {
+  color: var(--color-gray-800);
+}
+
+.text-muted {
+  color: var(--color-gray-600);
 }

@@ -1,8 +1,7 @@
 import { Button as HeadlessButton } from '@headlessui/react';
 import clsx from 'clsx';
-import React from 'react';
 import type { ReactNode } from 'react';
-import { forwardRef } from 'react';
+import React, { forwardRef } from 'react';
 import { Icon } from './Icon';
 
 export type ButtonVariant =
@@ -118,22 +117,22 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
-    // Base styles
+    // Base styles with improved transitions and focus states
     const baseStyles =
-      'inline-flex items-center justify-center font-medium rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2';
+      'inline-flex items-center justify-center font-medium rounded-md transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1';
 
-    // Variant styles
+    // Variant styles with improved contrast
     const variantStyles = {
       primary:
-        'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500 data-active:bg-blue-800',
+        'bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-400 active:bg-primary-800 shadow-sm hover:shadow',
       secondary:
-        'bg-gray-200 text-gray-800 hover:bg-gray-300 focus:ring-gray-500 data-active:bg-gray-400',
+        'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-400 active:bg-gray-400',
       danger:
-        'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 data-active:bg-red-800',
+        'bg-error text-white hover:bg-error-600 focus:ring-error-400 active:bg-error-800',
       outline:
-        'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-blue-500 data-active:bg-gray-100',
+        'bg-white text-primary-700 border border-primary-500 hover:bg-primary-50 focus:ring-primary-400 active:bg-primary-100',
       ghost:
-        'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-500 data-active:bg-gray-200',
+        'bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-400 active:bg-gray-200',
     };
 
     // Size styles

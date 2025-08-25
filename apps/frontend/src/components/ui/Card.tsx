@@ -87,11 +87,12 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     },
     ref
   ) => {
-    // Variant styles
+    // Variant styles with enhanced contrast and visual design
     const variantStyles = {
-      default: 'bg-white border border-gray-200',
-      outlined: 'bg-white border border-gray-300',
-      elevated: 'bg-white border border-gray-200 shadow-md',
+      default: 'bg-white border border-gray-200 hover:border-gray-300',
+      outlined: 'bg-white border-2 border-gray-300 hover:border-primary-400',
+      elevated:
+        'bg-white border border-gray-200 shadow-card hover:shadow-card-hover',
     };
 
     // Size styles
@@ -102,7 +103,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
 
     // Combined styles
     const combinedStyles = clsx(
-      'rounded-lg overflow-hidden',
+      'rounded-lg overflow-hidden transition-all duration-200',
       variantStyles[variant],
       sizeStyles,
       paddingStyle,
@@ -112,9 +113,9 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     return (
       <div ref={ref} className={combinedStyles} onClick={onClick} {...props}>
         {(title || headerActions) && (
-          <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-3">
             {title && (
-              <h3 className="text-lg font-medium text-gray-800">{title}</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
             )}
             {headerActions && (
               <div className="flex items-center">{headerActions}</div>
