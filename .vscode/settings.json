@@ -66,5 +66,7 @@
         ["cx\\(([^)]*)\\)", "(?:'|\"|`)([^']*)(?:'|\"|`)"]
     ],
     "python-envs.pythonProjects": [],
-    "makefile.configureOnOpen": false
+    "cSpell.words": [
+        "headlessui"
+    ]
 }

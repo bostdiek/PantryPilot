@@ -15,6 +15,7 @@ Instructions for building high-quality React applications with TypeScript, moder
 • Tailwind CSS 4.1.11+ for utility-first styling
 • Vitest 3.2.4+ for testing with React Testing Library
 • ESLint 9.30.1+ and Prettier 3.6.2+ for code quality
+• Headless UI for accessible component foundations
 
 ## Development Standards
 
@@ -36,23 +37,124 @@ Instructions for building high-quality React applications with TypeScript, moder
 • Include JSDoc comments for complex interfaces and functions
 • Use `as const` assertions for literal types and readonly arrays
 
-### Hooks and State Management
+### PantryPilot Domain Types
 
-• Follow React hooks rules (only call at top level, proper dependencies)
-• Use `useState` for local component state management
-• Implement `useEffect` with proper dependency arrays to avoid infinite loops
-• Use `useCallback` and `useMemo` for performance optimization when needed
-• Create custom hooks for reusable stateful logic
-• Leverage `useContext` for sharing state across component trees
+The application includes a set of domain-specific TypeScript types that should be used when working with data:
 
-### Styling with Tailwind CSS
+#### Recipe and Ingredient Types
 
-• Use Tailwind CSS 4.1.11+ utility classes for component styling
-• Follow mobile-first responsive design with breakpoint prefixes
-• Apply consistent spacing scale (`space-*`, `p-*`, `m-*`) throughout
-• Use semantic color classes and CSS custom properties for theming
-• Implement component variants with conditional class utilities
-• Create reusable styling patterns with utility composition
+```typescript
+// Types for recipes and ingredients
+type Recipe = {
+  id: string;
+  title: string;
+  description: string;
+  ingredients: Ingredient[];
+  instructions: string[];
+  cookTime: number; // in minutes
+  prepTime: number; // in minutes
+  servings: number;
+  difficulty: "easy" | "medium" | "hard";
+  tags: string[];
+  imageUrl?: string; // optional
+  ovenTemperatureF?: number; // optional
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type Ingredient = {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+};
+```
+
+#### Meal Planning Types
+
+```typescript
+type Meal = {
+  dayOfWeek:
+    | "Sunday"
+    | "Monday"
+    | "Tuesday"
+    | "Wednesday"
+    | "Thursday"
+    | "Friday"
+    | "Saturday";
+  recipeId?: string;
+  isLeftover: boolean;
+  isEatingOut: boolean;
+  notes?: string;
+};
+
+type MealPlan = {
+  meals: Meal[];
+};
+```
+
+#### User and Authentication Types
+
+```typescript
+interface AuthState {
+  token: string | null;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+  } | null;
+  login: (token: string, user: AuthState["user"]) => void;
+  logout: () => void;
+  setToken: (token: string | null) => void;
+  setUser: (user: AuthState["user"]) => void;
+}
+
+type User = {
+  userId: string;
+  username: string;
+  email: string;
+};
+```
+
+#### Family Management Types
+
+```typescript
+type FamilyMember = {
+  name: string;
+  dietaryRestrictions: string[];
+  allergies: string[];
+  preferredCuisines: string[];
+};
+
+type Family = {
+  members: FamilyMember[];
+};
+```
+
+#### API Types
+
+```typescript
+// API Response Types
+interface ApiResponse<T = unknown> {
+  data?: T;
+  message?: string;
+  error?: string;
+}
+
+// Health Check Types
+interface HealthCheckResponse {
+  status: "healthy" | "unhealthy";
+  message: string;
+  timestamp?: string;
+}
+
+// Common API Error Type
+interface ApiError {
+  message: string;
+  status?: number;
+  code?: string;
+}
+```
 
 ### Performance Optimization
 
@@ -240,292 +342,611 @@ function ContactForm() {
 }
 ```
 
-### Tailwind CSS Patterns
+### PantryPilot UI Component Library
 
-#### Component Styling
+The PantryPilot frontend includes a comprehensive set of UI components built on Headless UI and Tailwind CSS. These components should be used when building new pages and features.
+
+#### Available UI Components
+
+| Component        | Description                              | Props Interface   |
+| ---------------- | ---------------------------------------- | ----------------- |
+| `Button`         | Multi-variant button with loading states | `ButtonProps`     |
+| `Card`           | Content container with various styles    | `CardProps`       |
+| `Combobox`       | Searchable dropdown with autocomplete    | `ComboboxOption`  |
+| `Container`      | Page container with size variants        | `ContainerProps`  |
+| `Dialog`         | Modal dialog with focus management       | `DialogProps`     |
+| `Disclosure`     | Expandable/collapsible content           | `DisclosureProps` |
+| `Icon`           | SVG icon wrapper                         | N/A               |
+| `Input`          | Form input with variants                 | `InputProps`      |
+| `Select`         | Dropdown select field                    | `SelectOption`    |
+| `Switch`         | Toggle switch control                    | `SwitchProps`     |
+| `Tabs`           | Tabbed interface                         | `TabsProps`       |
+| `LoadingSpinner` | Loading indicator                        | N/A               |
+| `ErrorMessage`   | Error display component                  | N/A               |
+| `EmptyState`     | Empty state placeholder                  | N/A               |
+
+#### Layout Components
+
+| Component | Description                                | Props Interface |
+| --------- | ------------------------------------------ | --------------- |
+| `Grid`    | CSS Grid layout wrapper                    | `GridProps`     |
+| `Stack`   | Vertical or horizontal stack using Flexbox | `StackProps`    |
+
+#### Available Icons
+
+The application includes a set of SVG icons that can be imported and used with the `Icon` component:
+
+- `CalendarIcon`
+- `CheckIcon`
+- `ChefHatIcon`
+- `ChevronUpDownIcon`
+- `KitchenIcon`
+- `RestaurantIcon`
+
+#### Component Usage Example
 
 ```tsx
-// Use Tailwind's utility classes for consistent design
-function Card({ children, variant = "default" }: CardProps) {
-  const baseClasses = "rounded-lg shadow-sm border";
-  const variantClasses = {
-    default: "bg-white border-gray-200",
-    primary: "bg-blue-50 border-blue-200",
-    danger: "bg-red-50 border-red-200",
-  };
+import { Button, Card, Container, Input } from "../components/ui";
 
+function RecipeForm() {
   return (
-    <div className={`${baseClasses} ${variantClasses[variant]} p-6`}>
-      {children}
-    </div>
+    <Container size="md">
+      <Card variant="default" className="p-6">
+        <h2 className="text-xl font-semibold mb-4">Create New Recipe</h2>
+        <form>
+          <div className="space-y-4">
+            <Input
+              label="Recipe Name"
+              placeholder="Enter recipe name"
+              type="text"
+              required
+            />
+
+            <div className="flex justify-end">
+              <Button variant="primary" type="submit">
+                Save Recipe
+              </Button>
+            </div>
+          </div>
+        </form>
+      </Card>
+    </Container>
   );
 }
-
-// Responsive design patterns
-function ResponsiveGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {children}
-    </div>
-  );
-}
-```
-
-#### Design System Consistency
-
-```tsx
-// Define consistent spacing and typography
-const spacing = {
-  xs: "p-2",
-  sm: "p-3",
-  md: "p-4",
-  lg: "p-6",
-  xl: "p-8",
-} as const;
-
-const typography = {
-  h1: "text-3xl font-bold text-gray-900",
-  h2: "text-2xl font-semibold text-gray-900",
-  h3: "text-lg font-medium text-gray-900",
-  body: "text-base text-gray-700",
-  caption: "text-sm text-gray-500",
-} as const;
 ```
 
 ### API Integration Patterns
 
-#### API Client Setup
+#### API Client
 
-```tsx
+PantryPilot uses a standardized API client for all backend interactions:
+
+```typescript
 // api/client.ts
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { useAuthStore } from "../stores/useAuthStore";
+import type { ApiError, ApiResponse } from "../types/api";
 
-export class ApiClient {
-  private baseURL: string;
+// API configuration
+const API_BASE_URL = getApiBaseUrl();
 
-  constructor(baseURL: string = API_BASE_URL) {
-    this.baseURL = baseURL;
+function getApiBaseUrl(): string {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  if (
+    import.meta.env.MODE === "development" ||
+    import.meta.env.MODE === "test"
+  ) {
+    return "http://localhost:8000";
+  }
+  throw new Error("VITE_API_URL must be set in production environments");
+}
+
+// API client with proper error handling
+class ApiClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl;
   }
 
-  async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`;
+  private getAuthHeaders(): Record<string, string> {
+    const token = useAuthStore.getState().token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
 
-    const response = await fetch(url, {
-      headers: {
+  async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+    // Ensure endpoint starts with /
+    const normalizedEndpoint = endpoint.startsWith("/")
+      ? endpoint
+      : `/${endpoint}`;
+    const url = `${this.baseUrl}${normalizedEndpoint}`;
+
+    try {
+      const headers = {
         "Content-Type": "application/json",
-        ...options.headers,
-      },
-      ...options,
-    });
+        ...this.getAuthHeaders(),
+        ...(options?.headers || {}),
+      };
+      const resp = await fetch(url, {
+        ...options,
+        headers,
+      });
 
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      const body = (await resp.json()) as ApiResponse<T>;
+
+      if (!resp.ok || body.error) {
+        const apiError: ApiError = {
+          message: body.error ?? `Request failed (${resp.status})`,
+          status: resp.status,
+        };
+        throw apiError;
+      }
+
+      return body.data as T;
+    } catch (err: unknown) {
+      const apiError: ApiError =
+        err instanceof Error
+          ? { message: err.message }
+          : { message: "Unknown error" };
+      console.error(`API request failed: ${url}`, apiError);
+      throw apiError;
     }
-
-    return response.json();
-  }
-
-  // Convenience methods
-  get<T>(endpoint: string) {
-    return this.request<T>(endpoint, { method: "GET" });
-  }
-
-  post<T>(endpoint: string, data: unknown) {
-    return this.request<T>(endpoint, {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
   }
 }
 
-export const apiClient = new ApiClient();
+// Export singleton instance
+export const apiClient = new ApiClient(API_BASE_URL);
 ```
 
-#### Service Layer Pattern
+#### API Endpoints
 
-```tsx
-// api/services/userService.ts
+The application has specific endpoint modules for different resources:
+
+```typescript
+// Example: api/endpoints/recipes.ts
 import { apiClient } from "../client";
-import type { User, CreateUserRequest, UpdateUserRequest } from "../types";
+import type { Recipe } from "../types/Recipe";
 
-export const userService = {
-  async getUsers(): Promise<User[]> {
-    return apiClient.get<User[]>("/api/v1/users");
+export const recipesApi = {
+  async getRecipes(): Promise<Recipe[]> {
+    return apiClient.request<Recipe[]>("/api/v1/recipes");
   },
 
-  async createUser(userData: CreateUserRequest): Promise<User> {
-    return apiClient.post<User>("/api/v1/users", userData);
+  async getRecipeById(id: string): Promise<Recipe> {
+    return apiClient.request<Recipe>(`/api/v1/recipes/${id}`);
   },
 
-  async updateUser(id: number, userData: UpdateUserRequest): Promise<User> {
-    return apiClient.request<User>(`/api/v1/users/${id}`, {
+  async createRecipe(
+    recipe: Omit<Recipe, "id" | "createdAt" | "updatedAt">
+  ): Promise<Recipe> {
+    return apiClient.request<Recipe>("/api/v1/recipes", {
+      method: "POST",
+      body: JSON.stringify(recipe),
+    });
+  },
+
+  async updateRecipe(id: string, recipe: Partial<Recipe>): Promise<Recipe> {
+    return apiClient.request<Recipe>(`/api/v1/recipes/${id}`, {
       method: "PATCH",
-      body: JSON.stringify(userData),
+      body: JSON.stringify(recipe),
+    });
+  },
+
+  async deleteRecipe(id: string): Promise<void> {
+    await apiClient.request(`/api/v1/recipes/${id}`, {
+      method: "DELETE",
     });
   },
 };
 ```
+
+### Hooks and State Management
+
+#### Zustand Store Pattern
+
+PantryPilot uses Zustand for global state management. Create separate stores for different domains:
+
+```typescript
+// stores/useAuthStore.ts
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+import type { AuthState } from "../types/Auth";
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set) => ({
+      token: null,
+      user: null,
+      login: (token, user) => set({ token, user }),
+      logout: () => set({ token: null, user: null }),
+      setToken: (token) => set({ token }),
+      setUser: (user) => set({ user }),
+    }),
+    {
+      name: "auth-storage", // unique name for localStorage
+      partialize: (state) => ({ token: state.token, user: state.user }), // only persist token and user
+    }
+  )
+);
+
+// stores/useAppStore.ts
+import { create } from "zustand";
+
+interface AppState {
+  currentPage: string;
+  isMenuOpen: boolean;
+  theme: "light" | "dark";
+
+  setCurrentPage: (page: string) => void;
+  toggleMenu: () => void;
+  setTheme: (theme: "light" | "dark") => void;
+}
+
+export const useAppStore = create<AppState>((set) => ({
+  currentPage: "home",
+  isMenuOpen: false,
+  theme: "light",
+
+  setCurrentPage: (page) => set({ currentPage: page }),
+  toggleMenu: () => set((state) => ({ isMenuOpen: !state.isMenuOpen })),
+  setTheme: (theme) => set({ theme }),
+}));
+```
+
+#### Custom Hooks
+
+Create custom hooks for reusable logic:
+
+```typescript
+// Example: hooks/useApi.ts
+import { useState, useCallback } from "react";
+import type { ApiError } from "../types/api";
+
+interface UseApiOptions<T> {
+  initialData?: T;
+  onSuccess?: (data: T) => void;
+  onError?: (error: ApiError) => void;
+}
+
+export function useApi<T>(
+  apiFunction: (...args: any[]) => Promise<T>,
+  options: UseApiOptions<T> = {}
+) {
+  const [data, setData] = useState<T | null>(options.initialData || null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const execute = useCallback(
+    async (...args: any[]) => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await apiFunction(...args);
+        setData(result);
+        options.onSuccess?.(result);
+        return result;
+      } catch (err) {
+        const apiError = err as ApiError;
+        setError(apiError);
+        options.onError?.(apiError);
+        throw apiError;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [apiFunction, options]
+  );
+
+  return {
+    data,
+    error,
+    loading,
+    execute,
+  };
+}
+```
+
+#### React Hooks Guidelines
+
+• Follow React hooks rules (only call at top level, proper dependencies)
+• Use `useState` for local component state management
+• Implement `useEffect` with proper dependency arrays to avoid infinite loops
+• Use `useCallback` and `useMemo` for performance optimization when needed
+• Create custom hooks for reusable stateful logic
+• Leverage context sparingly for deeply nested shared state
+
+### Styling with Tailwind CSS
+
+• Use Tailwind CSS 4.1.11+ utility classes for component styling
+• Follow mobile-first responsive design with breakpoint prefixes
+• Apply consistent spacing scale (`space-*`, `p-*`, `m-*`) throughout
+• Use semantic color classes and CSS custom properties for theming
+• Implement component variants with conditional class utilities
+• Create reusable styling patterns with utility composition
 
 ### Testing Patterns with Vitest
 
 #### Component Testing
 
 ```tsx
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
-import ContactForm from "./ContactForm";
+import { Button } from "./Button";
 
-describe("ContactForm", () => {
-  it("should submit form with valid data", async () => {
-    const mockOnSubmit = vi.fn();
-    const user = userEvent.setup();
-
-    render(<ContactForm onSubmit={mockOnSubmit} />);
-
-    await user.type(screen.getByLabelText("Email"), "test@example.com");
-    await user.type(screen.getByLabelText("Message"), "Hello world");
-    await user.click(screen.getByRole("button", { name: "Send" }));
-
-    await waitFor(() => {
-      expect(mockOnSubmit).toHaveBeenCalledWith({
-        email: "test@example.com",
-        message: "Hello world",
-      });
-    });
+describe("Button", () => {
+  it("renders correctly with default props", () => {
+    render(<Button>Click me</Button>);
+    expect(screen.getByRole("button")).toHaveTextContent("Click me");
   });
 
-  it("should display validation errors", async () => {
-    render(<ContactForm onSubmit={vi.fn()} />);
+  it("calls onClick handler when clicked", async () => {
+    const handleClick = vi.fn();
+    const user = userEvent.setup();
 
-    await userEvent.click(screen.getByRole("button", { name: "Send" }));
+    render(<Button onClick={handleClick}>Click me</Button>);
+    await user.click(screen.getByRole("button"));
 
-    expect(screen.getByText("Email is required")).toBeInTheDocument();
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("displays loading state when loading prop is true", () => {
+    render(<Button loading>Click me</Button>);
+    expect(screen.getByRole("button")).toHaveAttribute("disabled");
+    expect(document.querySelector("svg")).toBeInTheDocument(); // Loading spinner
   });
 });
 ```
 
-#### Hook Testing
+#### Store Testing
 
 ```tsx
 import { renderHook, act } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
-import useApi from "./useApi";
+import { describe, it, expect, beforeEach } from "vitest";
+import { useAppStore } from "./useAppStore";
 
-describe("useApi", () => {
-  it("should handle successful API call", async () => {
-    const mockApiCall = vi.fn().mockResolvedValue({ data: "test" });
+describe("useAppStore", () => {
+  beforeEach(() => {
+    // Reset the store before each test
+    act(() => {
+      useAppStore.setState({
+        currentPage: "home",
+        isMenuOpen: false,
+        theme: "light",
+      });
+    });
+  });
 
-    const { result } = renderHook(() => useApi(mockApiCall));
+  it("should update current page", () => {
+    const { result } = renderHook(() => useAppStore());
 
-    await act(async () => {
-      await result.current.execute();
+    act(() => {
+      result.current.setCurrentPage("recipes");
     });
 
-    expect(result.current.data).toEqual({ data: "test" });
-    expect(result.current.loading).toBe(false);
-    expect(result.current.error).toBeNull();
+    expect(result.current.currentPage).toBe("recipes");
+  });
+
+  it("should toggle menu state", () => {
+    const { result } = renderHook(() => useAppStore());
+
+    act(() => {
+      result.current.toggleMenu();
+    });
+
+    expect(result.current.isMenuOpen).toBe(true);
+
+    act(() => {
+      result.current.toggleMenu();
+    });
+
+    expect(result.current.isMenuOpen).toBe(false);
+  });
+});
+```
+
+#### API Testing
+
+```tsx
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { apiClient } from "./client";
+
+// Mock fetch globally
+beforeEach(() => {
+  global.fetch = vi.fn();
+});
+
+describe("apiClient", () => {
+  it("should handle successful requests", async () => {
+    // Setup mock response
+    const mockResponse = {
+      ok: true,
+      json: () =>
+        Promise.resolve({ data: { id: 1, name: "Test" }, error: null }),
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    // Make the request
+    const result = await apiClient.request("/test");
+
+    // Assertions
+    expect(result).toEqual({ id: 1, name: "Test" });
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("/test"),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+        }),
+      })
+    );
+  });
+
+  it("should handle API errors", async () => {
+    // Setup mock error response
+    const mockResponse = {
+      ok: false,
+      status: 404,
+      json: () => Promise.resolve({ error: "Not found" }),
+    };
+    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+
+    // Make the request and expect it to throw
+    await expect(apiClient.request("/test")).rejects.toMatchObject({
+      message: "Not found",
+      status: 404,
+    });
   });
 });
 ```
 
 ### Performance Optimization
 
-#### Memo and Callback Optimization
+#### Component Optimization
 
 ```tsx
 import { memo, useMemo, useCallback } from "react";
+import { Recipe } from "../types/Recipe";
 
-interface ExpensiveListProps {
-  items: Item[];
-  onItemClick: (id: number) => void;
+interface RecipeListProps {
+  recipes: Recipe[];
+  onRecipeSelect: (id: string) => void;
 }
 
-const ExpensiveList = memo(({ items, onItemClick }: ExpensiveListProps) => {
-  const sortedItems = useMemo(() => {
-    return items.sort((a, b) => a.name.localeCompare(b.name));
-  }, [items]);
+// Use memo for components that render frequently with the same props
+export const RecipeList = memo(
+  ({ recipes, onRecipeSelect }: RecipeListProps) => {
+    // Use useMemo for expensive computations
+    const sortedRecipes = useMemo(() => {
+      return [...recipes].sort((a, b) => a.title.localeCompare(b.title));
+    }, [recipes]);
 
-  const handleItemClick = useCallback(
-    (id: number) => {
-      onItemClick(id);
-    },
-    [onItemClick]
-  );
+    // Use useCallback for event handlers that are passed to child components
+    const handleRecipeClick = useCallback(
+      (id: string) => {
+        onRecipeSelect(id);
+      },
+      [onRecipeSelect]
+    );
 
-  return (
-    <ul>
-      {sortedItems.map((item) => (
-        <ExpensiveListItem
-          key={item.id}
-          item={item}
-          onClick={handleItemClick}
-        />
-      ))}
-    </ul>
-  );
-});
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sortedRecipes.map((recipe) => (
+          <div
+            key={recipe.id}
+            onClick={() => handleRecipeClick(recipe.id)}
+            className="cursor-pointer"
+          >
+            <h3 className="font-medium">{recipe.title}</h3>
+            <p className="text-sm text-gray-500">
+              {recipe.prepTime + recipe.cookTime} mins • {recipe.difficulty}
+            </p>
+          </div>
+        ))}
+      </div>
+    );
+  }
+);
 
-ExpensiveList.displayName = "ExpensiveList";
+RecipeList.displayName = "RecipeList";
 ```
 
-#### Lazy Loading
+#### Code Splitting with React.lazy
 
 ```tsx
 import { lazy, Suspense } from "react";
+import { LoadingSpinner } from "../components/ui";
 
-// Lazy load heavy components
-const Dashboard = lazy(() => import("./Dashboard"));
-const Reports = lazy(() => import("./Reports"));
+// Lazy load page components
+const RecipesPage = lazy(() => import("./RecipesPage"));
+const MealPlanPage = lazy(() => import("./MealPlanPage"));
+const RecipeDetailPage = lazy(() => import("./RecipeDetailPage"));
 
-function App() {
+function AppRoutes() {
   return (
     <Suspense
       fallback={
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex items-center justify-center h-screen">
+          <LoadingSpinner />
         </div>
       }
     >
       <Routes>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/reports" element={<Reports />} />
+        <Route path="/" element={<HomePage />} />
+        <Route path="/recipes" element={<RecipesPage />} />
+        <Route path="/recipes/:id" element={<RecipeDetailPage />} />
+        <Route path="/meal-plan" element={<MealPlanPage />} />
       </Routes>
     </Suspense>
   );
 }
 ```
 
-### Context7 Integration
+### Page Structure and Layout
 
-When encountering React questions or needing examples:
+When building new pages, follow this consistent structure:
 
-- Reference `/reactjs/react.dev` for official React 19+ documentation
-- Use Context7 to fetch current best practices for:
-  - Modern hook patterns
-  - TypeScript integration
-  - Performance optimization
-  - Testing strategies
+```tsx
+import { Container, Card, Button } from "../components/ui";
+import { Stack, Grid } from "../components/layout";
+import { useApi } from "../hooks/useApi";
+import { recipesApi } from "../api/endpoints/recipes";
 
-### Environment Configuration
+function RecipesPage() {
+  const {
+    data: recipes,
+    loading,
+    error,
+    execute: fetchRecipes,
+  } = useApi(recipesApi.getRecipes);
 
-#### Vite Environment Variables
+  // Layout structure: Container -> Card -> Content
+  return (
+    <Container size="lg">
+      <Stack spacing="lg">
+        {/* Page header */}
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold">My Recipes</h1>
+          <Button variant="primary">Add Recipe</Button>
+        </div>
 
-```typescript
-// types/env.d.ts
-interface ImportMetaEnv {
-  readonly VITE_API_URL: string;
-  readonly VITE_APP_NAME: string;
-  readonly VITE_DEBUG: string;
+        {/* Main content */}
+        <Card variant="default">
+          {loading ? (
+            <div className="py-12 flex justify-center">
+              <LoadingSpinner />
+            </div>
+          ) : error ? (
+            <div className="py-12 text-center">
+              <p className="text-red-500">Failed to load recipes</p>
+              <Button
+                variant="secondary"
+                className="mt-4"
+                onClick={() => fetchRecipes()}
+              >
+                Retry
+              </Button>
+            </div>
+          ) : recipes?.length === 0 ? (
+            <EmptyState
+              title="No recipes yet"
+              description="Create your first recipe to get started"
+              action={<Button variant="primary">Add Recipe</Button>}
+            />
+          ) : (
+            <Grid columns={3} gap="md">
+              {recipes?.map((recipe) => (
+                <RecipeCard key={recipe.id} recipe={recipe} />
+              ))}
+            </Grid>
+          )}
+        </Card>
+      </Stack>
+    </Container>
+  );
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}
-
-// Usage
-const apiUrl = import.meta.env.VITE_API_URL;
-const isDebug = import.meta.env.VITE_DEBUG === "true";
+export default RecipesPage;
 ```
 
 ### Development Commands Reference
@@ -535,48 +956,51 @@ const isDebug = import.meta.env.VITE_DEBUG === "true";
 npm run dev                 # Start Vite dev server
 
 # Code quality
-npm run lint               # ESLint checking
-npm run type-check         # TypeScript checking
-npm run format             # Prettier formatting
+npm run lint                # ESLint checking
+npm run type-check          # TypeScript checking
+npm run format              # Prettier formatting
 
 # Testing
-npm run test               # Run Vitest
-npm run test:ui            # Run with UI
-npm run test:coverage      # Run with coverage
+npm run test                # Run Vitest
+npm run test:ui             # Run with UI
+npm run test:coverage       # Run with coverage
 
 # Build
-npm run build              # Production build
-npm run preview            # Preview production build
+npm run build               # Production build
+npm run preview             # Preview production build
 ```
 
-### Accessibility Best Practices
+### Component Development Guidelines
 
-```tsx
-// Semantic HTML and ARIA
-function Modal({ title, children, onClose }: ModalProps) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center"
-    >
-      <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-        <h2 id="modal-title" className="text-lg font-semibold mb-4">
-          {title}
-        </h2>
-        {children}
-        <button
-          onClick={onClose}
-          aria-label="Close modal"
-          className="mt-4 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-```
+1. **Use Headless UI Components**: Leverage the built-in Headless UI components for accessible interactive elements.
 
-Always prioritize type safety, component reusability, and modern React patterns. Use Context7 to reference the latest React documentation when implementing new features or optimizations.
+2. **Component Naming**:
+
+   - Use PascalCase for component names
+   - Include descriptive suffixes (e.g., Button, Card, List)
+   - Create separate files for large components
+
+3. **Props Structure**:
+
+   - Define clear prop interfaces with JSDoc comments
+   - Use sensible defaults for optional props
+   - Use properly typed event handlers
+
+4. **Component Structure**:
+
+   - Place helper functions within component or extract to custom hooks
+   - Apply consistent Tailwind classes organization
+   - Keep component files focused on a single responsibility
+
+5. **Testing Focus**:
+
+   - Test component behavior, not implementation details
+   - Cover key user interactions and state changes
+   - Test error and loading states
+
+6. **Performance Considerations**:
+   - Add memo() to components rendered frequently in lists
+   - Use useCallback() for functions passed as props
+   - Apply useMemo() for expensive calculations
+
+By following these guidelines, you'll maintain consistency across the PantryPilot frontend and ensure high-quality, maintainable React components.
