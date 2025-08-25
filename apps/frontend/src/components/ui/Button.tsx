@@ -1,8 +1,7 @@
 import { Button as HeadlessButton } from '@headlessui/react';
 import clsx from 'clsx';
-import React from 'react';
 import type { ReactNode } from 'react';
-import { forwardRef } from 'react';
+import React, { forwardRef } from 'react';
 import { Icon } from './Icon';
 
 export type ButtonVariant =
