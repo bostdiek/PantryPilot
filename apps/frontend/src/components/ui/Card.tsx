@@ -1,6 +1,6 @@
+import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { forwardRef } from 'react';
-import clsx from 'clsx';
 
 export type CardVariant = 'default' | 'outlined' | 'elevated';
 

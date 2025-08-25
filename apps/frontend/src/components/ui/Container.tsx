@@ -1,6 +1,6 @@
+import clsx from 'clsx';
 import type { ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
-import clsx from 'clsx';
 
 export type ContainerSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 

@@ -1,6 +1,6 @@
 import { Disclosure as HeadlessDisclosure } from '@headlessui/react';
-import type { ComponentType, ReactNode, SVGProps } from 'react';
 import clsx from 'clsx';
+import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { Icon } from './Icon';
 import ChevronUpDown from './icons/chevron-up-down.svg?react';
 

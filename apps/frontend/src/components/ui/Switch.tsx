@@ -1,7 +1,7 @@
 import { Switch as HeadlessSwitch } from '@headlessui/react';
+import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import clsx from 'clsx';
 import { switchKnobSizes, switchTrackSizes } from './tokens';
 
 export interface SwitchProps {

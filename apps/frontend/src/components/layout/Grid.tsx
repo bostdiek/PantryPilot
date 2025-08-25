@@ -1,6 +1,6 @@
+import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import React from 'react';
-import clsx from 'clsx';
 
 /**
  * Grid component for responsive grid layouts

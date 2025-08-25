@@ -1,7 +1,7 @@
 import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
+import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { Fragment } from 'react';
-import clsx from 'clsx';
 import type { ButtonProps } from './Button';
 import { Button } from './Button';
 import { dialogSizes } from './tokens';

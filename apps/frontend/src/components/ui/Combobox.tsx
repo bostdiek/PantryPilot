@@ -1,6 +1,6 @@
 import { Combobox as HeadlessCombobox, Transition } from '@headlessui/react';
-import { Fragment, useState } from 'react';
 import clsx from 'clsx';
+import { Fragment, useState } from 'react';
 import { Icon } from './Icon';
 
 // Import the SVG components
