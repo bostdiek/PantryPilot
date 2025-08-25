@@ -1,6 +1,7 @@
 import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
 import type { ReactNode } from 'react';
 import { Fragment } from 'react';
+import clsx from 'clsx';
 import type { ButtonProps } from './Button';
 import { Button } from './Button';
 import { dialogSizes } from './tokens';
@@ -127,7 +128,12 @@ export function Dialog({
               leaveTo="opacity-0 scale-95"
             >
               <HeadlessDialog.Panel
-                className={`w-full ${sizeClasses[size]} transform overflow-hidden rounded-lg bg-white p-6 text-left align-middle shadow-xl transition-all ${className}`}
+                className={clsx(
+                  'w-full',
+                  sizeClasses[size],
+                  'transform overflow-hidden rounded-lg bg-white p-6 text-left align-middle shadow-xl transition-all',
+                  className
+                )}
               >
                 {/* Title */}
                 {title && (
@@ -185,7 +191,7 @@ export function DialogFooter({
   children?: ReactNode;
 }) {
   return (
-    <div className={`mt-6 flex justify-end space-x-3 ${className}`}>
+    <div className={clsx('mt-6 flex justify-end space-x-3', className)}>
       {children ||
         (onCancel || onConfirm ? (
           <>

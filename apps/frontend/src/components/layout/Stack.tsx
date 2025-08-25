@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import React from 'react';
+import clsx from 'clsx';
 
 /**
  * Stack component for vertical or horizontal stacking of children
@@ -22,7 +23,7 @@ export const Stack: React.FC<StackProps> = ({
   const dirClass = direction === 'vertical' ? 'flex-col' : 'flex-row';
   const gapClass = `gap-${gap}`;
   return (
-    <div className={`flex ${dirClass} ${gapClass} ${className}`}>
+    <div className={clsx('flex', dirClass, gapClass, className)}>
       {children}
     </div>
   );

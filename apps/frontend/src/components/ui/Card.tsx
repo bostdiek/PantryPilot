@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { forwardRef } from 'react';
+import clsx from 'clsx';
 
 export type CardVariant = 'default' | 'outlined' | 'elevated';
 
@@ -94,22 +95,19 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
     };
 
     // Size styles
-    const sizeStyles = [fullWidth ? 'w-full' : '', fullHeight ? 'h-full' : '']
-      .filter(Boolean)
-      .join(' ');
+    const sizeStyles = clsx(fullWidth && 'w-full', fullHeight && 'h-full');
 
     // Padding style
     const paddingStyle = noPadding ? '' : 'p-4';
 
     // Combined styles
-    const combinedStyles = [
+    const combinedStyles = clsx(
       'rounded-lg overflow-hidden',
       variantStyles[variant],
       sizeStyles,
-      className,
-    ]
-      .filter(Boolean)
-      .join(' ');
+      paddingStyle,
+      className
+    );
 
     return (
       <div ref={ref} className={combinedStyles} onClick={onClick} {...props}>

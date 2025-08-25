@@ -1,5 +1,6 @@
 import type { ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
+import clsx from 'clsx';
 
 export type ContainerSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -72,15 +73,13 @@ export const Container = forwardRef<HTMLDivElement, ContainerProps>(
     };
 
     // Combined styles
-    const combinedStyles = [
+    const combinedStyles = clsx(
       'w-full',
       sizeStyles[size],
-      centered ? 'mx-auto' : '',
-      padding ? 'px-4 sm:px-6 md:px-8' : '',
-      className,
-    ]
-      .filter(Boolean)
-      .join(' ');
+      centered && 'mx-auto',
+      padding && 'px-4 sm:px-6 md:px-8',
+      className
+    );
 
     const Component = as as ElementType;
 

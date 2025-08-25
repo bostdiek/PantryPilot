@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import React from 'react';
+import clsx from 'clsx';
 
 /**
  * Grid component for responsive grid layouts
@@ -22,7 +23,7 @@ export const Grid: React.FC<GridProps> = ({
   const colsClass = `grid-cols-${columns}`;
   const gapClass = `gap-${gap}`;
   return (
-    <div className={`grid ${colsClass} ${gapClass} ${className}`}>
+    <div className={clsx('grid', colsClass, gapClass, className)}>
       {children}
     </div>
   );

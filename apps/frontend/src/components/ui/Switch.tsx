@@ -1,6 +1,7 @@
 import { Switch as HeadlessSwitch } from '@headlessui/react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
+import clsx from 'clsx';
 import { switchKnobSizes, switchTrackSizes } from './tokens';
 
 export interface SwitchProps {
@@ -110,19 +111,24 @@ export function Switch({
   // If there's a label or description, render with a wrapper for layout
   if (label || description) {
     return (
-      <div className={`flex items-start ${disabled ? 'opacity-50' : ''}`}>
+      <div className={clsx('flex items-start', disabled && 'opacity-50')}>
         <HeadlessSwitch.Group>
           <div className="flex flex-col">
             {label && (
               <HeadlessSwitch.Label
                 passive={!labelClickable}
-                className={`mb-1 text-sm font-medium text-gray-700 ${labelClassName}`}
+                className={clsx(
+                  'mb-1 text-sm font-medium text-gray-700',
+                  labelClassName
+                )}
               >
                 {label}
               </HeadlessSwitch.Label>
             )}
             {description && (
-              <div className={`text-xs text-gray-500 ${descriptionClassName}`}>
+              <div
+                className={clsx('text-xs text-gray-500', descriptionClassName)}
+              >
                 {description}
               </div>
             )}
@@ -135,12 +141,20 @@ export function Switch({
               disabled={disabled}
               name={name}
               value={value}
-              className={`group relative inline-flex ${switchSizeClasses[size]} items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none data-[checked]:bg-blue-600 data-[disabled]:cursor-not-allowed ${className} `}
+              className={clsx(
+                'group relative inline-flex',
+                switchSizeClasses[size],
+                'items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none data-[checked]:bg-blue-600 data-[disabled]:cursor-not-allowed',
+                className
+              )}
               id={id}
             >
               <span className="sr-only">{label || 'Toggle'}</span>
               <span
-                className={` ${knobSizeClasses[size]} rounded-full bg-white transition-transform`}
+                className={clsx(
+                  knobSizeClasses[size],
+                  'rounded-full bg-white transition-transform'
+                )}
                 aria-hidden="true"
               />
             </HeadlessSwitch>
@@ -158,11 +172,20 @@ export function Switch({
       disabled={disabled}
       name={name}
       value={value}
-      className={`group relative inline-flex ${switchSizeClasses[size]} items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none data-[checked]:bg-blue-600 data-[disabled]:cursor-not-allowed ${disabled ? 'opacity-50' : ''} ${className} `}
+      className={clsx(
+        'group relative inline-flex',
+        switchSizeClasses[size],
+        'items-center rounded-full bg-gray-200 transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none data-[checked]:bg-blue-600 data-[disabled]:cursor-not-allowed',
+        disabled && 'opacity-50',
+        className
+      )}
     >
       <span className="sr-only">{label || 'Toggle'}</span>
       <span
-        className={` ${knobSizeClasses[size]} rounded-full bg-white transition-transform`}
+        className={clsx(
+          knobSizeClasses[size],
+          'rounded-full bg-white transition-transform'
+        )}
         aria-hidden="true"
       />
     </HeadlessSwitch>

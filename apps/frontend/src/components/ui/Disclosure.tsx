@@ -1,5 +1,6 @@
 import { Disclosure as HeadlessDisclosure } from '@headlessui/react';
 import type { ComponentType, ReactNode, SVGProps } from 'react';
+import clsx from 'clsx';
 import { Icon } from './Icon';
 import ChevronUpDown from './icons/chevron-up-down.svg?react';
 
@@ -73,13 +74,16 @@ export function Disclosure({
   return (
     <HeadlessDisclosure
       as="div"
-      className={`rounded-md ${className}`}
+      className={clsx('rounded-md', className)}
       defaultOpen={defaultOpen}
     >
       {({ open: isOpen }) => (
         <>
           <HeadlessDisclosure.Button
-            className={`focus-visible:ring-opacity-75 flex w-full justify-between rounded-lg bg-blue-50 px-4 py-3 text-left text-sm font-medium text-blue-900 hover:bg-blue-100 focus:outline-none focus-visible:ring focus-visible:ring-blue-500 ${buttonClassName}`}
+            className={clsx(
+              'focus-visible:ring-opacity-75 flex w-full justify-between rounded-lg bg-blue-50 px-4 py-3 text-left text-sm font-medium text-blue-900 hover:bg-blue-100 focus:outline-none focus-visible:ring focus-visible:ring-blue-500',
+              buttonClassName
+            )}
             onClick={() => {
               onChange?.(!isOpen);
             }}
@@ -87,15 +91,19 @@ export function Disclosure({
             <span>{title}</span>
             <Icon
               svg={iconSvg}
-              className={`h-5 w-5 text-blue-500 transition-transform ${
-                isOpen ? 'rotate-180 transform' : ''
-              }`}
+              className={clsx(
+                'h-5 w-5 text-blue-500 transition-transform',
+                isOpen && 'rotate-180 transform'
+              )}
               aria-hidden="true"
             />
           </HeadlessDisclosure.Button>
 
           <HeadlessDisclosure.Panel
-            className={`px-4 pt-4 pb-2 text-sm text-gray-700 ${panelClassName}`}
+            className={clsx(
+              'px-4 pt-4 pb-2 text-sm text-gray-700',
+              panelClassName
+            )}
           >
             {children}
           </HeadlessDisclosure.Panel>

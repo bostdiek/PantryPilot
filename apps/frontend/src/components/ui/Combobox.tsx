@@ -1,5 +1,6 @@
 import { Combobox as HeadlessCombobox, Transition } from '@headlessui/react';
 import { Fragment, useState } from 'react';
+import clsx from 'clsx';
 import { Icon } from './Icon';
 
 // Import the SVG components
@@ -133,17 +134,19 @@ export function Combobox({
                         {({ selected, active }) => (
                           <>
                             <span
-                              className={`block truncate ${
+                              className={clsx(
+                                'block truncate',
                                 selected ? 'font-medium' : 'font-normal'
-                              }`}
+                              )}
                             >
                               {option.name}
                             </span>
                             {selected ? (
                               <span
-                                className={`absolute inset-y-0 left-0 flex items-center pl-3 ${
+                                className={clsx(
+                                  'absolute inset-y-0 left-0 flex items-center pl-3',
                                   active ? 'text-blue-600' : 'text-blue-600'
-                                }`}
+                                )}
                               >
                                 <Icon
                                   svg={CheckIcon}
