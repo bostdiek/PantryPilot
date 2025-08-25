@@ -2,9 +2,9 @@ import { Combobox as HeadlessCombobox, Transition } from '@headlessui/react';
 import { Fragment, useState } from 'react';
 import { Icon } from './Icon';
 
-// Import the SVG paths
-import checkIcon from './icons/check.svg';
-import chevronUpDownIcon from './icons/chevron-up-down.svg';
+// Import the SVG components
+import CheckIcon from './icons/check.svg?react';
+import ChevronUpDownIcon from './icons/chevron-up-down.svg?react';
 
 export type ComboboxOption = {
   id: string;
@@ -99,7 +99,7 @@ export function Combobox({
                 />
                 <HeadlessCombobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
                   <Icon
-                    src={chevronUpDownIcon}
+                    svg={ChevronUpDownIcon}
                     className="h-5 w-5 text-gray-400"
                     aria-hidden="true"
                   />
@@ -146,7 +146,7 @@ export function Combobox({
                                 }`}
                               >
                                 <Icon
-                                  src={checkIcon}
+                                  svg={CheckIcon}
                                   className="h-5 w-5"
                                   aria-hidden="true"
                                 />
