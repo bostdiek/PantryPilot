@@ -4,23 +4,40 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
-import { Select } from '../components/ui/Select';
+import { Select, type SelectOption } from '../components/ui/Select';
 import type { Ingredient } from '../types/Ingredients';
+import { RECIPE_CATEGORIES, RECIPE_DIFFICULTIES } from '../types/Recipe';
+
+// Create options for the Select component
+const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
+  id: cat,
+  name: cat.charAt(0).toUpperCase() + cat.slice(1), // Capitalize first letter
+}));
+
+const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
+  id: diff,
+  name: diff.charAt(0).toUpperCase() + diff.slice(1), // Capitalize first letter
+}));
 
 const RecipesNewPage: React.FC = () => {
   const navigate = useNavigate();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  // Category options
-  const categoryOptions = [
-    { id: 'breakfast', name: 'Breakfast' },
-    { id: 'lunch', name: 'Lunch' },
-    { id: 'dinner', name: 'Dinner' },
-  ];
-  const [category, setCategory] = useState(categoryOptions[0]);
+  const [category, setCategory] = useState<SelectOption>(
+    categoryOptions.find((c) => c.id === 'dinner') || categoryOptions[0]
+  );
+  const [difficulty, setDifficulty] = useState<SelectOption>(
+    difficultyOptions.find((d) => d.id === 'medium') || difficultyOptions[0]
+  );
   const [prepTime, setPrepTime] = useState(0);
   const [cookTime, setCookTime] = useState(0);
-  const [servings, setServings] = useState(1);
+  const [servingMin, setServingMin] = useState(1);
+  const [servingMax, setServingMax] = useState<number | undefined>(undefined);
+  const [ethnicity, setEthnicity] = useState('');
+  const [ovenTemperatureF, setOvenTemperatureF] = useState<number | undefined>(
+    undefined
+  );
+  const [userNotes, setUserNotes] = useState('');
   const [ingredients, setIngredients] = useState<Ingredient[]>([
     {
       name: '',
@@ -34,7 +51,22 @@ const RecipesNewPage: React.FC = () => {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: handle recipe creation
+    // TODO: handle recipe creation with all the fields
+    console.log({
+      title,
+      description,
+      category: category.id,
+      difficulty: difficulty.id,
+      prep_time_minutes: prepTime,
+      cook_time_minutes: cookTime,
+      serving_min: servingMin,
+      serving_max: servingMax,
+      ethnicity,
+      oven_temperature_f: ovenTemperatureF,
+      user_notes: userNotes,
+      ingredients,
+      instructions,
+    });
     navigate('/recipes');
   };
 
@@ -58,16 +90,25 @@ const RecipesNewPage: React.FC = () => {
             placeholder="Brief description of the recipe"
           />
 
-          {/* Category Select */}
-          <Select
-            label="Category"
-            options={categoryOptions}
-            value={category}
-            onChange={setCategory}
-          />
+          {/* Category and Difficulty */}
+          <div className="grid grid-cols-2 gap-4">
+            <Select
+              label="Category"
+              options={categoryOptions}
+              value={category}
+              onChange={setCategory}
+            />
+
+            <Select
+              label="Difficulty"
+              options={difficultyOptions}
+              value={difficulty}
+              onChange={setDifficulty}
+            />
+          </div>
 
           {/* Prep, Cook, Servings */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <Input
               label="Prep (min)"
               type="number"
@@ -81,10 +122,44 @@ const RecipesNewPage: React.FC = () => {
               onChange={(v) => setCookTime(Number(v))}
             />
             <Input
-              label="Servings"
+              label="Min Servings"
               type="number"
-              value={servings.toString()}
-              onChange={(v) => setServings(Number(v))}
+              value={servingMin.toString()}
+              onChange={(v) => setServingMin(Number(v))}
+            />
+            <Input
+              label="Max Servings"
+              type="number"
+              value={servingMax?.toString() ?? ''}
+              onChange={(v) => setServingMax(v ? Number(v) : undefined)}
+              placeholder="Optional"
+            />
+          </div>
+
+          {/* Additional Recipe Information */}
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Ethnicity/Cuisine"
+              value={ethnicity}
+              onChange={setEthnicity}
+              placeholder="e.g., Italian, Mexican, etc."
+            />
+            <Input
+              label="Oven Temperature (°F)"
+              type="number"
+              value={ovenTemperatureF?.toString() ?? ''}
+              onChange={(v) => setOvenTemperatureF(v ? Number(v) : undefined)}
+              placeholder="Optional"
+            />
+          </div>
+
+          {/* Notes */}
+          <div className="grid grid-cols-1 gap-4">
+            <Input
+              label="Notes"
+              value={userNotes}
+              onChange={setUserNotes}
+              placeholder="Any additional notes about this recipe"
             />
           </div>
 
