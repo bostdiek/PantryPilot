@@ -1,7 +1,8 @@
 import uuid
 
 from sqlalchemy import UUID, Column, DateTime, Integer, String, Text, func
-from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
@@ -18,7 +19,8 @@ class Recipe(Base):
     serving_max = Column(Integer, nullable=True)
     ethnicity = Column(String(255), nullable=True)
     course_type = Column(String(255), nullable=True)
-    instructions = Column(Text, nullable=True)
+    # Stored as a Postgres TEXT[] (list of instruction steps)
+    instructions: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     user_notes = Column(Text, nullable=True)
     ai_summary = Column(Text, nullable=True)
     link_source = Column(Text, nullable=True)

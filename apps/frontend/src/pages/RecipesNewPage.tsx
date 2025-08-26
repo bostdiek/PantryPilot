@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
 import { Select } from '../components/ui/Select';
+import type { Ingredient } from '../types/Ingredients';
 
 const RecipesNewPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,7 +21,15 @@ const RecipesNewPage: React.FC = () => {
   const [prepTime, setPrepTime] = useState(0);
   const [cookTime, setCookTime] = useState(0);
   const [servings, setServings] = useState(1);
-  const [ingredients, setIngredients] = useState(['']);
+  const [ingredients, setIngredients] = useState<Ingredient[]>([
+    {
+      name: '',
+      quantity_value: undefined,
+      quantity_unit: '',
+      prep: {},
+      is_optional: false,
+    },
+  ]);
   const [instructions, setInstructions] = useState(['']);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -83,16 +92,69 @@ const RecipesNewPage: React.FC = () => {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Ingredients</h2>
             {ingredients.map((ing, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
+              <div key={idx} className="grid grid-cols-6 items-end gap-2">
                 <Input
-                  className="flex-1"
-                  value={ing}
+                  label={`Ingredient ${idx + 1}`}
+                  className="col-span-2"
+                  value={ing.name}
                   onChange={(v) => {
                     const list = [...ingredients];
-                    list[idx] = v;
+                    list[idx] = { ...list[idx], name: v };
                     setIngredients(list);
                   }}
-                  placeholder={`Ingredient ${idx + 1}`}
+                  placeholder={`e.g., Onion`}
+                />
+                <Input
+                  label="Qty"
+                  type="number"
+                  className="col-span-1"
+                  value={ing.quantity_value?.toString() ?? ''}
+                  onChange={(v) => {
+                    const list = [...ingredients];
+                    const val = v === '' ? undefined : Number(v);
+                    list[idx] = { ...list[idx], quantity_value: val };
+                    setIngredients(list);
+                  }}
+                  placeholder="1"
+                />
+                <Input
+                  label="Unit"
+                  className="col-span-1"
+                  value={ing.quantity_unit ?? ''}
+                  onChange={(v) => {
+                    const list = [...ingredients];
+                    list[idx] = { ...list[idx], quantity_unit: v };
+                    setIngredients(list);
+                  }}
+                  placeholder="count, cup, g"
+                />
+                <Input
+                  label="Method"
+                  className="col-span-1"
+                  value={ing.prep?.method ?? ''}
+                  onChange={(v) => {
+                    const list = [...ingredients];
+                    list[idx] = {
+                      ...list[idx],
+                      prep: { ...(list[idx].prep || {}), method: v },
+                    };
+                    setIngredients(list);
+                  }}
+                  placeholder="chopped, sliced"
+                />
+                <Input
+                  label="Size"
+                  className="col-span-1"
+                  value={ing.prep?.size_descriptor ?? ''}
+                  onChange={(v) => {
+                    const list = [...ingredients];
+                    list[idx] = {
+                      ...list[idx],
+                      prep: { ...(list[idx].prep || {}), size_descriptor: v },
+                    };
+                    setIngredients(list);
+                  }}
+                  placeholder="small, medium, large"
                 />
                 {ingredients.length > 1 && (
                   <Button
@@ -114,7 +176,18 @@ const RecipesNewPage: React.FC = () => {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setIngredients([...ingredients, ''])}
+              onClick={() =>
+                setIngredients([
+                  ...ingredients,
+                  {
+                    name: '',
+                    quantity_value: undefined,
+                    quantity_unit: '',
+                    prep: {},
+                    is_optional: false,
+                  },
+                ])
+              }
             >
               + Add Ingredient
             </Button>

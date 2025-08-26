@@ -3,7 +3,7 @@ import type { Ingredient } from './Ingredients';
 type Recipe = {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   ingredients: Ingredient[];
   instructions: string[];
   cookTime: number; // in minutes

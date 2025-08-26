@@ -47,11 +47,11 @@ describe('RecipesNewPage', () => {
 
     const addButton = screen.getByText(/add ingredient/i);
     fireEvent.click(addButton);
-    expect(screen.getAllByPlaceholderText(/ingredient/i)).toHaveLength(2);
+    expect(screen.getAllByLabelText(/ingredient/i)).toHaveLength(2);
 
     const removeButtons = screen.getAllByText(/remove/i);
     fireEvent.click(removeButtons[0]);
-    expect(screen.getAllByPlaceholderText(/ingredient/i)).toHaveLength(1);
+    expect(screen.getAllByLabelText(/ingredient/i)).toHaveLength(1);
   });
 
   test('adds and removes instruction steps dynamically', () => {

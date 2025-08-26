@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS ingredient_names (
 -- Recipes table (basic structure)
 -- NOTE: Production will need cuisine types, difficulty scoring,
 -- nutritional analysis, cooking methods, equipment requirements, etc.
+-- NOTE (schema): `instructions` is stored as a list of steps (TEXT array).
+-- If you prefer richer step metadata (timings, images, tips), consider JSONB.
 CREATE TABLE IF NOT EXISTS recipe_names (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
@@ -61,7 +63,7 @@ CREATE TABLE IF NOT EXISTS recipe_names (
     serving_max INTEGER,
     ethnicity VARCHAR(255),
     course_type VARCHAR(255),
-    instructions TEXT,
+    instructions TEXT[],
     user_notes TEXT,
     ai_summary TEXT,
     link_source TEXT,
@@ -76,8 +78,9 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     recipe_id UUID NOT NULL REFERENCES recipe_names(id) ON DELETE CASCADE,
     ingredient_id UUID NOT NULL REFERENCES ingredient_names(id) ON DELETE CASCADE,
-    quantity VARCHAR(255),
-    unit TEXT,
+    quantity_value NUMERIC,
+    quantity_unit VARCHAR(64),
+    prep JSONB DEFAULT '{}'::jsonb,
     is_optional BOOLEAN DEFAULT false,
     user_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -116,6 +119,8 @@ CREATE INDEX IF NOT EXISTS idx_recipe_names_name_trgm ON recipe_names USING gin 
 -- Recipe ingredients indexes
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient_id ON recipe_ingredients(ingredient_id);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_quantity_value ON recipe_ingredients(quantity_value);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_prep_gin ON recipe_ingredients USING GIN (prep);
 
 -- =============================================================================
 -- TRIGGERS FOR UPDATED_AT TIMESTAMPS
@@ -184,15 +189,21 @@ BEGIN
 
         -- Insert a sample recipe and link a couple of ingredients
         WITH r AS (
+            -- instructions as a text array (one entry per step)
             INSERT INTO recipe_names (name, instructions, user_notes)
-            VALUES ('Simple Omelette', 'Beat eggs, cook in butter, fold and serve.', 'Basic demo recipe')
+            VALUES ('Simple Omelette', ARRAY['Beat eggs, cook in butter, fold and serve.'], 'Basic demo recipe')
             RETURNING id
         )
-        INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit)
+        INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_value, quantity_unit, prep)
         SELECT r.id,
                i.id,
-               x.qty,
-               x.unit
+               x.qty::numeric,
+               x.unit,
+               CASE i.ingredient_name
+                   WHEN 'Eggs' THEN '{"size_descriptor": "large", "size_unit": "count"}'::jsonb
+                   WHEN 'Milk' THEN '{"method": "none"}'::jsonb
+                   ELSE '{}'::jsonb
+               END
         FROM r
         JOIN ingredient_names i ON i.ingredient_name = ANY(ARRAY['Eggs','Milk'])
         JOIN (
