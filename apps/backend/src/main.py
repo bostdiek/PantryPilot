@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.v1.api import api_router
+from api.v1.api import api_router
 
 
 def validate_cors_origins(origins_str: str) -> list[str]:

@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from src.schemas.ingredients import IngredientPrepIn, IngredientsIn, IngredientsOut
+from schemas.ingredients import IngredientPrepIn, IngredientsIn, IngredientsOut
 
 
 def test_ingredient_happy_path():

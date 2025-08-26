@@ -9,8 +9,8 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 
-from src.dependencies.db import get_db
-from src.main import app
+from dependencies.db import get_db
+from main import app
 
 
 @pytest.fixture

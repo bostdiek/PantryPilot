@@ -6,7 +6,7 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from src.schemas.recipes import RecipeCategory, RecipeDifficulty
+from schemas.recipes import RecipeCategory, RecipeDifficulty
 
 
 @pytest.mark.asyncio

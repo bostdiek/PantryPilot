@@ -9,7 +9,7 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import AsyncClient
 
-from src.main import app
+from main import app
 
 
 @pytest.fixture
