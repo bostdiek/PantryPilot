@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean
 
 # Environment detection
 ENV ?= dev
@@ -28,6 +28,7 @@ help:
 	@echo "  reset-db           - Reset database (respects ENV)"
 	@echo "  reset-db-dev       - Reset development database"
 	@echo "  reset-db-prod      - Reset production database"
+	@echo "  reset-db-volume    - Remove ONLY the database volume and re-init (respects ENV)"
 	@echo ""
 	@echo "Database Management:"
 	@echo "  db-backup          - Create database backup (ENV=dev default)"
@@ -115,6 +116,23 @@ reset-db:
 	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down -v
 	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) up -d db
 	@echo "✅ Database reset complete!"
+
+# Remove ONLY the Postgres data volume and reinitialize DB (ENV=dev default)
+reset-db-volume:
+	# Stop and remove only the db service container to free the volume
+	@echo "Removing ONLY Postgres data volume for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) stop db >/dev/null 2>&1 || true
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) rm -f db >/dev/null 2>&1 || true
+	# Compute volume name and remove it
+	@/bin/sh -lc 'set -eu; \
+	  if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	  VOL_NAME="$${COMPOSE_PROJECT_NAME:-$$(basename "$$PWD")}_postgres_data"; \
+	  echo "Target volume: $$VOL_NAME"; \
+	  docker volume rm "$$VOL_NAME" >/dev/null 2>&1 || echo "Info: volume $$VOL_NAME not found or already removed"; \
+	  echo "Starting fresh db to re-run init scripts..."; \
+	  true'
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) up -d db
+	@echo "DB volume removed and re-initialized for $(ENV) environment."
 
 reset-db-dev:
 	# Reset development database

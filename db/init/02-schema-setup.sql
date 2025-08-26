@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Pantry items table (basic structure)
+-- Ingredient names table (basic structure)
 -- NOTE: Production will need ingredient taxonomy, nutritional data,
 -- expiration tracking, storage conditions, purchase history, etc.
 CREATE TABLE IF NOT EXISTS ingredient_names (
@@ -103,24 +103,19 @@ CREATE TABLE IF NOT EXISTS meal_history (
 
 -- User indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
--- Pantry items indexes
-CREATE INDEX IF NOT EXISTS idx_pantry_items_user_id ON pantry_items(user_id);
-CREATE INDEX IF NOT EXISTS idx_pantry_items_name ON pantry_items(name);
-CREATE INDEX IF NOT EXISTS idx_pantry_items_category ON pantry_items(category);
-CREATE INDEX IF NOT EXISTS idx_pantry_items_expiration ON pantry_items(expiration_date);
-CREATE INDEX IF NOT EXISTS idx_pantry_items_name_trgm ON pantry_items USING gin (name gin_trgm_ops);
+-- Ingredient name indexes
+CREATE INDEX IF NOT EXISTS idx_ingredient_names_name ON ingredient_names(ingredient_name);
+CREATE INDEX IF NOT EXISTS idx_ingredient_names_name_trgm ON ingredient_names USING gin (ingredient_name gin_trgm_ops);
 
--- Recipe indexes
-CREATE INDEX IF NOT EXISTS idx_recipes_user_id ON recipes(user_id);
-CREATE INDEX IF NOT EXISTS idx_recipes_title ON recipes(title);
-CREATE INDEX IF NOT EXISTS idx_recipes_difficulty ON recipes(difficulty_level);
-CREATE INDEX IF NOT EXISTS idx_recipes_title_trgm ON recipes USING gin (title gin_trgm_ops);
+-- Recipe name indexes
+CREATE INDEX IF NOT EXISTS idx_recipe_names_name ON recipe_names(name);
+CREATE INDEX IF NOT EXISTS idx_recipe_names_name_trgm ON recipe_names USING gin (name gin_trgm_ops);
 
 -- Recipe ingredients indexes
 CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe_id ON recipe_ingredients(recipe_id);
-CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_name ON recipe_ingredients(ingredient_name);
+CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_ingredient_id ON recipe_ingredients(ingredient_id);
 
 -- =============================================================================
 -- TRIGGERS FOR UPDATED_AT TIMESTAMPS
@@ -141,13 +136,23 @@ CREATE TRIGGER update_users_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_pantry_items_updated_at
-    BEFORE UPDATE ON pantry_items
+CREATE TRIGGER update_ingredient_names_updated_at
+    BEFORE UPDATE ON ingredient_names
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_recipes_updated_at
-    BEFORE UPDATE ON recipes
+CREATE TRIGGER update_recipe_names_updated_at
+    BEFORE UPDATE ON recipe_names
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_recipe_ingredients_updated_at
+    BEFORE UPDATE ON recipe_ingredients
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_meal_history_updated_at
+    BEFORE UPDATE ON meal_history
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
@@ -163,42 +168,36 @@ BEGIN
     IF current_database() LIKE '%dev%' OR current_database() LIKE '%development%' THEN
         -- Insert a sample user with secure random password hash
         -- NOTE: Production will have proper authentication with OAuth, etc.
-        INSERT INTO users (id, email, hashed_password, full_name, is_active, is_superuser)
+        INSERT INTO users (email, username, hashed_password, first_name, last_name)
         VALUES (
-            uuid_generate_v4(),
             'demo@pantrypilot.dev',
+            'demo',
             '$2b$12$SecureHashForDemoAccountOnlyNotForProd.Development.Only',
-            'Demo User',
-            true,
-            false
+            'Demo',
+            'User'
         ) ON CONFLICT (email) DO NOTHING;
 
-        -- Get the demo user ID
-        WITH demo_user AS (
-            SELECT id FROM users WHERE email = 'demo@pantrypilot.dev'
+        -- Insert sample ingredient names
+        INSERT INTO ingredient_names (ingredient_name)
+        SELECT unnest(ARRAY['Flour', 'Sugar', 'Eggs', 'Milk', 'Chicken Breast', 'Tomatoes', 'Onions', 'Garlic'])
+        ON CONFLICT DO NOTHING;
+
+        -- Insert a sample recipe and link a couple of ingredients
+        WITH r AS (
+            INSERT INTO recipe_names (name, instructions, user_notes)
+            VALUES ('Simple Omelette', 'Beat eggs, cook in butter, fold and serve.', 'Basic demo recipe')
+            RETURNING id
         )
-        -- Insert sample pantry items (just for testing database operations!)
-        -- NOTE: Real pantry management will have ingredient taxonomy,
-        -- nutritional data, smart expiration tracking, etc.
-        INSERT INTO pantry_items (user_id, name, category, quantity, unit, expiration_date, location)
-        SELECT
-            demo_user.id,
-            unnest(ARRAY['Flour', 'Sugar', 'Eggs', 'Milk', 'Chicken Breast', 'Tomatoes', 'Onions', 'Garlic']),
-            unnest(ARRAY['Baking', 'Baking', 'Dairy', 'Dairy', 'Meat', 'Produce', 'Produce', 'Produce']),
-            unnest(ARRAY[5.0, 2.0, 12.0, 1.0, 2.0, 6.0, 3.0, 1.0]),
-            unnest(ARRAY['lbs', 'lbs', 'count', 'gallon', 'lbs', 'count', 'count', 'bulb']),
-            unnest(ARRAY[
-                CURRENT_DATE + INTERVAL '6 months',
-                CURRENT_DATE + INTERVAL '1 year',
-                CURRENT_DATE + INTERVAL '3 weeks',
-                CURRENT_DATE + INTERVAL '1 week',
-                CURRENT_DATE + INTERVAL '5 days',
-                CURRENT_DATE + INTERVAL '1 week',
-                CURRENT_DATE + INTERVAL '2 weeks',
-                CURRENT_DATE + INTERVAL '3 weeks'
-            ]),
-            unnest(ARRAY['Pantry', 'Pantry', 'Refrigerator', 'Refrigerator', 'Freezer', 'Refrigerator', 'Pantry', 'Pantry'])
-        FROM demo_user
+        INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity, unit)
+        SELECT r.id,
+               i.id,
+               x.qty,
+               x.unit
+        FROM r
+        JOIN ingredient_names i ON i.ingredient_name = ANY(ARRAY['Eggs','Milk'])
+        JOIN (
+            SELECT unnest(ARRAY['2','1']) AS qty, unnest(ARRAY['count','cup']) AS unit
+        ) x ON TRUE
         ON CONFLICT DO NOTHING;
 
         RAISE NOTICE '========================================';
@@ -219,7 +218,7 @@ BEGIN
     RAISE NOTICE 'Demo Schema Setup Completed';
     RAISE NOTICE '========================================';
     RAISE NOTICE 'IMPORTANT: This is a DEMONSTRATION schema only!';
-    RAISE NOTICE 'Tables created: users, pantry_items, recipes, recipe_ingredients';
+    RAISE NOTICE 'Tables created: users, ingredient_names, recipe_names, recipe_ingredients, meal_history';
     RAISE NOTICE 'Indexes created for optimal query performance';
     RAISE NOTICE 'Triggers created for automatic timestamp updates';
     RAISE NOTICE 'Sample data inserted (development environment only)';
