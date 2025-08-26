@@ -5,8 +5,15 @@ import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
-import { RECIPE_CATEGORIES, RECIPE_DIFFICULTIES } from '../types/Recipe';
+import {
+  RECIPE_CATEGORIES,
+  RECIPE_DIFFICULTIES,
+  type RecipeCategory,
+  type RecipeDifficulty,
+} from '../types/Recipe';
+import { useApiHealth } from '../utils/useApiHealth';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -48,32 +55,150 @@ const RecipesNewPage: React.FC = () => {
     },
   ]);
   const [instructions, setInstructions] = useState(['']);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { addRecipe } = useRecipeStore();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Use the custom hook instead of direct useEffect
+  const { isApiOnline } = useApiHealth();
+  const apiUnavailable = !isApiOnline;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: handle recipe creation with all the fields
-    console.log({
-      title,
-      description,
-      category: category.id,
-      difficulty: difficulty.id,
-      prep_time_minutes: prepTime,
-      cook_time_minutes: cookTime,
-      serving_min: servingMin,
-      serving_max: servingMax,
-      ethnicity,
-      oven_temperature_f: ovenTemperatureF,
-      user_notes: userNotes,
-      ingredients,
-      instructions,
-    });
-    navigate('/recipes');
+
+    // Clear previous errors
+    setError(null);
+    setIsSubmitting(true);
+
+    // Filter out empty instructions and ingredients
+    const filteredInstructions = instructions.filter(
+      (step) => step.trim() !== ''
+    );
+    const filteredIngredients = ingredients.filter(
+      (ing) => ing.name.trim() !== ''
+    );
+
+    // If API is unavailable, store data locally and show message
+    if (apiUnavailable) {
+      try {
+        // Create the recipe data object
+        const recipeData = {
+          title,
+          description,
+          category: category.id as RecipeCategory,
+          difficulty: difficulty.id as RecipeDifficulty,
+          prep_time_minutes: prepTime,
+          cook_time_minutes: cookTime,
+          serving_min: servingMin,
+          serving_max: servingMax,
+          ethnicity: ethnicity || undefined,
+          oven_temperature_f: ovenTemperatureF,
+          user_notes: userNotes || undefined,
+          instructions: filteredInstructions,
+          ingredients: filteredIngredients.map((ing) => ({
+            name: ing.name,
+            quantity_value: ing.quantity_value,
+            quantity_unit: ing.quantity_unit || undefined,
+            prep:
+              ing.prep && (ing.prep.method || ing.prep.size_descriptor)
+                ? {
+                    method: ing.prep.method,
+                    size_descriptor: ing.prep.size_descriptor,
+                  }
+                : undefined,
+            is_optional: ing.is_optional || false,
+          })),
+        };
+
+        // Store locally until connection is restored
+        const pendingRecipes = JSON.parse(
+          localStorage.getItem('pendingRecipes') || '[]'
+        );
+        pendingRecipes.push(recipeData);
+        localStorage.setItem('pendingRecipes', JSON.stringify(pendingRecipes));
+
+        setError(
+          'API is currently unavailable. Your recipe has been saved locally and will be synced when connection is restored.'
+        );
+        setTimeout(() => {
+          navigate('/recipes');
+        }, 3000);
+      } catch (err) {
+        console.error('Failed to save recipe locally:', err);
+        setError('Unable to save recipe. Please try again later.');
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
+    try {
+      // Create the recipe data object matching the backend schema
+      const recipeData = {
+        title,
+        description,
+        category: category.id as RecipeCategory,
+        difficulty: difficulty.id as RecipeDifficulty,
+        prep_time_minutes: prepTime,
+        cook_time_minutes: cookTime,
+        serving_min: servingMin,
+        serving_max: servingMax,
+        ethnicity: ethnicity || undefined,
+        oven_temperature_f: ovenTemperatureF,
+        user_notes: userNotes || undefined,
+        instructions: filteredInstructions,
+        ingredients: filteredIngredients.map((ing) => ({
+          name: ing.name,
+          quantity_value: ing.quantity_value,
+          quantity_unit: ing.quantity_unit || undefined,
+          prep:
+            ing.prep && (ing.prep.method || ing.prep.size_descriptor)
+              ? {
+                  method: ing.prep.method,
+                  size_descriptor: ing.prep.size_descriptor,
+                }
+              : undefined,
+          is_optional: ing.is_optional || false,
+        })),
+      };
+
+      // Use the store to add the recipe
+      const result = await addRecipe(recipeData);
+
+      if (result) {
+        // Navigate back to recipes list on success
+        navigate('/recipes');
+      } else {
+        setError('Failed to create recipe. Please try again.');
+      }
+    } catch (err) {
+      console.error('Failed to create recipe:', err);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Failed to create recipe. Please try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Container size="md">
       <Card variant="default" className="mt-6 p-6">
         <h1 className="mb-4 text-2xl font-bold">Create New Recipe</h1>
+
+        {apiUnavailable && (
+          <div className="mb-4 rounded border border-yellow-300 bg-yellow-100 p-3 text-yellow-800">
+            <p className="font-semibold">⚠️ Backend service unavailable</p>
+            <p className="text-sm">
+              The server is currently unreachable. You can still create a
+              recipe, and it will be saved locally until the connection is
+              restored.
+            </p>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Name & Description */}
           <Input
@@ -311,15 +436,19 @@ const RecipesNewPage: React.FC = () => {
 
           {/* Actions */}
           <div className="flex items-center justify-end space-x-2">
+            {error && (
+              <div className="mr-auto text-sm text-red-500">{error}</div>
+            )}
             <Button
               type="button"
               variant="ghost"
               onClick={() => navigate('/recipes')}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
-            <Button type="submit" variant="primary">
-              Save Recipe
+            <Button type="submit" variant="primary" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : 'Save Recipe'}
             </Button>
           </div>
         </form>

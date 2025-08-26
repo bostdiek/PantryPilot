@@ -48,10 +48,13 @@ export const useRecipeStore = create<RecipeState>((set) => ({
           ? error.message
           : (error as ApiError)?.message || 'Failed to fetch recipes';
 
-      set({
+      // Set an error but don't clear existing recipes if we already have them
+      set((state) => ({
         error: errorMessage,
         isLoading: false,
-      });
+        // Keep existing recipes if we have them (don't replace with empty array)
+        recipes: state.recipes.length > 0 ? state.recipes : [],
+      }));
     }
   },
 
@@ -90,10 +93,13 @@ export const useRecipeStore = create<RecipeState>((set) => ({
 
       console.log('API response from addRecipe:', newRecipe);
 
-      set((state) => ({
-        recipes: [...state.recipes, newRecipe],
+      // Fetch all recipes to ensure we have the complete list
+      const allRecipes = await getAllRecipes();
+
+      set({
+        recipes: allRecipes,
         isLoading: false,
-      }));
+      });
 
       return newRecipe;
     } catch (error) {
