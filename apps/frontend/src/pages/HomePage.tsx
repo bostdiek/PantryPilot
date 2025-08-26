@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Grid } from '../components/layout/Grid';
 import { Button } from '../components/ui/Button';
@@ -14,19 +14,9 @@ import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
 
 const HomePage: React.FC = () => {
-  // Get data from stores
-  const { recipes, isLoading: recipesLoading, fetchRecipes } = useRecipeStore();
-  const {
-    currentWeek,
-    isLoading: mealPlanLoading,
-    fetchCurrentWeek,
-  } = useMealPlanStore();
-
-  // Fetch data on component mount
-  useEffect(() => {
-    fetchRecipes();
-    fetchCurrentWeek();
-  }, [fetchRecipes, fetchCurrentWeek]);
+  // Get data from stores (already loaded by the route loader)
+  const { recipes, isLoading: recipesLoading } = useRecipeStore();
+  const { currentWeek, isLoading: mealPlanLoading } = useMealPlanStore();
 
   // Get today's meal plan
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
@@ -104,7 +94,9 @@ const HomePage: React.FC = () => {
               {todaysMeal.recipe.title}
             </h3>
             <p className="mb-4 text-sm text-gray-600">
-              Ready in {todaysMeal.recipe.prepTime + todaysMeal.recipe.cookTime}{' '}
+              Ready in{' '}
+              {todaysMeal.recipe.prep_time_minutes +
+                todaysMeal.recipe.cook_time_minutes}{' '}
               minutes
             </p>
             <Link to={`/recipes/${todaysMeal.recipe.id}`}>

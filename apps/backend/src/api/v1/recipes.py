@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID as UUIDType
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +21,7 @@ from dependencies.db import get_db
 from models.ingredient_names import Ingredient
 from models.recipe_ingredients import RecipeIngredient
 from models.recipes_names import Recipe
+from schemas.api import ApiResponse
 from schemas.recipes import (
     RecipeCategory,
     RecipeCreate,
@@ -52,7 +53,7 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
 
 @router.post(
     "/",
-    response_model=RecipeOut,
+    response_model=ApiResponse[RecipeOut],
     status_code=status.HTTP_201_CREATED,
     summary="Create a new recipe",
     description=(
@@ -62,7 +63,7 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
 )
 async def create_recipe(
     recipe_data: RecipeCreate, db: Annotated[AsyncSession, Depends(get_db)]
-) -> RecipeOut:
+) -> ApiResponse[RecipeOut]:
     """Create a new recipe with ingredients.
 
     This endpoint creates a new recipe along with its associated ingredients,
@@ -183,7 +184,10 @@ async def create_recipe(
         }
 
         # Pydantic will coerce/validate fields as needed.
-        return RecipeOut(**response_data)
+        recipe_response = RecipeOut(**response_data)
+        return ApiResponse(
+            success=True, data=recipe_response, message="Recipe created successfully"
+        )
 
     except IntegrityError as e:
         await db.rollback()
@@ -206,6 +210,9 @@ def _recipe_to_response(
 
     Assumes ingredients list contains RecipeIngredient instances with
     .ingredient relationship loaded.
+
+    Note: This function returns the RecipeOut object directly (not wrapped in
+    ApiResponse). The calling function is responsible for wrapping it.
     """
     now_ts = datetime.now(UTC)
     response_data: dict[str, Any] = {
@@ -351,13 +358,13 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
 
 @router.get(
     "/",
-    response_model=list[RecipeOut],
+    response_model=ApiResponse[list[RecipeOut]],
     summary="List recipes for the current user (or all recipes if no user linked)",
 )
 async def list_recipes(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
-) -> list[RecipeOut]:
+) -> ApiResponse[list[RecipeOut]]:
     """Return recipes scoped to current user when available.
 
     If the `Recipe` model has a `user_id` column, this will filter by it. Until
@@ -379,15 +386,17 @@ async def list_recipes(
         ingredients = list(r.recipeingredients or [])
         out.append(_recipe_to_response(r, ingredients))
 
-    return out
+    return ApiResponse(success=True, data=out, message="Recipes retrieved successfully")
 
 
-@router.get("/{recipe_id}", response_model=RecipeOut, summary="Get a recipe by id")
+@router.get(
+    "/{recipe_id}", response_model=ApiResponse[RecipeOut], summary="Get a recipe by id"
+)
 async def get_recipe(
     recipe_id: UUIDType,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
-) -> RecipeOut:
+) -> ApiResponse[RecipeOut]:
     stmt = (
         select(Recipe)
         .where(Recipe.id == recipe_id)
@@ -413,16 +422,21 @@ async def get_recipe(
             )
 
     ingredients = list(recipe.recipeingredients or [])
-    return _recipe_to_response(recipe, ingredients)
+    recipe_response = _recipe_to_response(recipe, ingredients)
+    return ApiResponse(
+        success=True, data=recipe_response, message="Recipe retrieved successfully"
+    )
 
 
-@router.put("/{recipe_id}", response_model=RecipeOut, summary="Update a recipe")
+@router.put(
+    "/{recipe_id}", response_model=ApiResponse[RecipeOut], summary="Update a recipe"
+)
 async def update_recipe(
     recipe_id: UUIDType,
     recipe_data: RecipeUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
-) -> RecipeOut:
+) -> ApiResponse[RecipeOut]:
     # Load existing recipe with ingredients
     stmt = (
         select(Recipe)
@@ -460,7 +474,10 @@ async def update_recipe(
 
         # Re-fetch ingredients relationships
         ingredients = list(recipe.recipeingredients or [])
-        return _recipe_to_response(recipe, ingredients)
+        recipe_response = _recipe_to_response(recipe, ingredients)
+        return ApiResponse(
+            success=True, data=recipe_response, message="Recipe updated successfully"
+        )
 
     except IntegrityError as e:
         await db.rollback()
@@ -476,12 +493,14 @@ async def update_recipe(
         ) from e
 
 
-@router.delete("/{recipe_id}", summary="Delete a recipe")
+@router.delete(
+    "/{recipe_id}", response_model=ApiResponse[None], summary="Delete a recipe"
+)
 async def delete_recipe(
     recipe_id: UUIDType,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
-) -> Response:
+) -> ApiResponse[None]:
     stmt = select(Recipe).where(Recipe.id == recipe_id)
     result = await db.execute(stmt)
     recipe = result.scalars().first()
@@ -505,7 +524,9 @@ async def delete_recipe(
         )
         await db.execute(delete(Recipe).where(Recipe.id == recipe.id))
         await db.commit()
-        return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return ApiResponse(
+            success=True, data=None, message="Recipe deleted successfully"
+        )
     except Exception as e:
         await db.rollback()
         raise HTTPException(

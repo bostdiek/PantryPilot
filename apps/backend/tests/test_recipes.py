@@ -50,7 +50,14 @@ async def test_create_recipe(async_client):
 
     # Assert response
     assert response.status_code == status.HTTP_201_CREATED
-    data = response.json()
+    response_wrapper = response.json()
+
+    # Check ApiResponse structure
+    assert response_wrapper["success"] is True
+    assert "data" in response_wrapper
+    assert "message" in response_wrapper
+
+    data = response_wrapper["data"]
 
     # Validate UUID
     uuid.UUID(data["id"])  # Will raise if not a valid UUID

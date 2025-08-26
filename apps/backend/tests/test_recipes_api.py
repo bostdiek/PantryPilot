@@ -53,7 +53,11 @@ async def test_create_recipe(async_client: AsyncClient) -> None:
     assert response.status_code == status.HTTP_201_CREATED
 
     # Validate response data
-    response_data = response.json()
+    response_wrapper = response.json()
+    assert response_wrapper["success"] is True
+    assert "data" in response_wrapper
+
+    response_data = response_wrapper["data"]
     assert response_data["title"] == recipe_data["title"]
     assert response_data["prep_time_minutes"] == recipe_data["prep_time_minutes"]
     assert response_data["cook_time_minutes"] == recipe_data["cook_time_minutes"]

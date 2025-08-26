@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Grid } from '../components/layout/Grid';
 import { Button } from '../components/ui/Button';
@@ -9,11 +9,7 @@ import ChefHatIcon from '../components/ui/icons/chef-hat.svg?react';
 import { useRecipeStore } from '../stores/useRecipeStore';
 
 const RecipesPage: React.FC = () => {
-  const { recipes, isLoading, fetchRecipes } = useRecipeStore();
-
-  useEffect(() => {
-    fetchRecipes();
-  }, [fetchRecipes]);
+  const { recipes, isLoading } = useRecipeStore();
 
   return (
     <Container size="lg">

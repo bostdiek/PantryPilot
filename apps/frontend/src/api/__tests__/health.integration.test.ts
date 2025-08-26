@@ -10,11 +10,14 @@ describe('Health API - Integration Tests with MSW', () => {
     server.use(
       http.get('*/api/v1/health', () =>
         HttpResponse.json({
+          success: true,
           data: {
             status: 'healthy',
             message: 'Integration test successful',
             timestamp: '2025-08-22T12:00:00Z',
           },
+          message: 'Health check successful',
+          error: null,
         })
       )
     );
@@ -33,9 +36,17 @@ describe('Health API - Integration Tests with MSW', () => {
       http.get(
         '*/api/v1/health',
         () =>
-          new HttpResponse(JSON.stringify({ error: 'Server is down' }), {
-            status: 500,
-          })
+          new HttpResponse(
+            JSON.stringify({
+              success: false,
+              data: null,
+              message: 'Server is down',
+              error: { code: 'SERVER_ERROR' },
+            }),
+            {
+              status: 500,
+            }
+          )
       )
     );
 

@@ -4,6 +4,8 @@
 services:
   # Database - Development Configuration
   db:
+    env_file:
+      - .env.dev
     ports:
       - "5432:5432" # Expose database port for development tools
     environment:
@@ -25,6 +27,8 @@ services:
     volumes:
       - ./apps/backend:/app # Mount source code for hot reload
       - backend_cache:/app/.venv # Cache virtual environment
+    env_file:
+      - .env.dev
     environment:
       FASTAPI_ENV: development
       FASTAPI_RELOAD: "true"
@@ -46,6 +50,8 @@ services:
     volumes:
       - ./apps/frontend:/app # Mount source code for hot reload
       - frontend_node_modules:/app/node_modules # Cache node_modules
+    env_file:
+      - .env.dev
     environment:
       NODE_ENV: development
       VITE_HMR_HOST: localhost

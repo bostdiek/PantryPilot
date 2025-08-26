@@ -169,7 +169,8 @@ type-check: type-check-backend type-check-frontend
 
 type-check-backend:
 	# Run backend type checker
-	cd apps/backend && uv run mypy src
+	# Run backend type checker (use MYPYPATH=src so mypy resolves runtime package names)
+	cd apps/backend && MYPYPATH=src uv run mypy -p api -p core -p crud -p dependencies -p models -p schemas
 
 type-check-frontend:
 	# Run frontend type checker

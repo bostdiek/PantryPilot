@@ -63,3 +63,8 @@ export type RecipeCreate = {
   user_notes?: string;
   link_source?: string;
 };
+
+/**
+ * Recipe update type
+ */
+export type RecipeUpdate = Partial<RecipeCreate>;
