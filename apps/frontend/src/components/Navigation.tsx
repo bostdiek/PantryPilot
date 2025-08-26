@@ -2,12 +2,16 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 
 const Navigation: React.FC = () => (
-  <nav className="flex gap-4 bg-white px-4 py-2 shadow">
+  <nav className="flex gap-4 border-b border-gray-200 bg-white px-6 py-4 shadow">
     <NavLink
       to="/"
       end
       className={(meta: { isActive: boolean }) =>
-        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
+        `text-lg font-bold ${
+          meta.isActive
+            ? 'text-primary-700 border-primary-500 border-b-2'
+            : 'hover:text-primary-600 text-gray-700 transition-colors'
+        }`
       }
     >
       Home
@@ -15,7 +19,11 @@ const Navigation: React.FC = () => (
     <NavLink
       to="/recipes"
       className={(meta: { isActive: boolean }) =>
-        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
+        `text-lg font-bold ${
+          meta.isActive
+            ? 'text-primary-700 border-primary-500 border-b-2'
+            : 'hover:text-primary-600 text-gray-700 transition-colors'
+        }`
       }
     >
       Recipes
@@ -23,7 +31,11 @@ const Navigation: React.FC = () => (
     <NavLink
       to="/recipes/new"
       className={(meta: { isActive: boolean }) =>
-        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
+        `text-lg font-bold ${
+          meta.isActive
+            ? 'text-primary-700 border-primary-500 border-b-2'
+            : 'hover:text-primary-600 text-gray-700 transition-colors'
+        }`
       }
     >
       Add Recipe
@@ -31,7 +43,11 @@ const Navigation: React.FC = () => (
     <NavLink
       to="/meal-plan"
       className={(meta: { isActive: boolean }) =>
-        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
+        `text-lg font-bold ${
+          meta.isActive
+            ? 'text-primary-700 border-primary-500 border-b-2'
+            : 'hover:text-primary-600 text-gray-700 transition-colors'
+        }`
       }
     >
       Meal Plan
@@ -39,7 +55,11 @@ const Navigation: React.FC = () => (
     <NavLink
       to="/login"
       className={(meta: { isActive: boolean }) =>
-        `font-bold text-blue-600 ${meta.isActive ? 'underline' : ''}`
+        `text-lg font-bold ${
+          meta.isActive
+            ? 'text-primary-700 border-primary-500 border-b-2'
+            : 'hover:text-primary-600 text-gray-700 transition-colors'
+        }`
       }
     >
       Login
