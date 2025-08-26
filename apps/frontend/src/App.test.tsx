@@ -38,7 +38,7 @@ describe('App Routing', () => {
 
     await user.click(screen.getByRole('link', { name: /^recipes$/i }));
     expect(
-      screen.getByRole('heading', { name: /^recipes$/i })
+      screen.getByRole('heading', { name: /^my recipes$/i })
     ).toBeInTheDocument();
   });
 
