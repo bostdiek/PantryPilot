@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
+import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
@@ -77,6 +79,19 @@ const RecipesNewPage: React.FC = () => {
     const filteredIngredients = ingredients.filter(
       (ing) => ing.name.trim() !== ''
     );
+
+    // Client-side validation: require at least one ingredient and one instruction
+    if (filteredIngredients.length === 0) {
+      setError('Please add at least one ingredient.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (filteredInstructions.length === 0) {
+      setError('Please add at least one instruction.');
+      setIsSubmitting(false);
+      return;
+    }
 
     // If API is unavailable, store data locally and show message
     if (apiUnavailable) {
@@ -189,13 +204,8 @@ const RecipesNewPage: React.FC = () => {
         <h1 className="mb-4 text-2xl font-bold">Create New Recipe</h1>
 
         {apiUnavailable && (
-          <div className="mb-4 rounded border border-yellow-300 bg-yellow-100 p-3 text-yellow-800">
-            <p className="font-semibold">⚠️ Backend service unavailable</p>
-            <p className="text-sm">
-              The server is currently unreachable. You can still create a
-              recipe, and it will be saved locally until the connection is
-              restored.
-            </p>
+          <div className="mb-4">
+            <ErrorMessage message="⚠️ Backend service unavailable — recipe will be saved locally until connection is restored." />
           </div>
         )}
 
@@ -437,7 +447,9 @@ const RecipesNewPage: React.FC = () => {
           {/* Actions */}
           <div className="flex items-center justify-end space-x-2">
             {error && (
-              <div className="mr-auto text-sm text-red-500">{error}</div>
+              <div className="mr-auto">
+                <ErrorMessage message={error} />
+              </div>
             )}
             <Button
               type="button"
@@ -448,7 +460,14 @@ const RecipesNewPage: React.FC = () => {
               Cancel
             </Button>
             <Button type="submit" variant="primary" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save Recipe'}
+              {isSubmitting ? (
+                <div className="flex items-center space-x-2">
+                  <LoadingSpinner />
+                  <span>Saving...</span>
+                </div>
+              ) : (
+                'Save Recipe'
+              )}
             </Button>
           </div>
         </form>
