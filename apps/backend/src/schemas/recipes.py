@@ -90,7 +90,7 @@ class RecipeBase(BaseModel):
         default=None, ge=1, description="Maximum number of servings"
     )
     instructions: Annotated[
-        list[str], Field(min_items=1, description="Step-by-step instructions")
+        list[str], Field(min_length=1, description="Step-by-step instructions")
     ]
     difficulty: RecipeDifficulty = Field(
         default=RecipeDifficulty.MEDIUM, description="Recipe difficulty level"
@@ -134,7 +134,7 @@ class RecipeCreate(RecipeBase):
     """Request model for creating a recipe."""
 
     ingredients: Annotated[
-        list[IngredientIn], Field(min_items=1, description="Recipe ingredients")
+        list[IngredientIn], Field(min_length=1, description="Recipe ingredients")
     ]
 
 
@@ -160,7 +160,7 @@ class RecipeUpdate(BaseModel):
         default=None, ge=1, description="Maximum number of servings"
     )
     instructions: Annotated[
-        list[str] | None, Field(min_items=1, description="Step-by-step instructions")
+        list[str] | None, Field(min_length=1, description="Step-by-step instructions")
     ] = None
     difficulty: RecipeDifficulty | None = Field(
         default=None, description="Recipe difficulty level"

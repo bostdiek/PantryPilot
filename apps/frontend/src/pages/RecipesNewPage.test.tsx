@@ -35,7 +35,8 @@ describe('RecipesNewPage', () => {
     // Numeric inputs by label
     expect(screen.getByLabelText(/prep \(min\)/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/cook \(min\)/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/servings/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/min servings/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/max servings/i)).toBeInTheDocument();
   });
 
   test('adds and removes ingredients dynamically', () => {
