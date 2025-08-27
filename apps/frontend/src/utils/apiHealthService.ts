@@ -8,9 +8,16 @@ class ApiHealthService {
   private apiUrl: string;
   private listeners: Array<(isOnline: boolean) => void> = [];
   private isOnline = true;
+  /** Timeout for health-check requests in milliseconds. */
+  private healthTimeoutMs: number;
 
-  constructor() {
+  constructor(
+    timeoutMs: number = Number(
+      import.meta.env.VITE_API_HEALTH_TIMEOUT_MS ?? 5000
+    )
+  ) {
     this.apiUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/health`;
+    this.healthTimeoutMs = timeoutMs;
   }
 
   /**
@@ -66,7 +73,7 @@ class ApiHealthService {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
         // Short timeout to avoid long waits
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(this.healthTimeoutMs),
       });
 
       const newStatus = response.ok;

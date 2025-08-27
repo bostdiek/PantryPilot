@@ -116,18 +116,21 @@ class RecipeBase(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("serving_max")
-    def validate_serving_max(cls, v: int | None, values: Any) -> int | None:
-        """Validate that serving_max >= serving_min if provided."""
-        if (
-            v is not None
-            and "serving_min" in values.data
-            and v < values.data["serving_min"]
-        ):
+    @staticmethod
+    def _validate_serving_max_value(v: int | None, values: Any) -> int | None:
+        """Shared validator ensuring serving_max >= serving_min when provided."""
+        if v is None:
+            return v
+        min_val = values.data.get("serving_min") if hasattr(values, "data") else None
+        if min_val is not None and v < min_val:
             raise ValueError(
                 "Maximum servings must be greater than or equal to minimum servings"
             )
         return v
+
+    @field_validator("serving_max")
+    def validate_serving_max(cls, v: int | None, values: Any) -> int | None:  # noqa: D417
+        return cls._validate_serving_max_value(v, values)
 
 
 class RecipeCreate(RecipeBase):
@@ -190,18 +193,8 @@ class RecipeUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @field_validator("serving_max")
-    def validate_serving_max(cls, v: int | None, values: Any) -> int | None:
-        """Validate that serving_max >= serving_min if both are provided."""
-        if (
-            v is not None
-            and "serving_min" in values.data
-            and values.data["serving_min"] is not None
-            and v < values.data["serving_min"]
-        ):
-            raise ValueError(
-                "Maximum servings must be greater than or equal to minimum servings"
-            )
-        return v
+    def validate_serving_max(cls, v: int | None, values: Any) -> int | None:  # noqa: D417
+        return RecipeBase._validate_serving_max_value(v, values)
 
 
 class RecipeOut(RecipeBase):

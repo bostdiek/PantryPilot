@@ -206,13 +206,27 @@ async def create_recipe(
 def _recipe_to_response(
     recipe: Recipe, ingredients: list[RecipeIngredient]
 ) -> RecipeOut:
-    """Build RecipeOut from ORM objects (helper).
+    """Build a RecipeOut schema object from ORM objects.
 
-    Assumes ingredients list contains RecipeIngredient instances with
-    .ingredient relationship loaded.
+    Create a Pydantic `RecipeOut` from a SQLAlchemy `Recipe` instance and a list
+    of associated `RecipeIngredient` instances.
 
-    Note: This function returns the RecipeOut object directly (not wrapped in
-    ApiResponse). The calling function is responsible for wrapping it.
+    Args:
+        recipe: The ORM `Recipe` instance containing the primary recipe fields.
+        ingredients: List of ORM `RecipeIngredient` instances for this recipe. Each
+            item must have its `.ingredient` relationship eagerly loaded (e.g., via
+            `selectinload`) so access to `ri.ingredient.ingredient_name` is safe.
+
+    Returns:
+        RecipeOut: The validated Pydantic model representing the recipe and its
+        ingredient details.
+
+    Notes:
+        - This function returns the `RecipeOut` directly and does not wrap it in an
+          `ApiResponse`. Callers are responsible for wrapping it at the route layer
+          when appropriate.
+        - Assumes ingredient relationship objects are already loaded to avoid
+          additional database round-trips.
     """
     now_ts = datetime.now(UTC)
     response_data: dict[str, Any] = {
@@ -285,9 +299,21 @@ def _recipe_to_response(
 
 
 async def _get_or_create_ingredient(db: AsyncSession, name: str) -> Ingredient:
-    """Return existing Ingredient by name or create a new one.
+    """Return an existing Ingredient by name or create a new one.
 
     Keeps DB interaction isolated to reduce complexity in route handlers.
+
+    Args:
+        db: The SQLAlchemy async session used for queries and persistence.
+        name: The ingredient name to look up or create.
+
+    Returns:
+        Ingredient: The existing (or newly created) `Ingredient` ORM object.
+
+    Raises:
+        sqlalchemy.exc.IntegrityError: If a unique/constraint violation occurs while
+            creating a new ingredient.
+        sqlalchemy.exc.SQLAlchemyError: For other SQLAlchemy-related database errors.
     """
     stmt = select(Ingredient).where(Ingredient.ingredient_name == name)
     result = await db.execute(stmt)
@@ -302,9 +328,30 @@ async def _get_or_create_ingredient(db: AsyncSession, name: str) -> Ingredient:
 async def _replace_recipe_ingredients(
     db: AsyncSession, recipe: Recipe, ingredients_data: list
 ) -> list[RecipeIngredient]:
-    """Remove existing RecipeIngredient rows and create new associations.
+    """Replace all ingredient associations for a recipe with new ones.
 
-    Returns the new RecipeIngredient instances (not committed).
+    Removes existing `RecipeIngredient` rows for the given recipe and creates new
+    associations from the provided data. New association objects are added to the
+    session but not committed.
+
+    Args:
+        db: The SQLAlchemy async session used for database operations.
+        recipe: The `Recipe` instance whose ingredient associations will be replaced.
+        ingredients_data: A list of ingredient input objects (e.g., `IngredientIn`)
+            containing name, quantity_value, quantity_unit, optional prep details,
+            and optionality flag.
+
+    Returns:
+        list[RecipeIngredient]: Newly created association instances corresponding to
+        the provided ingredient data. These are attached to the session but not yet
+        committed.
+
+    Side Effects:
+        - Deletes existing `RecipeIngredient` rows for the recipe.
+        - Adds new `RecipeIngredient` rows to the session.
+
+    Note:
+        You must call `await db.commit()` in the calling context to persist changes.
     """
     await db.execute(
         delete(RecipeIngredient).where(RecipeIngredient.recipe_id == recipe.id)
@@ -334,9 +381,14 @@ async def _replace_recipe_ingredients(
 
 
 def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
-    """Apply scalar attribute updates from RecipeUpdate to Recipe.
+    """Apply scalar attribute updates from RecipeUpdate to Recipe in-place.
 
     Keeps the update loop isolated so the route handler remains small.
+
+    Args:
+        recipe: The ORM `Recipe` instance to modify. Modified in-place.
+        recipe_data: The `RecipeUpdate` payload containing optional scalar field
+            updates. Only provided (non-None) values are applied.
     """
     updatable = {
         "name": recipe_data.title,

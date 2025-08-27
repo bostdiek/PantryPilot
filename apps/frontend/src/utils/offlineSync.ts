@@ -5,18 +5,15 @@ import type { RecipeCreate } from '../types/Recipe';
  * Attempts to sync any locally stored recipes with the backend
  * @returns {Promise<{synced: number, failed: number}>} - Counts of synced and failed recipes
  */
-export async function syncPendingRecipes(): Promise<{
-  synced: number;
-  failed: number;
-}> {
+export type SyncResult = { synced: number; failed: number; error?: string };
+
+export async function syncPendingRecipes(): Promise<SyncResult> {
   try {
     // Get pending recipes from localStorage
     const pendingRecipes = JSON.parse(
       localStorage.getItem('pendingRecipes') || '[]'
     ) as RecipeCreate[];
-    if (pendingRecipes.length === 0) {
-      return { synced: 0, failed: 0 };
-    }
+    if (pendingRecipes.length === 0) return { synced: 0, failed: 0 };
 
     // Try to sync each recipe
     const results = await Promise.allSettled(
@@ -42,7 +39,11 @@ export async function syncPendingRecipes(): Promise<{
     return { synced, failed };
   } catch (error) {
     console.error('Error syncing pending recipes:', error);
-    return { synced: 0, failed: -1 }; // -1 indicates a sync process error
+    return {
+      synced: 0,
+      failed: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -66,4 +67,15 @@ export function getPendingRecipeCount(): number {
     localStorage.getItem('pendingRecipes') || '[]'
   );
   return pendingRecipes.length;
+}
+
+/**
+ * Save a recipe payload to localStorage for later sync.
+ */
+export function saveRecipeOffline(recipe: RecipeCreate) {
+  const pendingRecipes = JSON.parse(
+    localStorage.getItem('pendingRecipes') || '[]'
+  ) as RecipeCreate[];
+  pendingRecipes.push(recipe);
+  localStorage.setItem('pendingRecipes', JSON.stringify(pendingRecipes));
 }

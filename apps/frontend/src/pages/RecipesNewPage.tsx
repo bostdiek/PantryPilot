@@ -16,6 +16,7 @@ import {
   type RecipeDifficulty,
 } from '../types/Recipe';
 import { useApiHealth } from '../utils/useApiHealth';
+import { saveRecipeOffline } from '../utils/offlineSync';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -96,7 +97,6 @@ const RecipesNewPage: React.FC = () => {
     // If API is unavailable, store data locally and show message
     if (apiUnavailable) {
       try {
-        // Create the recipe data object
         const recipeData = {
           title,
           description,
@@ -123,21 +123,14 @@ const RecipesNewPage: React.FC = () => {
                 : undefined,
             is_optional: ing.is_optional || false,
           })),
-        };
+        } as const;
 
-        // Store locally until connection is restored
-        const pendingRecipes = JSON.parse(
-          localStorage.getItem('pendingRecipes') || '[]'
-        );
-        pendingRecipes.push(recipeData);
-        localStorage.setItem('pendingRecipes', JSON.stringify(pendingRecipes));
+        saveRecipeOffline(recipeData);
 
         setError(
           'API is currently unavailable. Your recipe has been saved locally and will be synced when connection is restored.'
         );
-        setTimeout(() => {
-          navigate('/recipes');
-        }, 3000);
+        setTimeout(() => navigate('/recipes'), 3000);
       } catch (err) {
         console.error('Failed to save recipe locally:', err);
         setError('Unable to save recipe. Please try again later.');
