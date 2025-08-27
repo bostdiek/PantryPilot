@@ -19,8 +19,10 @@ const HomePage: React.FC = () => {
   const { currentWeek, isLoading: mealPlanLoading } = useMealPlanStore();
 
   // Get today's meal plan
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-  const todaysMeal = currentWeek?.days.find((day) => day.day === today);
+  const todayDate = new Date();
+  const yyyyMmDd = todayDate.toISOString().slice(0, 10);
+  const todaysDay = currentWeek?.days.find((d) => d.date === yyyyMmDd);
+  const todaysFirstEntry = todaysDay?.entries[0];
 
   return (
     <Container>
@@ -69,7 +71,10 @@ const HomePage: React.FC = () => {
               </div>
               <div>
                 <div className="text-3xl font-bold">
-                  {currentWeek?.days.filter((day) => day.recipe).length || 0}
+                  {currentWeek?.days.reduce(
+                    (sum, d) => sum + (d.entries?.length || 0),
+                    0
+                  ) || 0}
                 </div>
                 <div className="text-gray-600">This Week</div>
               </div>
@@ -88,20 +93,21 @@ const HomePage: React.FC = () => {
           <div className="flex h-32 items-center justify-center">
             <div className="border-primary-500 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
           </div>
-        ) : todaysMeal?.recipe ? (
+        ) : todaysFirstEntry ? (
           <div className="p-4">
-            <h3 className="mb-1 text-lg font-medium">
-              {todaysMeal.recipe.title}
-            </h3>
+            <h3 className="mb-1 text-lg font-medium">Today's Dinner</h3>
             <p className="mb-4 text-sm text-gray-600">
-              Ready in{' '}
-              {todaysMeal.recipe.prep_time_minutes +
-                todaysMeal.recipe.cook_time_minutes}{' '}
-              minutes
+              {todaysFirstEntry.isEatingOut
+                ? 'Eating out'
+                : todaysFirstEntry.isLeftover
+                  ? 'Leftovers'
+                  : todaysFirstEntry.recipeId
+                    ? 'Planned recipe'
+                    : 'No details'}
             </p>
-            <Link to={`/recipes/${todaysMeal.recipe.id}`}>
+            <Link to={`/meal-plan`}>
               <Button variant="outline" fullWidth>
-                View Recipe
+                View Plan
               </Button>
             </Link>
           </div>

@@ -14,11 +14,11 @@ import { useRecipeStore } from './stores/useRecipeStore';
 const homeLoader = async () => {
   console.log('Home loader executing...');
   const { fetchRecipes } = useRecipeStore.getState();
-  const { fetchCurrentWeek } = useMealPlanStore.getState();
+  const { loadWeek } = useMealPlanStore.getState();
 
   // Start both fetches in parallel
   console.log('Starting parallel data fetching for home page');
-  await Promise.all([fetchRecipes(), fetchCurrentWeek()]);
+  await Promise.all([fetchRecipes(), loadWeek()]);
 
   console.log('Home loader completed');
   // Data is already stored in our Zustand stores
@@ -45,8 +45,12 @@ const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
 };
 
 const mealPlanLoader = async () => {
-  const { fetchCurrentWeek } = useMealPlanStore.getState();
-  await fetchCurrentWeek();
+  const { loadWeek } = useMealPlanStore.getState();
+  const { recipes, fetchRecipes } = useRecipeStore.getState();
+  await Promise.all([
+    loadWeek(),
+    recipes.length === 0 ? fetchRecipes() : Promise.resolve(),
+  ]);
   return null;
 };
 

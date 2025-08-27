@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test coverage output
+coverage/
+coverage-final.json
+lcov.info

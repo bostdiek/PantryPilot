@@ -1,119 +1,147 @@
 import { create } from 'zustand';
-import type { Recipe } from '../types/Recipe';
-
-interface MealPlanDay {
-  day: string;
-  recipe: Recipe | null;
-  notes?: string;
-}
-
-interface MealPlanWeek {
-  startDate: Date;
-  days: MealPlanDay[];
-}
+import {
+  createMealEntry,
+  deleteMealEntry,
+  getWeeklyMealPlan,
+  markMealCooked,
+  updateMealEntry,
+} from '../api/endpoints/mealPlans';
+import type {
+  MealEntryIn,
+  MealEntryPatch,
+  WeeklyMealPlan,
+} from '../types/MealPlan';
 
 interface MealPlanState {
-  currentWeek: MealPlanWeek | null;
+  currentWeek: WeeklyMealPlan | null;
   isLoading: boolean;
   error: string | null;
 
   // Actions
-  fetchCurrentWeek: () => Promise<void>;
-  assignRecipeToDay: (day: string, recipeId: string) => Promise<void>;
-  generateGroceryList: () => Promise<string[]>;
+  loadWeek: (start?: string) => Promise<void>;
+  addEntry: (entry: MealEntryIn) => Promise<void>;
+  updateEntry: (id: string, patch: MealEntryPatch) => Promise<void>;
+  removeEntry: (id: string) => Promise<void>;
+  markCooked: (id: string, cookedAt?: string) => Promise<void>;
 }
 
-// This is a mock implementation for now
 export const useMealPlanStore = create<MealPlanState>((set) => ({
   currentWeek: null,
   isLoading: false,
   error: null,
 
-  fetchCurrentWeek: async () => {
+  loadWeek: async (start) => {
     set({ isLoading: true, error: null });
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // For now, return an empty meal plan
-      set({
-        currentWeek: {
-          startDate: new Date(),
-          days: [
-            { day: 'Monday', recipe: null },
-            { day: 'Tuesday', recipe: null },
-            { day: 'Wednesday', recipe: null },
-            { day: 'Thursday', recipe: null },
-            { day: 'Friday', recipe: null },
-            { day: 'Saturday', recipe: null },
-            { day: 'Sunday', recipe: null },
-          ],
-        },
-        isLoading: false,
-      });
+      const data = await getWeeklyMealPlan(start);
+      set({ currentWeek: data, isLoading: false });
     } catch (error) {
       set({
         error:
-          error instanceof Error ? error.message : 'Failed to fetch meal plan',
+          error instanceof Error ? error.message : 'Failed to load meal plan',
         isLoading: false,
       });
     }
   },
 
-  assignRecipeToDay: async (day, recipeId) => {
+  addEntry: async (entry) => {
     set({ isLoading: true, error: null });
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // This would update the meal plan with the recipe
+      const created = await createMealEntry(entry);
       set((state) => {
-        if (!state.currentWeek) return state;
-
-        const updatedDays = state.currentWeek.days.map((d) =>
-          d.day === day
-            ? { ...d, recipe: { id: recipeId } as any } // This is a simplification
-            : d
-        );
-
-        return {
-          ...state,
-          currentWeek: {
-            ...state.currentWeek,
-            days: updatedDays,
-          },
-          isLoading: false,
-        };
+        const week = state.currentWeek;
+        if (!week) return { ...state, isLoading: false };
+        const day = week.days.find((d) => d.date === created.plannedForDate);
+        if (day) {
+          day.entries = [...day.entries, created].sort(
+            (a, b) => a.orderIndex - b.orderIndex
+          );
+        }
+        return { ...state, currentWeek: { ...week }, isLoading: false };
       });
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : 'Failed to assign recipe',
+        error: error instanceof Error ? error.message : 'Failed to add entry',
         isLoading: false,
       });
     }
   },
 
-  generateGroceryList: async () => {
+  updateEntry: async (id, patch) => {
     set({ isLoading: true, error: null });
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Mock grocery list
-      const groceryList = ['Eggs', 'Milk', 'Bread', 'Vegetables'];
-
-      set({ isLoading: false });
-      return groceryList;
+      const updated = await updateMealEntry(id, patch);
+      set((state) => {
+        const week = state.currentWeek;
+        if (!week) return { ...state, isLoading: false };
+        // Remove from old day if moved
+        for (const d of week.days) {
+          const idx = d.entries.findIndex((e) => e.id === id);
+          if (idx !== -1) {
+            d.entries.splice(idx, 1);
+            break;
+          }
+        }
+        // Insert into new day
+        const newDay = week.days.find((d) => d.date === updated.plannedForDate);
+        if (newDay) {
+          newDay.entries = [...newDay.entries, updated].sort(
+            (a, b) => a.orderIndex - b.orderIndex
+          );
+        }
+        return { ...state, currentWeek: { ...week }, isLoading: false };
+      });
     } catch (error) {
       set({
         error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to generate grocery list',
+          error instanceof Error ? error.message : 'Failed to update entry',
         isLoading: false,
       });
-      return [];
+    }
+  },
+
+  removeEntry: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await deleteMealEntry(id);
+      set((state) => {
+        const week = state.currentWeek;
+        if (!week) return { ...state, isLoading: false };
+        for (const d of week.days) {
+          d.entries = d.entries.filter((e) => e.id !== id);
+        }
+        return { ...state, currentWeek: { ...week }, isLoading: false };
+      });
+    } catch (error) {
+      set({
+        error:
+          error instanceof Error ? error.message : 'Failed to remove entry',
+        isLoading: false,
+      });
+    }
+  },
+
+  markCooked: async (id, cookedAt) => {
+    set({ isLoading: true, error: null });
+    try {
+      const updated = await markMealCooked(id, cookedAt);
+      set((state) => {
+        const week = state.currentWeek;
+        if (!week) return { ...state, isLoading: false };
+        for (const d of week.days) {
+          const idx = d.entries.findIndex((e) => e.id === id);
+          if (idx !== -1) {
+            d.entries[idx] = updated;
+            break;
+          }
+        }
+        return { ...state, currentWeek: { ...week }, isLoading: false };
+      });
+    } catch (error) {
+      set({
+        error: error instanceof Error ? error.message : 'Failed to mark cooked',
+        isLoading: false,
+      });
     }
   },
 }));

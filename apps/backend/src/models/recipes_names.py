@@ -18,6 +18,7 @@ class Recipe(Base):
     serving_min = Column(Integer, nullable=True)
     serving_max = Column(Integer, nullable=True)
     ethnicity = Column(String(255), nullable=True)
+    difficulty = Column(String(50), nullable=True)
     course_type = Column(String(255), nullable=True)
     # Stored as a Postgres TEXT[] (list of instruction steps)
     instructions: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)

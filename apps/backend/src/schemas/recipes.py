@@ -214,3 +214,12 @@ class RecipeOut(RecipeBase):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+class RecipeSearchResponse(BaseModel):
+    """Offset-based search response for recipes."""
+
+    items: list[RecipeOut]
+    limit: int
+    offset: int
+    total: int | None = None

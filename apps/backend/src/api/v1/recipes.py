@@ -12,7 +12,7 @@ from typing import Annotated, Any
 from uuid import UUID as UUIDType
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -27,6 +27,7 @@ from schemas.recipes import (
     RecipeCreate,
     RecipeDifficulty,
     RecipeOut,
+    RecipeSearchResponse,
     RecipeUpdate,
 )
 
@@ -92,6 +93,7 @@ async def create_recipe(
             serving_min=recipe_data.serving_min,
             serving_max=recipe_data.serving_max,
             ethnicity=recipe_data.ethnicity,
+            difficulty=recipe_data.difficulty.value,
             # Map category to course_type
             course_type=recipe_data.category.value,
             instructions=recipe_data.instructions,
@@ -242,10 +244,8 @@ def _recipe_to_response(
         "instructions": recipe.instructions or [],
         # Provide defaults for enums when the DB value is missing so Pydantic
         # always receives an allowed enum value.
-        "difficulty": (
-            RecipeDifficulty(recipe.difficulty)
-            if getattr(recipe, "difficulty", None)
-            else RecipeDifficulty.MEDIUM
+        "difficulty": RecipeDifficulty(
+            recipe.difficulty or RecipeDifficulty.MEDIUM.value
         ),
         "category": (
             RecipeCategory(recipe.course_type)
@@ -397,6 +397,7 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
         "serving_min": recipe_data.serving_min,
         "serving_max": recipe_data.serving_max,
         "ethnicity": recipe_data.ethnicity,
+        "difficulty": recipe_data.difficulty.value if recipe_data.difficulty else None,
         "course_type": recipe_data.category.value if recipe_data.category else None,
         "instructions": recipe_data.instructions,
         "user_notes": recipe_data.user_notes,
@@ -410,35 +411,82 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
 
 @router.get(
     "/",
-    response_model=ApiResponse[list[RecipeOut]],
-    summary="List recipes for the current user (or all recipes if no user linked)",
+    response_model=ApiResponse[RecipeSearchResponse],
+    summary="Search recipes with optional filters and pagination",
 )
 async def list_recipes(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
-) -> ApiResponse[list[RecipeOut]]:
-    """Return recipes scoped to current user when available.
+    query: str | None = None,
+    difficulty: RecipeDifficulty | None = None,
+    max_total_time: int | None = None,
+    category: RecipeCategory | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> ApiResponse[RecipeSearchResponse]:
+    """Return recipes with filters applied and paginated results.
 
-    If the `Recipe` model has a `user_id` column, this will filter by it. Until
-    a user system is wired, this returns all recipes.
+    Notes:
+    - difficulty is accepted for future compatibility but not applied because
+      there is no difficulty column in the current schema.
+    - query matches recipe name and user_notes (as a proxy for description).
     """
-    stmt = select(Recipe).options(
-        selectinload(Recipe.recipeingredients).selectinload(RecipeIngredient.ingredient)
-    )
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+
+    filters = []
 
     # If the model has a user_id attribute and we have a current_user, filter by it
     if hasattr(Recipe, "user_id") and current_user and "id" in current_user:
-        stmt = stmt.where(Recipe.user_id == current_user["id"])  # type: ignore[misc]
+        filters.append(Recipe.user_id == current_user["id"])  # type: ignore[misc]
 
+    if query:
+        like = f"%{query}%"
+        filters.append(or_(Recipe.name.ilike(like), Recipe.user_notes.ilike(like)))
+
+    if max_total_time is not None:
+        filters.append(Recipe.total_time_minutes <= max_total_time)
+
+    if category is not None:
+        filters.append(Recipe.course_type == category.value)
+
+    if difficulty is not None:
+        filters.append(Recipe.difficulty == difficulty.value)
+
+    base_q = select(Recipe)
+    if filters:
+        base_q = base_q.where(and_(*filters))
+
+    # Total count (optional)
+    total_stmt = select(func.count()).select_from(Recipe)
+    if filters:
+        total_stmt = total_stmt.where(and_(*filters))
+    total_res = await db.execute(total_stmt)
+    total = int(total_res.scalar() or 0)
+
+    # Fetch items with ingredients eager-loaded
+    stmt = (
+        base_q.options(
+            selectinload(Recipe.recipeingredients).selectinload(
+                RecipeIngredient.ingredient
+            )
+        )
+        .limit(limit)
+        .offset(offset)
+    )
     result = await db.execute(stmt)
     recipes = result.scalars().all()
 
-    out: list[RecipeOut] = []
+    items: list[RecipeOut] = []
     for r in recipes:
         ingredients = list(r.recipeingredients or [])
-        out.append(_recipe_to_response(r, ingredients))
+        items.append(_recipe_to_response(r, ingredients))
 
-    return ApiResponse(success=True, data=out, message="Recipes retrieved successfully")
+    return ApiResponse(
+        success=True,
+        data=RecipeSearchResponse(items=items, limit=limit, offset=offset, total=total),
+        message="Recipes retrieved successfully",
+    )
 
 
 @router.get(
