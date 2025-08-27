@@ -1,6 +1,6 @@
 # PantryPilot
 
-[![CI](https://github.com/bryanostdiek/pantrypilot/actions/workflows/ci.yml/badge.svg)](https://github.com/bryanostdiek/pantrypilot/actions/workflows/ci.yml)
+[![CI](https://github.com/bryanostdiek/pantrypilot/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/bryanostdiek/pantrypilot/actions/workflows/ci.yml)
 [![Coverage Status](https://codecov.io/gh/bryanostdiek/pantrypilot/branch/main/graph/badge.svg)](https://codecov.io/gh/bryanostdiek/pantrypilot)
 
 Helps families plan the weekly meals and grocery list
