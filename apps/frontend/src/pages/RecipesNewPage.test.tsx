@@ -35,7 +35,8 @@ describe('RecipesNewPage', () => {
     // Numeric inputs by label
     expect(screen.getByLabelText(/prep \(min\)/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/cook \(min\)/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/servings/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/min servings/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/max servings/i)).toBeInTheDocument();
   });
 
   test('adds and removes ingredients dynamically', () => {
@@ -47,11 +48,11 @@ describe('RecipesNewPage', () => {
 
     const addButton = screen.getByText(/add ingredient/i);
     fireEvent.click(addButton);
-    expect(screen.getAllByPlaceholderText(/ingredient/i)).toHaveLength(2);
+    expect(screen.getAllByLabelText(/ingredient/i)).toHaveLength(2);
 
     const removeButtons = screen.getAllByText(/remove/i);
     fireEvent.click(removeButtons[0]);
-    expect(screen.getAllByPlaceholderText(/ingredient/i)).toHaveLength(1);
+    expect(screen.getAllByLabelText(/ingredient/i)).toHaveLength(1);
   });
 
   test('adds and removes instruction steps dynamically', () => {

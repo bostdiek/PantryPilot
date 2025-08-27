@@ -80,27 +80,28 @@ $$ LANGUAGE plpgsql;
 -- Create application-specific user if running in development
 -- (In production, this should be handled via environment variables)
 DO $$
+DECLARE
+    v_pwd TEXT;
 BEGIN
     -- Only create user if we're in a development environment
     -- Check if we're using a dev database name pattern
     IF current_database() LIKE '%dev%' OR current_database() LIKE '%development%' THEN
         -- Create readonly user for potential read replicas or reporting
         IF NOT EXISTS (SELECT FROM pg_user WHERE usename = 'pantrypilot_readonly') THEN
-            -- Use environment variable for password, or generate a random one for development
-            PERFORM set_config('readonly_user_password',
-                COALESCE(current_setting('readonly_user_password', true),
-                md5(random()::text || clock_timestamp()::text)),
-                false);
+            -- Derive password from setting if provided, else generate a random one (dev only)
+            v_pwd := COALESCE(current_setting('readonly_user_password', true),
+                              md5(random()::text || clock_timestamp()::text));
 
-            CREATE USER pantrypilot_readonly WITH PASSWORD current_setting('readonly_user_password');
-            GRANT CONNECT ON DATABASE pantrypilot_dev TO pantrypilot_readonly;
-            GRANT USAGE ON SCHEMA public TO pantrypilot_readonly;
-            -- Grant SELECT on all existing tables
-            GRANT SELECT ON ALL TABLES IN SCHEMA public TO pantrypilot_readonly;
-            -- Grant SELECT on all future tables
-            ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO pantrypilot_readonly;
+            -- CREATE USER requires a literal; use dynamic SQL with proper quoting
+            EXECUTE format('CREATE USER %I WITH PASSWORD %L', 'pantrypilot_readonly', v_pwd);
 
-            RAISE NOTICE 'Created readonly user for development environment';
+            -- Grant privileges (use dynamic SQL for database identifier)
+            EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), 'pantrypilot_readonly');
+            EXECUTE 'GRANT USAGE ON SCHEMA public TO pantrypilot_readonly';
+            EXECUTE 'GRANT SELECT ON ALL TABLES IN SCHEMA public TO pantrypilot_readonly';
+            EXECUTE 'ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO pantrypilot_readonly';
+
+            RAISE NOTICE 'Created readonly user for development environment (user: %)', 'pantrypilot_readonly';
         END IF;
     END IF;
 END $$;

@@ -1,7 +1,6 @@
 import uuid
-from datetime import datetime
 
-from sqlalchemy import UUID, Column, DateTime, String
+from sqlalchemy import UUID, Column, DateTime, String, func
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -16,8 +15,8 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     first_name = Column(String(255))
     last_name = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     meal = relationship("Meal", back_populates="user")

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,14 +23,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v6
         with:
-          version: "latest"
+          working-directory: apps/backend
+          python-version: "3.12"
           enable-cache: true
-          cache-dependency-glob: "**/uv.lock"
-
-      - name: Set up Python
-        run: uv python install 3.12
+          cache-dependency-glob: apps/backend/uv.lock
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -42,7 +40,8 @@ jobs:
         run: uv run ruff format --check --diff .
 
       - name: Run mypy type check
-        run: uv run mypy src
+        # Run mypy the same way as local developers: set MYPYPATH=src and target packages
+        run: MYPYPATH=src uv run mypy -p api -p core -p crud -p dependencies -p models -p schemas
 
   backend-test:
     name: Backend Test
@@ -56,14 +55,12 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v6
         with:
-          version: "latest"
+          working-directory: apps/backend
+          python-version: "3.12"
           enable-cache: true
-          cache-dependency-glob: "**/uv.lock"
-
-      - name: Set up Python
-        run: uv python install 3.12
+          cache-dependency-glob: apps/backend/uv.lock
 
       - name: Install dependencies
         run: uv sync --frozen
@@ -93,8 +90,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
       - name: Install dependencies
@@ -123,8 +120,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
       - name: Install dependencies
@@ -155,8 +152,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
       - name: Install dependencies
@@ -180,17 +177,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Run backend security audit (uv)
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          working-directory: apps/backend
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: apps/backend/uv.lock
+
+      - name: Export backend dependencies
         working-directory: apps/backend
         run: |
-          uvx --from pip-audit pip-audit --format=json --output=backend-audit.json
+          uv export --format=requirements-txt --no-hashes > requirements.lock
+
+      - name: Run backend security audit (pip-audit)
+        working-directory: apps/backend
+        run: |
+          uvx --from pip-audit pip-audit -r requirements.lock --format=json --output=backend-audit.json
         continue-on-error: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: "20"
+          cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
       - name: Run frontend security audit (npm)

@@ -1,8 +1,9 @@
 // API Response Types
 export interface ApiResponse<T = unknown> {
-  data?: T;
-  message?: string;
-  error?: string;
+  success: boolean;
+  data: T | null;
+  message: string;
+  error?: Record<string, unknown> | null;
 }
 
 // Health Check Types

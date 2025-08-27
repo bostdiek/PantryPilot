@@ -21,7 +21,15 @@ describe('ApiClient (unit)', () => {
   it('sends correct headers and returns data on success', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: { hello: 'world' } }),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: true,
+            data: { hello: 'world' },
+            message: 'Success',
+          })
+        ),
+      status: 200,
     });
 
     const res = await apiClient.request('/test', { method: 'GET' });
@@ -37,7 +45,15 @@ describe('ApiClient (unit)', () => {
 
     fetchMock.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: {} }),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: true,
+            data: {},
+            message: 'Success',
+          })
+        ),
+      status: 200,
     });
 
     await apiClient.request('/secure');

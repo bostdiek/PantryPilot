@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from sqlalchemy import (
     UUID,
@@ -7,9 +6,12 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Numeric,
     String,
     Text,
+    func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
 from .base import Base
@@ -25,12 +27,13 @@ class RecipeIngredient(Base):
     ingredient_id = Column(
         UUID(as_uuid=True), ForeignKey("ingredient_names.id"), nullable=False
     )  # noqa: E501
-    quantity = Column(String(255), nullable=False)
-    unit = Column(String(255), nullable=False)
+    quantity_value = Column(Numeric, nullable=True)
+    quantity_unit = Column(String(64), nullable=True)
+    prep = Column(JSONB, nullable=False, server_default="{}")
     is_optional = Column(Boolean, default=False)
     user_notes = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
     recipe = relationship("Recipe", back_populates="recipeingredients")
