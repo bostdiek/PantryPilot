@@ -23,6 +23,13 @@ vi.mock('@dnd-kit/core', async (orig) => {
   };
 });
 
+// Mock icons imported by the page
+vi.mock('../../components/ui/icons/check.svg?react', () => ({
+  default: () => <span data-testid="icon-check" />,
+}));
+vi.mock('../../components/ui/icons/x.svg?react', () => ({
+  default: () => <span data-testid="icon-x" />,
+}));
 // Mock SVG icon components used by Select to avoid jsdom parsing inline SVG data URLs
 vi.mock('../../components/ui/icons/check.svg?react', () => ({
   default: () => <span data-testid="icon-check" />,
@@ -90,5 +97,38 @@ describe('MealPlanPage', () => {
 
     expect(markSpy).toHaveBeenCalledTimes(1);
     expect(markSpy.mock.calls[0][0]).toBe('m1');
+  });
+
+  it('removes an entry when clicking Remove', async () => {
+    const user = userEvent.setup();
+    const removeSpy = vi
+      .spyOn(useMealPlanStore.getState(), 'removeEntry')
+      .mockResolvedValue();
+
+    render(<MealPlanPage />);
+
+    const entryItem = screen.getByText('Planned item').closest('li')!;
+    const removeBtn = within(entryItem).getByRole('button', {
+      name: /Remove/i,
+    });
+    await user.click(removeBtn);
+
+    expect(removeSpy).toHaveBeenCalledTimes(1);
+    expect(removeSpy.mock.calls[0][0]).toBe('m1');
+  });
+
+  it('navigates to previous week via controls', async () => {
+    const user = userEvent.setup();
+    const loadSpy = vi
+      .spyOn(useMealPlanStore.getState(), 'loadWeek')
+      .mockResolvedValue();
+
+    render(<MealPlanPage />);
+
+    const prevBtn = screen.getByRole('button', { name: /Previous week/i });
+    await user.click(prevBtn);
+
+    // Given weekStartDate is 2025-01-12 in beforeEach, previous week is 2025-01-05
+    expect(loadSpy).toHaveBeenCalledWith('2025-01-05');
   });
 });
