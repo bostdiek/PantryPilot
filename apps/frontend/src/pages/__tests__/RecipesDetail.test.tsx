@@ -67,7 +67,7 @@ const mockDuplicateRecipe = vi.fn();
 describe('RecipesDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Setup default mock store state
     vi.mocked(useRecipeStore).mockReturnValue({
       deleteRecipe: mockDeleteRecipe,
@@ -110,9 +110,11 @@ describe('RecipesDetail', () => {
   it('renders recipe details correctly', () => {
     renderRecipesDetail();
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Test Recipe');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Test Recipe'
+    );
     expect(screen.getByText('A delicious test recipe')).toBeInTheDocument();
-    
+
     // Check metadata
     expect(screen.getByText('15')).toBeInTheDocument(); // prep time
     expect(screen.getByText('30')).toBeInTheDocument(); // cook time
@@ -151,22 +153,32 @@ describe('RecipesDetail', () => {
   it('displays user notes when present', () => {
     renderRecipesDetail();
 
-    expect(screen.getByText('This is a great recipe for family dinners')).toBeInTheDocument();
+    expect(
+      screen.getByText('This is a great recipe for family dinners')
+    ).toBeInTheDocument();
   });
 
   it('renders action buttons', () => {
     renderRecipesDetail();
 
-    expect(screen.getByRole('button', { name: /edit test recipe/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /duplicate test recipe/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /delete test recipe/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /edit test recipe/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /duplicate test recipe/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /delete test recipe/i })
+    ).toBeInTheDocument();
   });
 
   it('navigates to edit page when edit button is clicked', async () => {
     const user = userEvent.setup();
     renderRecipesDetail();
 
-    const editButton = screen.getByRole('button', { name: /edit test recipe/i });
+    const editButton = screen.getByRole('button', {
+      name: /edit test recipe/i,
+    });
     await user.click(editButton);
 
     expect(mockNavigate).toHaveBeenCalledWith('/recipes/test-recipe-id/edit');
@@ -174,16 +186,23 @@ describe('RecipesDetail', () => {
 
   it('calls duplicate recipe when duplicate button is clicked', async () => {
     const user = userEvent.setup();
-    mockDuplicateRecipe.mockResolvedValue({ ...mockRecipe, id: 'new-recipe-id' });
+    mockDuplicateRecipe.mockResolvedValue({
+      ...mockRecipe,
+      id: 'new-recipe-id',
+    });
     renderRecipesDetail();
 
-    const duplicateButton = screen.getByRole('button', { name: /duplicate test recipe/i });
+    const duplicateButton = screen.getByRole('button', {
+      name: /duplicate test recipe/i,
+    });
     await user.click(duplicateButton);
 
     expect(mockDuplicateRecipe).toHaveBeenCalledWith('test-recipe-id');
-    
+
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/recipes/new-recipe-id', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/recipes/new-recipe-id', {
+        replace: true,
+      });
     });
   });
 
@@ -192,7 +211,9 @@ describe('RecipesDetail', () => {
     mockDuplicateRecipe.mockImplementation(() => new Promise(() => {})); // Never resolves
     renderRecipesDetail();
 
-    const duplicateButton = screen.getByRole('button', { name: /duplicate test recipe/i });
+    const duplicateButton = screen.getByRole('button', {
+      name: /duplicate test recipe/i,
+    });
     await user.click(duplicateButton);
 
     expect(duplicateButton).toBeDisabled();
@@ -202,15 +223,21 @@ describe('RecipesDetail', () => {
     const user = userEvent.setup();
     renderRecipesDetail();
 
-    const deleteButton = screen.getByRole('button', { name: /delete test recipe/i });
+    const deleteButton = screen.getByRole('button', {
+      name: /delete test recipe/i,
+    });
     await user.click(deleteButton);
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /delete recipe/i })).toBeInTheDocument();
-    
+    expect(
+      screen.getByRole('heading', { name: /delete recipe/i })
+    ).toBeInTheDocument();
+
     // Check for the specific confirmation text within the dialog
     const dialog = screen.getByRole('dialog');
-    expect(dialog).toHaveTextContent('Are you sure you want to delete "Test Recipe"');
+    expect(dialog).toHaveTextContent(
+      'Are you sure you want to delete "Test Recipe"'
+    );
   });
 
   it('closes delete modal when cancel is clicked', async () => {
@@ -218,7 +245,9 @@ describe('RecipesDetail', () => {
     renderRecipesDetail();
 
     // Open modal
-    const deleteButton = screen.getByRole('button', { name: /delete test recipe/i });
+    const deleteButton = screen.getByRole('button', {
+      name: /delete test recipe/i,
+    });
     await user.click(deleteButton);
 
     // Close modal
@@ -236,15 +265,19 @@ describe('RecipesDetail', () => {
     renderRecipesDetail();
 
     // Open modal
-    const deleteButton = screen.getByRole('button', { name: /delete test recipe/i });
+    const deleteButton = screen.getByRole('button', {
+      name: /delete test recipe/i,
+    });
     await user.click(deleteButton);
 
     // Confirm deletion
-    const confirmButton = screen.getByRole('button', { name: /delete recipe/i });
+    const confirmButton = screen.getByRole('button', {
+      name: /delete recipe/i,
+    });
     await user.click(confirmButton);
 
     expect(mockDeleteRecipe).toHaveBeenCalledWith('test-recipe-id');
-    
+
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/recipes', { replace: true });
     });
@@ -255,18 +288,28 @@ describe('RecipesDetail', () => {
 
     // Check for proper headings
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: /ingredients/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: /instructions/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /ingredients/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { level: 2, name: /instructions/i })
+    ).toBeInTheDocument();
 
     // Check for proper landmarks
     expect(screen.getByRole('article')).toBeInTheDocument();
-    
+
     // Check for lists
     expect(screen.getAllByRole('list')).toHaveLength(2); // ingredients and instructions
 
     // Check aria-labels on buttons
-    expect(screen.getByRole('button', { name: /edit test recipe/i })).toHaveAttribute('aria-label');
-    expect(screen.getByRole('button', { name: /duplicate test recipe/i })).toHaveAttribute('aria-label');
-    expect(screen.getByRole('button', { name: /delete test recipe/i })).toHaveAttribute('aria-label');
+    expect(
+      screen.getByRole('button', { name: /edit test recipe/i })
+    ).toHaveAttribute('aria-label');
+    expect(
+      screen.getByRole('button', { name: /duplicate test recipe/i })
+    ).toHaveAttribute('aria-label');
+    expect(
+      screen.getByRole('button', { name: /delete test recipe/i })
+    ).toHaveAttribute('aria-label');
   });
 });

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLoaderData, useParams } from 'react-router-dom';
+import React, { useState } from 'react';
+import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -28,96 +28,65 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
   name: diff.charAt(0).toUpperCase() + diff.slice(1), // Capitalize first letter
 }));
 
-const RecipesEditPage: React.FC = () => {
+type RecipeEditFormProps = { recipe: Recipe };
+
+function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const recipe = useLoaderData() as Recipe | null;
-  
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState<SelectOption>(
-    categoryOptions.find((c) => c.id === 'dinner') || categoryOptions[0]
-  );
-  const [difficulty, setDifficulty] = useState<SelectOption>(
-    difficultyOptions.find((d) => d.id === 'medium') || difficultyOptions[0]
-  );
-  const [prepTime, setPrepTime] = useState(0);
-  const [cookTime, setCookTime] = useState(0);
-  const [servingMin, setServingMin] = useState(1);
-  const [servingMax, setServingMax] = useState<number | undefined>(undefined);
-  const [ethnicity, setEthnicity] = useState('');
-  const [ovenTemperatureF, setOvenTemperatureF] = useState<number | undefined>(
-    undefined
-  );
-  const [userNotes, setUserNotes] = useState('');
-  const [ingredients, setIngredients] = useState<Ingredient[]>([
-    {
-      name: '',
-      quantity_value: undefined,
-      quantity_unit: '',
-      prep: {},
-      is_optional: false,
-    },
-  ]);
-  const [instructions, setInstructions] = useState(['']);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { updateRecipe } = useRecipeStore();
 
-  // Populate form fields when recipe data is available
-  useEffect(() => {
-    if (recipe) {
-      setTitle(recipe.title);
-      setDescription(recipe.description || '');
-      setCategory(
-        categoryOptions.find((c) => c.id === recipe.category) ||
-          categoryOptions[0]
-      );
-      setDifficulty(
-        difficultyOptions.find((d) => d.id === recipe.difficulty) ||
-          difficultyOptions[0]
-      );
-      setPrepTime(recipe.prep_time_minutes || 0);
-      setCookTime(recipe.cook_time_minutes || 0);
-      setServingMin(recipe.serving_min || 1);
-      setServingMax(recipe.serving_max || undefined);
-      setEthnicity(recipe.ethnicity || '');
-      setOvenTemperatureF(recipe.oven_temperature_f || undefined);
-      setUserNotes(recipe.user_notes || '');
-      
-      // Set ingredients, ensuring we have at least one empty ingredient
-      if (recipe.ingredients && recipe.ingredients.length > 0) {
-        setIngredients(recipe.ingredients.map(ing => ({
+  // Initialize state lazily from recipe props to avoid useEffect hydration
+  const [title, setTitle] = useState(() => recipe.title);
+  const [description, setDescription] = useState(
+    () => recipe.description || ''
+  );
+  const [category, setCategory] = useState<SelectOption>(
+    () =>
+      categoryOptions.find((c) => c.id === recipe.category) ||
+      categoryOptions[0]
+  );
+  const [difficulty, setDifficulty] = useState<SelectOption>(
+    () =>
+      difficultyOptions.find((d) => d.id === recipe.difficulty) ||
+      difficultyOptions[0]
+  );
+  const [prepTime, setPrepTime] = useState(() => recipe.prep_time_minutes || 0);
+  const [cookTime, setCookTime] = useState(() => recipe.cook_time_minutes || 0);
+  const [servingMin, setServingMin] = useState(() => recipe.serving_min || 1);
+  const [servingMax, setServingMax] = useState<number | undefined>(
+    () => recipe.serving_max || undefined
+  );
+  const [ethnicity, setEthnicity] = useState(() => recipe.ethnicity || '');
+  const [ovenTemperatureF, setOvenTemperatureF] = useState<number | undefined>(
+    () => recipe.oven_temperature_f || undefined
+  );
+  const [userNotes, setUserNotes] = useState(() => recipe.user_notes || '');
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() =>
+    recipe.ingredients && recipe.ingredients.length > 0
+      ? recipe.ingredients.map((ing) => ({
           name: ing.name || '',
           quantity_value: ing.quantity_value || undefined,
           quantity_unit: ing.quantity_unit || '',
           prep: ing.prep || {},
           is_optional: ing.is_optional || false,
-        })));
-      }
-      
-      // Set instructions, ensuring we have at least one empty instruction
-      if (recipe.instructions && recipe.instructions.length > 0) {
-        setInstructions(recipe.instructions);
-      }
-    }
-  }, [recipe]);
-
-  // Show loading state if recipe is not loaded
-  if (!recipe) {
-    return (
-      <Container>
-        <div className="py-8">
-          <Card variant="elevated" className="p-6">
-            <div className="flex items-center justify-center py-12">
-              <LoadingSpinner />
-              <span className="ml-3 text-gray-600">Loading recipe...</span>
-            </div>
-          </Card>
-        </div>
-      </Container>
-    );
-  }
+        }))
+      : [
+          {
+            name: '',
+            quantity_value: undefined,
+            quantity_unit: '',
+            prep: {},
+            is_optional: false,
+          },
+        ]
+  );
+  const [instructions, setInstructions] = useState<string[]>(() =>
+    recipe.instructions && recipe.instructions.length > 0
+      ? recipe.instructions
+      : ['']
+  );
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -473,6 +442,27 @@ const RecipesEditPage: React.FC = () => {
       </Card>
     </Container>
   );
+}
+
+const RecipesEditPage: React.FC = () => {
+  const recipe = useLoaderData() as Recipe | null;
+
+  if (!recipe) {
+    return (
+      <Container>
+        <div className="py-8">
+          <Card variant="elevated" className="p-6">
+            <div className="flex items-center justify-center py-12">
+              <LoadingSpinner />
+              <span className="ml-3 text-gray-600">Loading recipe...</span>
+            </div>
+          </Card>
+        </div>
+      </Container>
+    );
+  }
+
+  return <RecipeEditForm recipe={recipe} />;
 };
 
 export default RecipesEditPage;
