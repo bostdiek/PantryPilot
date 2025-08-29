@@ -207,9 +207,10 @@ describe('RecipesDetail', () => {
 
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /delete recipe/i })).toBeInTheDocument();
-    expect(screen.getByText((content, element) => {
-      return element ? element.textContent?.includes('Are you sure you want to delete "Test Recipe"') ?? false : false;
-    })).toBeInTheDocument();
+    
+    // Check for the specific confirmation text within the dialog
+    const dialog = screen.getByRole('dialog');
+    expect(dialog).toHaveTextContent('Are you sure you want to delete "Test Recipe"');
   });
 
   it('closes delete modal when cancel is clicked', async () => {
