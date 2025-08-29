@@ -13,6 +13,11 @@ vi.mock('../components/ui/icons/search.svg?react', () => ({
   default: () => <div data-testid="mock-search-icon" />,
 }));
 
+// Mock chevron icon used by Select component
+vi.mock('../components/ui/icons/chevron-up-down.svg?react', () => ({
+  default: () => <div data-testid="mock-chevron-icon" />,
+}));
+
 // Mock the store
 const fetchRecipesMock = vi.fn();
 const setPageMock = vi.fn();

@@ -7,14 +7,20 @@ import {
   getRecipeById,
 } from '../api/endpoints/recipes';
 import type { ApiError } from '../types/api';
-import type { Recipe, RecipeCreate, RecipeUpdate, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
+import type {
+  Recipe,
+  RecipeCategory,
+  RecipeCreate,
+  RecipeDifficulty,
+  RecipeUpdate,
+} from '../types/Recipe';
 
 // Sort options for recipes
-export type RecipeSortOption = 
-  | 'relevance' 
-  | 'title-asc' 
+export type RecipeSortOption =
+  | 'relevance'
+  | 'title-asc'
   | 'title-desc'
-  | 'cook-time-asc' 
+  | 'cook-time-asc'
   | 'cook-time-desc'
   | 'recently-added';
 
@@ -68,12 +74,12 @@ interface RecipeState {
 
 // Helper functions for filtering and sorting
 function filterRecipes(recipes: Recipe[], filters: RecipeFilters): Recipe[] {
-  return recipes.filter(recipe => {
+  return recipes.filter((recipe) => {
     // Text search in title and ingredients
     if (filters.query) {
       const query = filters.query.toLowerCase();
       const titleMatch = recipe.title.toLowerCase().includes(query);
-      const ingredientMatch = recipe.ingredients.some(ing => 
+      const ingredientMatch = recipe.ingredients.some((ing) =>
         ing.name.toLowerCase().includes(query)
       );
       if (!titleMatch && !ingredientMatch) return false;
@@ -90,15 +96,16 @@ function filterRecipes(recipes: Recipe[], filters: RecipeFilters): Recipe[] {
     }
 
     // Cook time range filter
-    const totalTime = recipe.prep_time_minutes + recipe.cook_time_minutes;
+    const totalTime =
+      (recipe.prep_time_minutes ?? 0) + (recipe.cook_time_minutes ?? 0);
     if (totalTime < filters.cookTimeMin || totalTime > filters.cookTimeMax) {
       return false;
     }
 
     // Included ingredients filter
     if (filters.includedIngredients.length > 0) {
-      const hasAllIncluded = filters.includedIngredients.every(required => 
-        recipe.ingredients.some(ing => 
+      const hasAllIncluded = filters.includedIngredients.every((required) =>
+        recipe.ingredients.some((ing) =>
           ing.name.toLowerCase().includes(required.toLowerCase())
         )
       );
@@ -107,8 +114,8 @@ function filterRecipes(recipes: Recipe[], filters: RecipeFilters): Recipe[] {
 
     // Excluded ingredients filter
     if (filters.excludedIngredients.length > 0) {
-      const hasExcluded = filters.excludedIngredients.some(excluded => 
-        recipe.ingredients.some(ing => 
+      const hasExcluded = filters.excludedIngredients.some((excluded) =>
+        recipe.ingredients.some((ing) =>
           ing.name.toLowerCase().includes(excluded.toLowerCase())
         )
       );
@@ -121,22 +128,31 @@ function filterRecipes(recipes: Recipe[], filters: RecipeFilters): Recipe[] {
 
 function sortRecipes(recipes: Recipe[], sortBy: RecipeSortOption): Recipe[] {
   const sorted = [...recipes];
-  
+
   switch (sortBy) {
     case 'title-asc':
       return sorted.sort((a, b) => a.title.localeCompare(b.title));
     case 'title-desc':
       return sorted.sort((a, b) => b.title.localeCompare(a.title));
     case 'cook-time-asc':
-      return sorted.sort((a, b) => 
-        (a.prep_time_minutes + a.cook_time_minutes) - (b.prep_time_minutes + b.cook_time_minutes)
+      return sorted.sort(
+        (a, b) =>
+          (a.prep_time_minutes ?? 0) +
+          (a.cook_time_minutes ?? 0) -
+          ((b.prep_time_minutes ?? 0) + (b.cook_time_minutes ?? 0))
       );
     case 'cook-time-desc':
-      return sorted.sort((a, b) => 
-        (b.prep_time_minutes + b.cook_time_minutes) - (a.prep_time_minutes + a.cook_time_minutes)
+      return sorted.sort(
+        (a, b) =>
+          (b.prep_time_minutes ?? 0) +
+          (b.cook_time_minutes ?? 0) -
+          ((a.prep_time_minutes ?? 0) + (a.cook_time_minutes ?? 0))
       );
     case 'recently-added':
-      return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     case 'relevance':
     default:
       // For relevance, keep original order (could be enhanced with scoring later)
@@ -361,7 +377,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     const state = get();
     const filtered = filterRecipes(state.recipes, state.filters);
     const sorted = sortRecipes(filtered, state.sortBy);
-    
+
     set({
       filteredRecipes: sorted,
       pagination: {

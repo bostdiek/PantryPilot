@@ -1,7 +1,16 @@
-import { useEffect, useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useRecipeStore, type RecipeFilters, type RecipeSortOption } from '../stores/useRecipeStore';
-import { RECIPE_CATEGORIES, RECIPE_DIFFICULTIES, type RecipeCategory, type RecipeDifficulty } from '../types/Recipe';
+import {
+  useRecipeStore,
+  type RecipeFilters,
+  type RecipeSortOption,
+} from '../stores/useRecipeStore';
+import {
+  RECIPE_CATEGORIES,
+  RECIPE_DIFFICULTIES,
+  type RecipeCategory,
+  type RecipeDifficulty,
+} from '../types/Recipe';
 
 /**
  * Custom hook for managing recipe filters with URL query parameters
@@ -9,7 +18,8 @@ import { RECIPE_CATEGORIES, RECIPE_DIFFICULTIES, type RecipeCategory, type Recip
  */
 export function useRecipeFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { filters, sortBy, setFilters, setSortBy, clearFilters } = useRecipeStore();
+  const { filters, sortBy, setFilters, setSortBy, clearFilters } =
+    useRecipeStore();
 
   // Parse URL parameters into filters
   const parseFiltersFromUrl = useCallback((): Partial<RecipeFilters> => {
@@ -22,14 +32,18 @@ export function useRecipeFilters() {
     if (categories) {
       urlFilters.categories = categories
         .split(',')
-        .filter(cat => RECIPE_CATEGORIES.includes(cat as any)) as RecipeCategory[];
+        .filter((cat): cat is RecipeCategory =>
+          RECIPE_CATEGORIES.includes(cat as RecipeCategory)
+        );
     }
 
     const difficulties = searchParams.get('difficulties');
     if (difficulties) {
       urlFilters.difficulties = difficulties
         .split(',')
-        .filter(diff => RECIPE_DIFFICULTIES.includes(diff as any)) as RecipeDifficulty[];
+        .filter((diff): diff is RecipeDifficulty =>
+          RECIPE_DIFFICULTIES.includes(diff as RecipeDifficulty)
+        );
     }
 
     const cookTimeMin = searchParams.get('cookTimeMin');
@@ -46,12 +60,16 @@ export function useRecipeFilters() {
 
     const includedIngredients = searchParams.get('include');
     if (includedIngredients) {
-      urlFilters.includedIngredients = includedIngredients.split(',').filter(Boolean);
+      urlFilters.includedIngredients = includedIngredients
+        .split(',')
+        .filter(Boolean);
     }
 
     const excludedIngredients = searchParams.get('exclude');
     if (excludedIngredients) {
-      urlFilters.excludedIngredients = excludedIngredients.split(',').filter(Boolean);
+      urlFilters.excludedIngredients = excludedIngredients
+        .split(',')
+        .filter(Boolean);
     }
 
     return urlFilters;
@@ -62,18 +80,21 @@ export function useRecipeFilters() {
     const sort = searchParams.get('sort') as RecipeSortOption;
     const validSorts: RecipeSortOption[] = [
       'relevance',
-      'title-asc', 
+      'title-asc',
       'title-desc',
       'cook-time-asc',
       'cook-time-desc',
-      'recently-added'
+      'recently-added',
     ];
-    
+
     return validSorts.includes(sort) ? sort : 'relevance';
   }, [searchParams]);
 
   // Update URL with current filters and sort
-  const updateUrl = (newFilters?: Partial<RecipeFilters>, newSort?: RecipeSortOption) => {
+  const updateUrl = (
+    newFilters?: Partial<RecipeFilters>,
+    newSort?: RecipeSortOption
+  ) => {
     const currentFilters = { ...filters, ...newFilters };
     const currentSort = newSort || sortBy;
 
@@ -89,7 +110,7 @@ export function useRecipeFilters() {
       newParams.set('categories', currentFilters.categories.join(','));
     }
 
-    // Add difficulty filter  
+    // Add difficulty filter
     if (currentFilters.difficulties && currentFilters.difficulties.length > 0) {
       newParams.set('difficulties', currentFilters.difficulties.join(','));
     }
@@ -103,10 +124,16 @@ export function useRecipeFilters() {
     }
 
     // Add ingredient filters
-    if (currentFilters.includedIngredients && currentFilters.includedIngredients.length > 0) {
+    if (
+      currentFilters.includedIngredients &&
+      currentFilters.includedIngredients.length > 0
+    ) {
       newParams.set('include', currentFilters.includedIngredients.join(','));
     }
-    if (currentFilters.excludedIngredients && currentFilters.excludedIngredients.length > 0) {
+    if (
+      currentFilters.excludedIngredients &&
+      currentFilters.excludedIngredients.length > 0
+    ) {
       newParams.set('exclude', currentFilters.excludedIngredients.join(','));
     }
 

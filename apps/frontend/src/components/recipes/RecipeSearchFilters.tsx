@@ -5,7 +5,12 @@ import { Select, type SelectOption } from '../ui/Select';
 import { Icon } from '../ui/Icon';
 import SearchIcon from '../ui/icons/search.svg?react';
 import XIcon from '../ui/icons/x.svg?react';
-import { RECIPE_CATEGORIES, RECIPE_DIFFICULTIES, type RecipeCategory, type RecipeDifficulty } from '../../types/Recipe';
+import {
+  RECIPE_CATEGORIES,
+  RECIPE_DIFFICULTIES,
+  type RecipeCategory,
+  type RecipeDifficulty,
+} from '../../types/Recipe';
 import { useRecipeFilters } from '../../hooks/useRecipeFilters';
 import type { RecipeSortOption } from '../../stores/useRecipeStore';
 
@@ -24,19 +29,19 @@ const sortOptions: { value: RecipeSortOption; label: string }[] = [
 ];
 
 // Convert sort options to Select format
-const sortSelectOptions: SelectOption[] = sortOptions.map(option => ({
+const sortSelectOptions: SelectOption[] = sortOptions.map((option) => ({
   id: option.value,
   name: option.label,
 }));
 
 // Convert categories to filter button format
-const categoryOptions = RECIPE_CATEGORIES.map(cat => ({
+const categoryOptions = RECIPE_CATEGORIES.map((cat) => ({
   id: cat,
   name: cat.charAt(0).toUpperCase() + cat.slice(1),
 }));
 
 // Convert difficulties to filter button format
-const difficultyOptions = RECIPE_DIFFICULTIES.map(diff => ({
+const difficultyOptions = RECIPE_DIFFICULTIES.map((diff) => ({
   id: diff,
   name: diff.charAt(0).toUpperCase() + diff.slice(1),
 }));
@@ -45,13 +50,16 @@ const difficultyOptions = RECIPE_DIFFICULTIES.map(diff => ({
  * Recipe search and filter component
  * Provides search input, category/difficulty filters, cook time range, and sort options
  */
-export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps) {
-  const { filters, sortBy, setFilters, setSortBy, clearFilters } = useRecipeFilters();
-  
+export function RecipeSearchFilters({
+  className = '',
+}: RecipeSearchFiltersProps) {
+  const { filters, sortBy, setFilters, setSortBy, clearFilters } =
+    useRecipeFilters();
+
   // Local state for ingredient inputs
   const [includeInput, setIncludeInput] = useState('');
   const [excludeInput, setExcludeInput] = useState('');
-  
+
   // Expanded state for advanced filters
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -64,7 +72,7 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
   const handleCategoryChange = (option: { id: string; name: string }) => {
     const category = option.id as RecipeCategory;
     const newCategories = filters.categories.includes(category)
-      ? filters.categories.filter(c => c !== category)
+      ? filters.categories.filter((c) => c !== category)
       : [...filters.categories, category];
     setFilters({ categories: newCategories });
   };
@@ -73,7 +81,7 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
   const handleDifficultyChange = (option: { id: string; name: string }) => {
     const difficulty = option.id as RecipeDifficulty;
     const newDifficulties = filters.difficulties.includes(difficulty)
-      ? filters.difficulties.filter(d => d !== difficulty)
+      ? filters.difficulties.filter((d) => d !== difficulty)
       : [...filters.difficulties, difficulty];
     setFilters({ difficulties: newDifficulties });
   };
@@ -96,31 +104,41 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
   // Handle ingredient filters
   const addIncludedIngredient = () => {
     if (includeInput.trim()) {
-      setFilters({ 
-        includedIngredients: [...filters.includedIngredients, includeInput.trim()] 
+      setFilters({
+        includedIngredients: [
+          ...filters.includedIngredients,
+          includeInput.trim(),
+        ],
       });
       setIncludeInput('');
     }
   };
 
   const removeIncludedIngredient = (ingredient: string) => {
-    setFilters({ 
-      includedIngredients: filters.includedIngredients.filter(i => i !== ingredient)
+    setFilters({
+      includedIngredients: filters.includedIngredients.filter(
+        (i) => i !== ingredient
+      ),
     });
   };
 
   const addExcludedIngredient = () => {
     if (excludeInput.trim()) {
-      setFilters({ 
-        excludedIngredients: [...filters.excludedIngredients, excludeInput.trim()] 
+      setFilters({
+        excludedIngredients: [
+          ...filters.excludedIngredients,
+          excludeInput.trim(),
+        ],
       });
       setExcludeInput('');
     }
   };
 
   const removeExcludedIngredient = (ingredient: string) => {
-    setFilters({ 
-      excludedIngredients: filters.excludedIngredients.filter(i => i !== ingredient)
+    setFilters({
+      excludedIngredients: filters.excludedIngredients.filter(
+        (i) => i !== ingredient
+      ),
     });
   };
 
@@ -130,7 +148,7 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
   };
 
   // Check if any filters are active
-  const hasActiveFilters = 
+  const hasActiveFilters =
     filters.query ||
     filters.categories.length > 0 ||
     filters.difficulties.length > 0 ||
@@ -141,7 +159,9 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
     sortBy !== 'relevance';
 
   return (
-    <div className={`space-y-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${className}`}>
+    <div
+      className={`space-y-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm ${className}`}
+    >
       {/* Search and Sort Row */}
       <div className="flex flex-col gap-4 sm:flex-row">
         <div className="flex-1">
@@ -158,7 +178,10 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
         <div className="sm:w-64">
           <Select
             options={sortSelectOptions}
-            value={sortSelectOptions.find(opt => opt.id === sortBy) || sortSelectOptions[0]}
+            value={
+              sortSelectOptions.find((opt) => opt.id === sortBy) ||
+              sortSelectOptions[0]
+            }
             onChange={handleSortChange}
             label="Sort by"
           />
@@ -168,9 +191,11 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
       {/* Basic Filters Row */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Category</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Category
+          </label>
           <div className="flex flex-wrap gap-2">
-            {categoryOptions.map(option => (
+            {categoryOptions.map((option) => (
               <button
                 key={option.id}
                 onClick={() => handleCategoryChange(option)}
@@ -185,11 +210,13 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
             ))}
           </div>
         </div>
-        
+
         <div>
-          <label className="mb-1 block text-sm font-medium text-gray-700">Difficulty</label>
+          <label className="mb-1 block text-sm font-medium text-gray-700">
+            Difficulty
+          </label>
           <div className="flex flex-wrap gap-2">
-            {difficultyOptions.map(option => (
+            {difficultyOptions.map((option) => (
               <button
                 key={option.id}
                 onClick={() => handleDifficultyChange(option)}
@@ -215,13 +242,9 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
         >
           {showAdvanced ? 'Hide' : 'Show'} Advanced Filters
         </Button>
-        
+
         {hasActiveFilters && (
-          <Button
-            variant="outline"
-            onClick={clearFilters}
-            className="text-sm"
-          >
+          <Button variant="outline" onClick={clearFilters} className="text-sm">
             Clear All Filters
           </Button>
         )}
@@ -275,7 +298,7 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
             </div>
             {filters.includedIngredients.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
-                {filters.includedIngredients.map(ingredient => (
+                {filters.includedIngredients.map((ingredient) => (
                   <span
                     key={ingredient}
                     className="flex items-center gap-1 rounded-full bg-green-100 px-2 py-1 text-xs"
@@ -315,7 +338,7 @@ export function RecipeSearchFilters({ className = '' }: RecipeSearchFiltersProps
             </div>
             {filters.excludedIngredients.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
-                {filters.excludedIngredients.map(ingredient => (
+                {filters.excludedIngredients.map((ingredient) => (
                   <span
                     key={ingredient}
                     className="flex items-center gap-1 rounded-full bg-red-100 px-2 py-1 text-xs"

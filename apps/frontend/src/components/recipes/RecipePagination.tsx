@@ -83,7 +83,9 @@ export function RecipePagination({
   const pageNumbers = getPageNumbers();
 
   return (
-    <div className={`flex flex-col items-center justify-between gap-4 sm:flex-row ${className}`}>
+    <div
+      className={`flex flex-col items-center justify-between gap-4 sm:flex-row ${className}`}
+    >
       {/* Results info */}
       <div className="text-sm text-gray-700">
         Showing <span className="font-medium">{startItem}</span> to{' '}

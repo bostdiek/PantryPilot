@@ -15,16 +15,16 @@ import { RecipePagination } from '../components/recipes/RecipePagination';
 import { RecipeCard } from '../components/recipes/RecipeCard';
 
 const RecipesPage: React.FC = () => {
-  const { 
-    recipes, 
-    filteredRecipes, 
-    isLoading, 
-    error, 
-    pagination, 
+  const {
+    recipes,
+    filteredRecipes,
+    isLoading,
+    error,
+    pagination,
     fetchRecipes,
-    setPage 
+    setPage,
   } = useRecipeStore();
-  
+
   const { filters } = useRecipeFilters();
 
   // Fetch recipes on mount
@@ -45,7 +45,7 @@ const RecipesPage: React.FC = () => {
   const totalPages = Math.ceil(pagination.total / pagination.pageSize);
 
   // Check if any filters are active
-  const hasActiveFilters = 
+  const hasActiveFilters =
     filters.query ||
     filters.categories.length > 0 ||
     filters.difficulties.length > 0 ||
@@ -62,10 +62,9 @@ const RecipesPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-900">My Recipes</h1>
           {pagination.total > 0 && (
             <p className="mt-1 text-sm text-gray-500">
-              {hasActiveFilters 
+              {hasActiveFilters
                 ? `${pagination.total} recipe${pagination.total !== 1 ? 's' : ''} found`
-                : `${pagination.total} recipe${pagination.total !== 1 ? 's' : ''} total`
-              }
+                : `${pagination.total} recipe${pagination.total !== 1 ? 's' : ''} total`}
             </p>
           )}
         </div>
@@ -114,7 +113,9 @@ const RecipesPage: React.FC = () => {
       ) : hasActiveFilters ? (
         <Card variant="elevated" className="flex flex-col items-center py-16">
           <Icon svg={ChefHatIcon} className="mb-4 h-12 w-12 text-gray-300" />
-          <p className="mb-2 text-lg text-gray-700">No recipes match your filters</p>
+          <p className="mb-2 text-lg text-gray-700">
+            No recipes match your filters
+          </p>
           <p className="mb-4 text-center text-sm text-gray-600">
             Try adjusting your search criteria or clearing filters
           </p>
