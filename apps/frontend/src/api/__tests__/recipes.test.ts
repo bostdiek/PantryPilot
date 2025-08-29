@@ -121,7 +121,7 @@ describe('Recipe API endpoints', () => {
     const result = await updateRecipe('1', updates);
 
     expect(apiClient.request).toHaveBeenCalledWith('/api/v1/recipes/1', {
-      method: 'PATCH',
+      method: 'PUT',
       body: JSON.stringify(updates),
     });
     expect(result.title).toBe(updates.title);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLoaderData, useParams, useNavigate, Link } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -9,10 +9,17 @@ import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe } from '../types/Recipe';
 
 const RecipesDetail: React.FC = () => {
-  // Get recipe data from loader
-  const recipe = useLoaderData() as Recipe | null;
+  // Get recipe data from loader as fallback
+  const loaderRecipe = useLoaderData() as Recipe | null;
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  
+  // Get recipe from store (primary source for latest data)
+  const { recipes } = useRecipeStore();
+  
+  // Find the recipe in the store first, fallback to loader data
+  const storeRecipe = id ? recipes.find(r => r.id === id) : null;
+  const recipe = storeRecipe || loaderRecipe;
   
   // State for delete confirmation modal
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -22,7 +29,14 @@ const RecipesDetail: React.FC = () => {
   const [isDuplicating, setIsDuplicating] = useState(false);
   
   // Store actions
-  const { deleteRecipe, duplicateRecipe, isLoading } = useRecipeStore();
+  const { deleteRecipe, duplicateRecipe, isLoading, fetchRecipeById } = useRecipeStore();
+
+  // Fetch recipe if not in store and we have an id but no recipe data
+  useEffect(() => {
+    if (id && !recipe && !isLoading) {
+      fetchRecipeById(id);
+    }
+  }, [id, recipe, isLoading, fetchRecipeById]);
 
   // Handle delete action
   const handleDelete = async () => {
