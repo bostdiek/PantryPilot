@@ -1,0 +1,33 @@
+# Dependabot configuration for PantryPilot
+# See: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuring-dependabot-version-updates
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/apps/frontend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: "pip"
+    directory: "/apps/backend"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+# Notes:
+# - You have CODECOV_TOKEN in repo secrets already, so CI uploads from Dependabot PRs
+#   (which create branches in this repo) will be able to use that secret.
+# - If you add private registries later, we'll add a `registries:` section and
+#   set Dependabot secrets as needed.
