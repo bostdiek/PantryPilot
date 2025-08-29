@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from './Navigation';
+import { ToastContainer } from './ui/Toast';
 
 /**
  * Root layout component that wraps all routes
@@ -11,6 +12,7 @@ const Root: React.FC = () => {
     <>
       <Navigation />
       <Outlet />
+      <ToastContainer />
     </>
   );
 };

@@ -111,4 +111,44 @@ describe('RecipesEditPage', () => {
     // Navigates back to detail
     expect(mockNavigate).toHaveBeenCalledWith('/recipes/r1');
   });
+
+  it('handles instruction reordering in edit form', async () => {
+    const user = userEvent.setup();
+    render(<RecipesEditPage />);
+
+    // Add another instruction to test reordering
+    const addStepButton = screen.getByRole('button', { name: /add step/i });
+    await user.click(addStepButton);
+
+    // Fill in both instructions by typing directly
+    const stepInputs = screen.getAllByLabelText(/step/i);
+    await user.type(stepInputs[0], ' - First step');
+    await user.type(stepInputs[1], 'Second step');
+
+    // Move second step up
+    const upButtons = screen.getAllByLabelText(/move step.*up/i);
+    await user.click(upButtons[1]);
+
+    // Check order changed - the step that was second should now have the original first content plus our addition
+    const updatedInputs = screen.getAllByLabelText(/step/i);
+    expect(updatedInputs[0].value).toBe('Second step');
+    expect(updatedInputs[1].value).toBe('Boil water - First step');
+  });
+
+  it('shows accessible error messages', async () => {
+    const user = userEvent.setup();
+    render(<RecipesEditPage />);
+
+    // Mock updateRecipe to return null (failure)
+    mockUpdateRecipe.mockResolvedValue(null);
+
+    // Submit form to trigger validation error
+    const submitButton = screen.getByRole('button', { name: /update recipe/i });
+    await user.click(submitButton);
+
+    // Check for accessible error message
+    const errorRegion = screen.getByRole('alert');
+    expect(errorRegion).toHaveAttribute('aria-live', 'polite');
+    expect(errorRegion).toHaveTextContent(/failed to update recipe/i);
+  });
 });

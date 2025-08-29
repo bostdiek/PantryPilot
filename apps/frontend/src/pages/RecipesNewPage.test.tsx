@@ -95,4 +95,71 @@ describe('RecipesNewPage', () => {
     fireEvent.click(save);
     expect(navigateMock).toHaveBeenCalledWith('/recipes');
   });
+
+  test('handles instruction reordering with up/down buttons', () => {
+    render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+
+    // Add a second instruction
+    const addStep = screen.getByText(/add step/i);
+    fireEvent.click(addStep);
+
+    // Fill in instructions
+    const stepInputs = screen.getAllByPlaceholderText(/step/i);
+    fireEvent.change(stepInputs[0], { target: { value: 'First step' } });
+    fireEvent.change(stepInputs[1], { target: { value: 'Second step' } });
+
+    // Test moving second step up (should become first)
+    const upButtons = screen.getAllByLabelText(/move step.*up/i);
+    fireEvent.click(upButtons[1]); // Click up button for second step
+
+    // Verify the order changed
+    const updatedInputs = screen.getAllByPlaceholderText(/step/i);
+    expect(updatedInputs[0].value).toBe('Second step');
+    expect(updatedInputs[1].value).toBe('First step');
+  });
+
+  test('disables up button for first instruction and down button for last instruction', () => {
+    render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+
+    // Add a second instruction
+    const addStep = screen.getByText(/add step/i);
+    fireEvent.click(addStep);
+
+    const upButtons = screen.getAllByLabelText(/move step.*up/i);
+    const downButtons = screen.getAllByLabelText(/move step.*down/i);
+
+    // First step's up button should be disabled
+    expect(upButtons[0]).toBeDisabled();
+    // Last step's down button should be disabled  
+    expect(downButtons[1]).toBeDisabled();
+    
+    // Middle buttons should be enabled
+    expect(downButtons[0]).not.toBeDisabled();
+    expect(upButtons[1]).not.toBeDisabled();
+  });
+
+  test('shows accessible error messages with aria-live', () => {
+    render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+
+    // Try to submit without ingredients
+    const save = screen.getByText(/save recipe/i);
+    fireEvent.click(save);
+
+    // Check for aria-live region with error
+    const errorRegion = screen.getByRole('alert');
+    expect(errorRegion).toHaveAttribute('aria-live', 'polite');
+    expect(errorRegion).toHaveTextContent(/please add at least one ingredient/i);
+  });
 });
