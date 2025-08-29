@@ -46,14 +46,22 @@ describe('Recipe API endpoints', () => {
     vi.clearAllMocks();
   });
 
-  it('getAllRecipes calls API with correct endpoint', async () => {
-    (apiClient.request as any).mockResolvedValueOnce(mockRecipes);
+  it('getAllRecipes calls API with query params and unwraps items', async () => {
+    (apiClient.request as any).mockResolvedValueOnce({
+      items: mockRecipes,
+      limit: 50,
+      offset: 0,
+      total: mockRecipes.length,
+    });
 
     const result = await getAllRecipes();
 
-    expect(apiClient.request).toHaveBeenCalledWith('/api/v1/recipes', {
-      method: 'GET',
-    });
+    expect(apiClient.request).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/v1\/recipes(\?|$)/),
+      {
+        method: 'GET',
+      }
+    );
     expect(result).toEqual(mockRecipes);
   });
 

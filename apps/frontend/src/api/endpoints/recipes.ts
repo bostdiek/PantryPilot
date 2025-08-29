@@ -1,12 +1,67 @@
-import type { Recipe } from '../../types/Recipe';
+import type {
+  Recipe,
+  RecipeCategory,
+  RecipeDifficulty,
+} from '../../types/Recipe';
 import { apiClient } from '../client';
 
-// Get all recipes
-export async function getAllRecipes(): Promise<Recipe[]> {
-  // The backend returns a direct array of recipes
-  return apiClient.request<Recipe[]>('/api/v1/recipes', {
-    method: 'GET',
-  });
+// Paginated search response type
+export interface RecipeSearchResponse {
+  items: Recipe[];
+  limit: number;
+  offset: number;
+  total?: number | null;
+}
+
+// Get recipes (first page) while staying compatible with existing store
+export async function getAllRecipes(params?: {
+  query?: string;
+  difficulty?: RecipeDifficulty;
+  max_total_time?: number;
+  category?: RecipeCategory;
+  limit?: number; // default 50 for near-full list UX
+  offset?: number;
+}): Promise<Recipe[]> {
+  const p = params || {};
+  const search = new URLSearchParams();
+  if (p.query) search.set('query', p.query);
+  if (p.difficulty) search.set('difficulty', p.difficulty);
+  if (p.max_total_time != null)
+    search.set('max_total_time', String(p.max_total_time));
+  if (p.category) search.set('category', p.category);
+  search.set('limit', String(p.limit ?? 50));
+  search.set('offset', String(p.offset ?? 0));
+
+  const resp = await apiClient.request<RecipeSearchResponse>(
+    `/api/v1/recipes?${search.toString()}`,
+    { method: 'GET' }
+  );
+  return resp.items;
+}
+
+// Full search with pagination metadata (for future UIs)
+export async function searchRecipes(params: {
+  query?: string;
+  difficulty?: RecipeDifficulty;
+  max_total_time?: number;
+  category?: RecipeCategory;
+  limit?: number;
+  offset?: number;
+}): Promise<RecipeSearchResponse> {
+  const p = params || {};
+  const search = new URLSearchParams();
+  if (p.query) search.set('query', p.query);
+  if (p.difficulty) search.set('difficulty', p.difficulty);
+  if (p.max_total_time != null)
+    search.set('max_total_time', String(p.max_total_time));
+  if (p.category) search.set('category', p.category);
+  search.set('limit', String(p.limit ?? 20));
+  search.set('offset', String(p.offset ?? 0));
+
+  return apiClient.request<RecipeSearchResponse>(
+    `/api/v1/recipes?${search.toString()}`,
+    { method: 'GET' }
+  );
 }
 
 // Get a recipe by ID

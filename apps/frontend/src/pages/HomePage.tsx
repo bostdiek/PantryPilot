@@ -19,8 +19,27 @@ const HomePage: React.FC = () => {
   const { currentWeek, isLoading: mealPlanLoading } = useMealPlanStore();
 
   // Get today's meal plan
-  const today = new Date().toLocaleDateString('en-US', { weekday: 'long' });
-  const todaysMeal = currentWeek?.days.find((day) => day.day === today);
+  const todayDate = new Date();
+  const yyyyMmDd = todayDate.toISOString().slice(0, 10);
+  const todaysDay = currentWeek?.days.find((d) => d.date === yyyyMmDd);
+  const todaysEntries = todaysDay?.entries ?? [];
+
+  function labelForEntry(e: {
+    id: string;
+    recipeId?: string | null;
+    isLeftover?: boolean;
+    isEatingOut?: boolean;
+  }): string {
+    if (e.isEatingOut) return 'Eating out';
+    if (e.isLeftover) return 'Leftovers';
+    if (e.recipeId) {
+      const recipe = useRecipeStore
+        .getState()
+        .recipes.find((r) => r.id === e.recipeId);
+      return recipe ? recipe.title : 'Planned recipe';
+    }
+    return 'Planned item';
+  }
 
   return (
     <Container>
@@ -69,7 +88,10 @@ const HomePage: React.FC = () => {
               </div>
               <div>
                 <div className="text-3xl font-bold">
-                  {currentWeek?.days.filter((day) => day.recipe).length || 0}
+                  {currentWeek?.days.reduce(
+                    (sum, d) => sum + (d.entries?.length || 0),
+                    0
+                  ) || 0}
                 </div>
                 <div className="text-gray-600">This Week</div>
               </div>
@@ -88,20 +110,26 @@ const HomePage: React.FC = () => {
           <div className="flex h-32 items-center justify-center">
             <div className="border-primary-500 h-8 w-8 animate-spin rounded-full border-4 border-t-transparent"></div>
           </div>
-        ) : todaysMeal?.recipe ? (
+        ) : todaysEntries.length > 0 ? (
           <div className="p-4">
-            <h3 className="mb-1 text-lg font-medium">
-              {todaysMeal.recipe.title}
-            </h3>
-            <p className="mb-4 text-sm text-gray-600">
-              Ready in{' '}
-              {todaysMeal.recipe.prep_time_minutes +
-                todaysMeal.recipe.cook_time_minutes}{' '}
-              minutes
-            </p>
-            <Link to={`/recipes/${todaysMeal.recipe.id}`}>
+            <ul className="mb-4 space-y-2">
+              {todaysEntries.map((e) => (
+                <li
+                  key={e.id}
+                  className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2 text-sm"
+                >
+                  <span className="truncate">{labelForEntry(e)}</span>
+                  {e.wasCooked ? (
+                    <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                      cooked
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            <Link to={`/meal-plan`}>
               <Button variant="outline" fullWidth>
-                View Recipe
+                View Plan
               </Button>
             </Link>
           </div>

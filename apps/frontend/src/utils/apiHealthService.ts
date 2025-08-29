@@ -99,7 +99,7 @@ class ApiHealthService {
         this.isOnline = newStatus;
         this.notifyListeners();
       }
-    } catch (error) {
+    } catch {
       // If we caught an error, API is offline
       if (this.isOnline) {
         this.isOnline = false;

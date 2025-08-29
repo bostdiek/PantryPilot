@@ -1,10 +1,10 @@
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
+import type { HTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
 
 export type CardVariant = 'default' | 'outlined' | 'elevated';
 
-export interface CardProps {
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   /**
    * Card content
    */
@@ -53,11 +53,6 @@ export interface CardProps {
    * Additional CSS classes
    */
   className?: string;
-
-  /**
-   * Click handler
-   */
-  onClick?: () => void;
 }
 
 /**

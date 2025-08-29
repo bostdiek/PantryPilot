@@ -37,7 +37,7 @@ vi.mock('../stores/useMealPlanStore', () => ({
   useMealPlanStore: () => ({
     currentWeek: null,
     isLoading: false,
-    fetchCurrentWeek: vi.fn(),
+    loadWeek: vi.fn(),
   }),
 }));
 
@@ -82,6 +82,7 @@ describe('HomePage', () => {
     );
 
     expect(screen.getByText("Today's Meals")).toBeInTheDocument();
+    // With no currentWeek, show empty state
     expect(screen.getByText('No meals planned for today')).toBeInTheDocument();
     expect(screen.getByText("Plan Today's Meals")).toBeInTheDocument();
   });

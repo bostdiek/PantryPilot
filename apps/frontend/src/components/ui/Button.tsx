@@ -85,6 +85,11 @@ export interface ButtonProps {
    * @default 'button'
    */
   type?: 'button' | 'submit' | 'reset';
+
+  /**
+   * Native title attribute (tooltip)
+   */
+  title?: string;
 }
 
 /**

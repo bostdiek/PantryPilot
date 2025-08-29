@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db
 
 # Environment detection
 ENV ?= dev
@@ -29,6 +29,8 @@ help:
 	@echo "  reset-db-dev       - Reset development database"
 	@echo "  reset-db-prod      - Reset production database"
 	@echo "  reset-db-volume    - Remove ONLY the database volume and re-init (respects ENV)"
+	@echo "  migrate            - Apply DB migrations (respects ENV)"
+	@echo "  check-migrations   - Run Alembic upgrade on a temporary DB to validate migrations"
 	@echo ""
 	@echo "Database Management:"
 	@echo "  db-backup          - Create database backup (ENV=dev default)"
@@ -59,10 +61,11 @@ help:
 	@echo "  test-coverage      - Run backend tests with coverage report"
 	@echo ""
 	@echo "Cleanup and Maintenance:"
-	@echo "  clean              - Stop services and remove containers/volumes (ENV=dev default)"
+	@echo "  clean              - Stop services, remove containers (keeps DB volume), clear local caches"
 	@echo "  clean-deps         - Remove dependency volumes and rebuild with fresh deps"
 	@echo "  clean-build        - Remove build caches and rebuild everything from scratch"
 	@echo "  clean-all          - Remove ALL project Docker resources (safe - PantryPilot only)"
+	@echo "  clean-keep-db      - Remove containers and ALL project volumes except the Postgres data volume"
 	@echo ""
 	@echo "Usage Examples:"
 	@echo "  make up              # Start in development mode"
@@ -84,6 +87,18 @@ up: validate-env
 	@echo "🚀 Starting PantryPilot in $(ENV) mode..."
 	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) up -d
 	@echo "✅ Services started! Check 'make logs' for output."
+	@echo "⏳ Waiting for database to become ready and running Alembic migrations..."
+	@/bin/sh -lc 'set -eu; \
+	  if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	  ATTEMPTS=30; \
+	  until docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T db pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB >/dev/null 2>&1; do \
+	    ATTEMPTS=$$((ATTEMPTS-1)); \
+	    if [ $$ATTEMPTS -le 0 ]; then echo "❌ DB not ready"; exit 1; fi; \
+	    sleep 2; \
+	  done; \
+	  echo "✅ DB is ready. Applying migrations..."; \
+	  docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T backend sh -lc "uv run alembic -c /app/src/alembic.ini upgrade head"; \
+	  echo "✅ Migrations up-to-date."'
 
 up-dev:
 	# Start development services
@@ -203,7 +218,7 @@ test-coverage:
 	cd apps/backend && uv run pytest --cov=src --cov-report=term --cov-report=html
 
 # Convenience targets
-check: lint type-check
+check: lint type-check check-migrations
 	# Run all code quality checks
 
 ci: install check test
@@ -212,11 +227,6 @@ ci: install check test
 dev-setup: install
 	# Set up development environment
 	cd apps/backend && uv run pre-commit install
-
-clean:
-	# Clean build artifacts and caches
-	cd apps/backend && rm -rf .pytest_cache __pycache__ .coverage htmlcov .mypy_cache .ruff_cache
-	cd apps/frontend && rm -rf node_modules/.cache dist coverage
 
 # Database management targets
 db-backup:
@@ -248,24 +258,57 @@ db-shell:
 	@echo "🐘 Opening PostgreSQL shell for $(ENV) environment..."
 	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec db psql -U $$POSTGRES_USER -d $$POSTGRES_DB
 
+# Apply Alembic migrations on demand
+migrate:
+	# Apply database migrations (ENV=$(ENV))
+	@echo "📦 Applying Alembic migrations for $(ENV) environment..."
+	@/bin/sh -lc 'set -eu; \
+	  if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	  ATTEMPTS=30; \
+	  until docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T db pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB >/dev/null 2>&1; do \
+	    ATTEMPTS=$$((ATTEMPTS-1)); \
+	    if [ $$ATTEMPTS -le 0 ]; then echo "❌ DB not ready"; exit 1; fi; \
+	    sleep 2; \
+	  done; \
+	  docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T backend sh -lc "uv run alembic -c /app/src/alembic.ini upgrade head"; \
+	  echo "✅ Migrations up-to-date."'
+
+migrate-dev:
+	# Apply database migrations for development environment
+	$(MAKE) ENV=dev migrate
+
+migrate-prod:
+	# Apply database migrations for production environment
+	$(MAKE) ENV=prod migrate
+
+check-migrations:
+	# Validate Alembic migrations by applying to a temporary database
+	@chmod +x scripts/check_migrations.sh >/dev/null 2>&1 || true
+	@/bin/sh scripts/check_migrations.sh "$(ENV_FILE)" "$(COMPOSE_FILES)"
+
 # =============================================================================
 # Cleanup and Maintenance Commands
 # =============================================================================
 
 clean:
-	# Stop all services and remove containers, networks, and named volumes
-	@echo "🧹 Stopping services and cleaning up Docker resources for $(ENV) environment..."
-	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	# Stop all services and remove containers (keep named volumes like DB)
+	@echo "🧹 Stopping services and cleaning up Docker containers for $(ENV) environment..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --remove-orphans
+	# Clear local caches/artifacts
+	cd apps/backend && rm -rf .pytest_cache __pycache__ .coverage htmlcov .mypy_cache .ruff_cache
+	cd apps/frontend && rm -rf node_modules/.cache dist coverage
 	@echo "🗑️ Removing project dangling images..."
 	docker images --filter "dangling=true" --filter "reference=pantrypilot*" -q | xargs -r docker rmi
 	@echo "✅ Cleanup complete!"
 
 clean-deps:
-	# Remove dependency volumes and rebuild with fresh dependencies
+	# Remove dependency volumes and rebuild with fresh dependencies (keep DB volume)
 	@echo "🧹 Cleaning dependency volumes for $(ENV) environment..."
-	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --remove-orphans
 	@echo "📦 Removing frontend dependency volume..."
 	docker volume rm $$(docker volume ls -q | grep frontend_node_modules) 2>/dev/null || true
+	@echo "📦 Removing backend venv cache volume..."
+	docker volume rm $$(docker volume ls -q | grep backend_cache) 2>/dev/null || true
 	@echo "🔄 Rebuilding with fresh dependencies..."
 	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build --no-cache frontend
 	@echo "🚀 Starting services with clean dependencies..."
@@ -273,9 +316,9 @@ clean-deps:
 	@echo "✅ Dependencies refreshed!"
 
 clean-build:
-	# Remove all build caches and rebuild everything from scratch
+	# Remove all build caches and rebuild everything from scratch (keep DB volume)
 	@echo "🧹 Cleaning all Docker build caches and images for $(ENV) environment..."
-	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --volumes --remove-orphans
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --remove-orphans
 	@echo "🗑️ Removing project build cache..."
 	docker builder prune -f --filter "label=project=pantrypilot" 2>/dev/null || docker builder prune -f --filter "unused-for=1h"
 	@echo "🗑️ Removing all project images..."
@@ -295,3 +338,25 @@ clean-all:
 	@echo "🗑️ Removing project build cache..."
 	docker builder prune -f --filter "label=project=pantrypilot"
 	@echo "✅ All PantryPilot Docker resources cleaned!"
+
+# Remove all project containers and non-DB volumes, preserving Postgres data volume
+clean-keep-db:
+	@echo "🧹 Cleaning containers and non-DB volumes for $(ENV) environment..."
+	# Stop and remove containers (keep volumes for now)
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) down --remove-orphans
+	# Determine compose project name and Postgres data volume
+	@/bin/sh -lc 'set -eu; \
+	  if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	  PNAME="$${COMPOSE_PROJECT_NAME:-$$(basename "$$PWD")}"; \
+	  DB_VOL="$${PNAME}_postgres_data"; \
+	  echo "Keeping DB volume: $$DB_VOL"; \
+	  echo "Removing project volumes except DB..."; \
+	  for v in $$(docker volume ls --format "{{.Name}}" | grep "^$${PNAME}_" || true); do \
+	    if [ "$$v" != "$$DB_VOL" ]; then echo " - removing $$v"; docker volume rm -f "$$v" >/dev/null 2>&1 || true; fi; \
+	  done; \
+	  true'
+	@echo "🔄 Rebuilding frontend to refresh npm deps (no cache)..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build --no-cache frontend
+	@echo "🚀 Starting services..."
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) up -d
+	@echo "✅ Containers restarted; non-DB volumes removed; DB preserved."
