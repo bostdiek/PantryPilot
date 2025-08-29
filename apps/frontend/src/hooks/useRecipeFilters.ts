@@ -95,7 +95,9 @@ export function useRecipeFilters() {
     newFilters?: Partial<RecipeFilters>,
     newSort?: RecipeSortOption
   ) => {
-    const currentFilters = { ...filters, ...newFilters };
+    // Pull latest filters from the store to avoid stale closure during rapid successive updates
+    const latest = useRecipeStore.getState().filters;
+    const currentFilters = { ...latest, ...newFilters };
     const currentSort = newSort || sortBy;
 
     const newParams = new URLSearchParams();
