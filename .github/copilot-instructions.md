@@ -124,7 +124,7 @@ make install
 
 # 2. Start backend server (in separate terminal)
 cd apps/backend
-PYTHONPATH=/path/to/PantryPilot/apps/backend/src uv run fastapi dev src/main.py --host 0.0.0.0 --port 8000
+PYTHONPATH=./src uv run fastapi dev src/main.py --host 0.0.0.0 --port 8000
 
 # 3. Start frontend server (in separate terminal)
 cd apps/frontend
