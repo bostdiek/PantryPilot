@@ -7,12 +7,52 @@ import {
   getRecipeById,
 } from '../api/endpoints/recipes';
 import type { ApiError } from '../types/api';
-import type { Recipe, RecipeCreate, RecipeUpdate } from '../types/Recipe';
+import type {
+  Recipe,
+  RecipeCategory,
+  RecipeCreate,
+  RecipeDifficulty,
+  RecipeUpdate,
+} from '../types/Recipe';
+
+// Sort options for recipes
+export type RecipeSortOption =
+  | 'relevance'
+  | 'title-asc'
+  | 'title-desc'
+  | 'cook-time-asc'
+  | 'cook-time-desc'
+  | 'recently-added';
+
+// Filter state for recipes
+export interface RecipeFilters {
+  query: string;
+  categories: RecipeCategory[];
+  difficulties: RecipeDifficulty[];
+  cookTimeMin: number;
+  cookTimeMax: number;
+  includedIngredients: string[];
+  excludedIngredients: string[];
+}
+
+// Pagination state
+export interface RecipePagination {
+  page: number;
+  pageSize: number;
+  total: number;
+}
 
 interface RecipeState {
+  // Data
   recipes: Recipe[];
+  filteredRecipes: Recipe[];
   isLoading: boolean;
   error: string | null;
+
+  // Search and filtering state
+  filters: RecipeFilters;
+  sortBy: RecipeSortOption;
+  pagination: RecipePagination;
 
   // Actions
   fetchRecipes: () => Promise<void>;
@@ -23,12 +63,128 @@ interface RecipeState {
     updates: Partial<Recipe>
   ) => Promise<Recipe | null>;
   deleteRecipe: (id: string) => Promise<boolean>;
+
+  // Search, filter, and sort actions
+  setFilters: (filters: Partial<RecipeFilters>) => void;
+  setSortBy: (sortBy: RecipeSortOption) => void;
+  setPage: (page: number) => void;
+  clearFilters: () => void;
+  applyFiltersAndSort: () => void;
 }
 
-export const useRecipeStore = create<RecipeState>((set) => ({
+// Helper functions for filtering and sorting
+function filterRecipes(recipes: Recipe[], filters: RecipeFilters): Recipe[] {
+  return recipes.filter((recipe) => {
+    // Text search in title and ingredients
+    if (filters.query) {
+      const query = filters.query.toLowerCase();
+      const titleMatch = recipe.title.toLowerCase().includes(query);
+      const ingredientMatch = recipe.ingredients.some((ing) =>
+        ing.name.toLowerCase().includes(query)
+      );
+      if (!titleMatch && !ingredientMatch) return false;
+    }
+
+    // Category filter
+    if (filters.categories.length > 0) {
+      if (!filters.categories.includes(recipe.category)) return false;
+    }
+
+    // Difficulty filter
+    if (filters.difficulties.length > 0) {
+      if (!filters.difficulties.includes(recipe.difficulty)) return false;
+    }
+
+    // Cook time range filter
+    const totalTime =
+      (recipe.prep_time_minutes ?? 0) + (recipe.cook_time_minutes ?? 0);
+    if (totalTime < filters.cookTimeMin || totalTime > filters.cookTimeMax) {
+      return false;
+    }
+
+    // Included ingredients filter
+    if (filters.includedIngredients.length > 0) {
+      const hasAllIncluded = filters.includedIngredients.every((required) =>
+        recipe.ingredients.some((ing) =>
+          ing.name.toLowerCase().includes(required.toLowerCase())
+        )
+      );
+      if (!hasAllIncluded) return false;
+    }
+
+    // Excluded ingredients filter
+    if (filters.excludedIngredients.length > 0) {
+      const hasExcluded = filters.excludedIngredients.some((excluded) =>
+        recipe.ingredients.some((ing) =>
+          ing.name.toLowerCase().includes(excluded.toLowerCase())
+        )
+      );
+      if (hasExcluded) return false;
+    }
+
+    return true;
+  });
+}
+
+function sortRecipes(recipes: Recipe[], sortBy: RecipeSortOption): Recipe[] {
+  const sorted = [...recipes];
+
+  switch (sortBy) {
+    case 'title-asc':
+      return sorted.sort((a, b) => a.title.localeCompare(b.title));
+    case 'title-desc':
+      return sorted.sort((a, b) => b.title.localeCompare(a.title));
+    case 'cook-time-asc':
+      return sorted.sort(
+        (a, b) =>
+          (a.prep_time_minutes ?? 0) +
+          (a.cook_time_minutes ?? 0) -
+          ((b.prep_time_minutes ?? 0) + (b.cook_time_minutes ?? 0))
+      );
+    case 'cook-time-desc':
+      return sorted.sort(
+        (a, b) =>
+          (b.prep_time_minutes ?? 0) +
+          (b.cook_time_minutes ?? 0) -
+          ((a.prep_time_minutes ?? 0) + (a.cook_time_minutes ?? 0))
+      );
+    case 'recently-added':
+      return sorted.sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    case 'relevance':
+    default:
+      // For relevance, keep original order (could be enhanced with scoring later)
+      return sorted;
+  }
+}
+
+// Default filter state
+const defaultFilters: RecipeFilters = {
+  query: '',
+  categories: [],
+  difficulties: [],
+  cookTimeMin: 0,
+  cookTimeMax: 240, // 4 hours max
+  includedIngredients: [],
+  excludedIngredients: [],
+};
+
+const defaultPagination: RecipePagination = {
+  page: 1,
+  pageSize: 24,
+  total: 0,
+};
+
+export const useRecipeStore = create<RecipeState>((set, get) => ({
   recipes: [],
+  filteredRecipes: [],
   isLoading: false,
   error: null,
+  filters: defaultFilters,
+  sortBy: 'relevance',
+  pagination: defaultPagination,
 
   fetchRecipes: async () => {
     set({ isLoading: true, error: null });
@@ -41,6 +197,9 @@ export const useRecipeStore = create<RecipeState>((set) => ({
         recipes,
         isLoading: false,
       });
+
+      // Apply filters after fetching
+      get().applyFiltersAndSort();
     } catch (error) {
       console.error('Error fetching recipes:', error);
       const errorMessage =
@@ -101,6 +260,9 @@ export const useRecipeStore = create<RecipeState>((set) => ({
         isLoading: false,
       });
 
+      // Apply filters after adding
+      get().applyFiltersAndSort();
+
       return newRecipe;
     } catch (error) {
       console.error('Error adding recipe:', error);
@@ -130,6 +292,9 @@ export const useRecipeStore = create<RecipeState>((set) => ({
         isLoading: false,
       }));
 
+      // Apply filters after updating
+      get().applyFiltersAndSort();
+
       return updatedRecipe;
     } catch (error) {
       console.error('Error updating recipe:', error);
@@ -158,6 +323,9 @@ export const useRecipeStore = create<RecipeState>((set) => ({
         isLoading: false,
       }));
 
+      // Apply filters after deleting
+      get().applyFiltersAndSort();
+
       return true;
     } catch (error) {
       console.error('Error deleting recipe:', error);
@@ -174,5 +342,48 @@ export const useRecipeStore = create<RecipeState>((set) => ({
 
       return false;
     }
+  },
+
+  // Search, filter, and sort actions
+  setFilters: (newFilters: Partial<RecipeFilters>) => {
+    set((state) => ({
+      filters: { ...state.filters, ...newFilters },
+      pagination: { ...state.pagination, page: 1 }, // Reset to first page
+    }));
+    get().applyFiltersAndSort();
+  },
+
+  setSortBy: (sortBy: RecipeSortOption) => {
+    set({ sortBy });
+    get().applyFiltersAndSort();
+  },
+
+  setPage: (page: number) => {
+    set((state) => ({
+      pagination: { ...state.pagination, page },
+    }));
+  },
+
+  clearFilters: () => {
+    set({
+      filters: defaultFilters,
+      sortBy: 'relevance',
+      pagination: { ...defaultPagination },
+    });
+    get().applyFiltersAndSort();
+  },
+
+  applyFiltersAndSort: () => {
+    const state = get();
+    const filtered = filterRecipes(state.recipes, state.filters);
+    const sorted = sortRecipes(filtered, state.sortBy);
+
+    set({
+      filteredRecipes: sorted,
+      pagination: {
+        ...state.pagination,
+        total: sorted.length,
+      },
+    });
   },
 }));

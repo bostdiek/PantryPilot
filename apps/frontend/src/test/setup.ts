@@ -36,3 +36,5 @@ afterAll(() => {
   // Restore console after tests complete
   (console.error as unknown as { mockRestore: () => void }).mockRestore?.();
 });
+
+// SVG imports are mocked via Vite test-only alias in vite.config.ts
