@@ -27,11 +27,18 @@ VS Code tasks:
 
 - Test: Run with Coverage (backend)
 
+## Tech Stack
+
+- Backend: Python, FastAPI, Pydantic, SQLAlchemy, Alembic, uv
+- Database: PostgreSQL
+- Frontend: React, Vite, TypeScript, Tailwind CSS
+- Tooling: Ruff, mypy, pytest, Vitest, Docker Compose, Nginx
+
 ## Quick Start
 
 ```bash
 # Start development environment
-make up
+make dev
 
 # View logs
 make logs
@@ -42,6 +49,30 @@ make db-maintenance CMD=health
 # Stop services
 make down
 ```
+
+## Development workflow
+
+- Monorepo structure (backend FastAPI, frontend React/Vite)
+- Use `make` targets for common tasks
+	- make dev, make prod
+	- make test, make lint, make type-check, make migrate
+- Folder structure documented below
+
+API versioning strategy: path-based under `/api/v1`. Swagger UI available at `/api/v1/docs`.
+
+Database migrations: Alembic configured; run `make migrate` or applied on `make up` after DB is healthy.
+
+Frontend/backed commands:
+
+- Backend: `make test-backend`, `make lint-backend`, `make type-check-backend`
+- Frontend: `make test-frontend`, `make lint-frontend`, `make type-check-frontend`
+
+Environment variables
+
+- CORS_ORIGINS: comma-separated origins (dev defaults to `http://localhost:5173`)
+- Database vars: see `.env.dev` and `.env.prod`
+
+See `docs/API_DESIGN.md` and `docs/DEPLOYMENT.md` for more details. Contribution guidelines in `docs/CONTRIBUTING.md`.
 
 ## Proposed structure
 
