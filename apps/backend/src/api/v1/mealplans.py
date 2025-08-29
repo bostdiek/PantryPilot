@@ -91,17 +91,18 @@ def _apply_meal_patch(meal: Meal, patch: MealEntryPatch) -> None:
 
 
 def _apply_cooked_patch(meal: Meal, patch: MealEntryPatch) -> None:
-    # Cooked state updates (use setattr to satisfy typing over SQLAlchemy columns)
+    # Cooked state updates — use cast(Any, meal) for write assignments to SA columns
+    m_any = cast(Any, meal)
     if patch.cooked_at is not None:
-        setattr(meal, "cooked_at", patch.cooked_at)  # noqa: B010
-        setattr(meal, "was_cooked", True)  # noqa: B010
+        m_any.cooked_at = patch.cooked_at
+        m_any.was_cooked = True
     if patch.was_cooked is not None:
-        setattr(meal, "was_cooked", patch.was_cooked)  # noqa: B010
+        m_any.was_cooked = patch.was_cooked
         current_cooked_at = cast(datetime | None, meal.cooked_at)
         if patch.was_cooked and current_cooked_at is None:
-            setattr(meal, "cooked_at", datetime.now(UTC))  # noqa: B010
+            m_any.cooked_at = datetime.now(UTC)
         if patch.was_cooked is False:
-            setattr(meal, "cooked_at", None)  # noqa: B010
+            m_any.cooked_at = None
 
 
 @router.get(
@@ -332,8 +333,9 @@ async def mark_meal_cooked(
     if not meal:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
     cooked_at: datetime | None = payload.cooked_at if payload else None
-    setattr(meal, "was_cooked", True)  # noqa: B010
-    setattr(meal, "cooked_at", cooked_at or datetime.now(UTC))  # noqa: B010
+    m_any = cast(Any, meal)
+    m_any.was_cooked = True
+    m_any.cooked_at = cooked_at or datetime.now(UTC)
     await db.commit()
     await db.refresh(meal)
     return ApiResponse(success=True, data=_meal_to_out(meal))

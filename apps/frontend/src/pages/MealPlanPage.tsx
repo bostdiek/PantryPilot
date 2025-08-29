@@ -26,7 +26,9 @@ import { searchRecipes } from '../api/endpoints/recipes';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
+import { Icon } from '../components/ui/Icon';
 import CheckIcon from '../components/ui/icons/check.svg?react';
+import DragHandleIcon from '../components/ui/icons/drag-handle.svg?react';
 import XIcon from '../components/ui/icons/x.svg?react';
 import { Input } from '../components/ui/Input';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -487,7 +489,11 @@ const MealPlanPage: React.FC = () => {
             {...listeners}
             {...attributes}
           >
-            ⠿
+            <Icon
+              svg={DragHandleIcon}
+              className="pointer-events-none h-5 w-5"
+              title="Drag handle"
+            />
           </button>
           <span className="min-w-0">
             <span className="block leading-5 font-medium break-words whitespace-normal">

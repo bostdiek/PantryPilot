@@ -70,8 +70,8 @@ def run_migrations_online() -> None:
     url = os.getenv("DATABASE_URL") or cfg.get("sqlalchemy.url")
     if not url:
         raise RuntimeError(
-            "No database URL configured. Set DATABASE_URL or sqlalchemy.url "
-            "in alembic.ini."
+            "No database URL configured. Set the DATABASE_URL environment variable "
+            "or provide sqlalchemy.url in alembic.ini."
         )
 
     connectable: AsyncEngine = create_async_engine(url, poolclass=pool.NullPool)

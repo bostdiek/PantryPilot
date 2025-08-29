@@ -22,13 +22,11 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import StaticPool
 
-from api.v1.recipes import create_recipe  # type: ignore
 from dependencies.db import get_db
 from main import app
 from models.base import Base
 from models.meal_history import Meal
 from models.users import User
-from schemas.recipes import RecipeCategory, RecipeCreate, RecipeDifficulty
 
 
 @pytest_asyncio.fixture
@@ -302,11 +300,16 @@ async def mealplans_env() -> AsyncIterator[_MealplansEnv]:
 
 
 @pytest.mark.asyncio
-async def test_create_recipe_then_plan_it(mealplans_env: _MealplansEnv) -> None:  # noqa: C901
-    recipe_id = await _create_recipe_via_fake_db()
+async def test_plan_meal_with_existing_recipe(mealplans_env: _MealplansEnv) -> None:
+    """Plan a meal that references an existing recipe UUID.
 
-    # Seed that recipe ID into the SQLite test DB and plan it
+    We seed the minimal `recipe_names` table to satisfy the FK and exercise the
+    public HTTP endpoint end-to-end.
+    """
+    recipe_id = uuid.uuid4()
     await mealplans_env.seed_recipe(recipe_id)
+
+    # Create a meal tied to the seeded recipe via HTTP API
     plan_payload = {
         "planned_for_date": "2025-01-14",
         "meal_type": "dinner",
@@ -316,20 +319,12 @@ async def test_create_recipe_then_plan_it(mealplans_env: _MealplansEnv) -> None:
         "notes": "use recipe",
         "order_index": None,
     }
-    # Call the route function directly to avoid dependency injection plumbing.
-    from api.v1.mealplans import create_meal_entry  # type: ignore
-    from schemas.mealplans import MealEntryIn
+    resp_create = await mealplans_env.client.post("/api/v1/meals/", json=plan_payload)
+    assert resp_create.status_code == status.HTTP_200_OK
+    created = resp_create.json()["data"]
+    assert created["recipe_id"] == str(recipe_id)
 
-    SessionLocal = async_sessionmaker(
-        mealplans_env._engine, expire_on_commit=False, class_=AsyncSession
-    )
-    async with SessionLocal() as session:
-        entry = MealEntryIn(**plan_payload)
-        api_resp = await create_meal_entry(entry, session)  # type: ignore[arg-type]
-        assert api_resp.success is True
-        created = api_resp.data
-        assert created.recipe_id == recipe_id
-    # Verify in weekly view
+    # Verify via weekly GET
     resp_week = await mealplans_env.client.get(
         "/api/v1/mealplans/weekly?start=2025-01-12"
     )
@@ -337,69 +332,6 @@ async def test_create_recipe_then_plan_it(mealplans_env: _MealplansEnv) -> None:
     week = resp_week.json()["data"]
     tuesday = next(d for d in week["days"] if d["date"] == "2025-01-14")
     assert any(e["recipe_id"] == str(recipe_id) for e in tuesday["entries"])
-
-
-async def _create_recipe_via_fake_db() -> uuid.UUID:  # noqa: C901
-    """Create a recipe using a temporary fake DB override and return its ID."""
-
-    class _FakeResult:
-        def scalars(self):
-            return self
-
-        def first(self):
-            return None
-
-    class _FakeSession:
-        def add(self, _obj):
-            return None
-
-        async def flush(self):
-            return None
-
-        async def execute(self, _stmt):
-            return _FakeResult()
-
-        async def commit(self):
-            return None
-
-        async def rollback(self):
-            return None
-
-        async def close(self):
-            return None
-
-        async def refresh(self, _obj):
-            return None
-
-    # Build the Pydantic payload
-    payload = RecipeCreate(
-        title="Planner Test Recipe",
-        description="desc",
-        prep_time_minutes=5,
-        cook_time_minutes=10,
-        serving_min=1,
-        serving_max=2,
-        instructions=["step1"],
-        difficulty=RecipeDifficulty.MEDIUM,
-        category=RecipeCategory.DINNER,
-        ethnicity="",
-        ingredients=[
-            {
-                "name": "Water",
-                "quantity_value": 1,
-                "quantity_unit": "cup",
-                "is_optional": False,
-            }
-        ],
-    )
-
-    fake = _FakeSession()
-    try:
-        api_resp = await create_recipe(payload, fake)  # type: ignore[arg-type]
-        assert api_resp.success is True
-        return uuid.UUID(str(api_resp.data.id))
-    finally:
-        await fake.close()
 
 
 @pytest.mark.asyncio

@@ -30,6 +30,9 @@ vi.mock('../../components/ui/icons/check.svg?react', () => ({
 vi.mock('../../components/ui/icons/x.svg?react', () => ({
   default: () => <span data-testid="icon-x" />,
 }));
+vi.mock('../../components/ui/icons/drag-handle.svg?react', () => ({
+  default: () => <span data-testid="icon-drag" />,
+}));
 // Mock SVG icon components used by Select to avoid jsdom parsing inline SVG data URLs
 vi.mock('../../components/ui/icons/check.svg?react', () => ({
   default: () => <span data-testid="icon-check" />,

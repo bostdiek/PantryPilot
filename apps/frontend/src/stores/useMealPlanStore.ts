@@ -11,6 +11,7 @@ import type {
   MealEntryPatch,
   WeeklyMealPlan,
 } from '../types/MealPlan';
+import { getErrorMessage } from '../utils/errors';
 
 interface MealPlanState {
   currentWeek: WeeklyMealPlan | null;
@@ -37,8 +38,7 @@ export const useMealPlanStore = create<MealPlanState>((set) => ({
       set({ currentWeek: data, isLoading: false });
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : 'Failed to load meal plan',
+        error: getErrorMessage(error, 'Failed to load meal plan'),
         isLoading: false,
       });
     }
@@ -61,7 +61,7 @@ export const useMealPlanStore = create<MealPlanState>((set) => ({
       });
     } catch (error) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to add entry',
+        error: getErrorMessage(error, 'Failed to add entry'),
         isLoading: false,
       });
     }
@@ -93,8 +93,7 @@ export const useMealPlanStore = create<MealPlanState>((set) => ({
       });
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : 'Failed to update entry',
+        error: getErrorMessage(error, 'Failed to update entry'),
         isLoading: false,
       });
     }
@@ -114,8 +113,7 @@ export const useMealPlanStore = create<MealPlanState>((set) => ({
       });
     } catch (error) {
       set({
-        error:
-          error instanceof Error ? error.message : 'Failed to remove entry',
+        error: getErrorMessage(error, 'Failed to remove entry'),
         isLoading: false,
       });
     }
@@ -139,7 +137,7 @@ export const useMealPlanStore = create<MealPlanState>((set) => ({
       });
     } catch (error) {
       set({
-        error: error instanceof Error ? error.message : 'Failed to mark cooked',
+        error: getErrorMessage(error, 'Failed to mark cooked'),
         isLoading: false,
       });
     }
