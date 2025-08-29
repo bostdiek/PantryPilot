@@ -39,6 +39,8 @@ help:
 	@echo "  db-shell           - Open PostgreSQL shell (ENV=dev default)"
 	@echo ""
 	@echo "Development:"
+	@echo "  dev               - Alias for 'up' (development)"
+	@echo "  prod              - Alias for 'ENV=prod up' (production)"
 	@echo "  install            - Install all dependencies"
 	@echo "  install-backend    - Install backend dependencies"
 	@echo "  install-frontend   - Install frontend dependencies"
@@ -227,6 +229,11 @@ ci: install check test
 dev-setup: install
 	# Set up development environment
 	cd apps/backend && uv run pre-commit install
+
+# Short aliases
+dev: up
+prod:
+	$(MAKE) ENV=prod up
 
 # Database management targets
 db-backup:

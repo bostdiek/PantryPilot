@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 
 from api.v1.api import api_router
 
@@ -31,6 +32,8 @@ app = FastAPI(
     title="PantryPilot API",
     description="A smart pantry management system",
     version="0.1.0",
+    docs_url=None,  # We'll mount docs under /api/v1/docs
+    redoc_url=None,
 )
 
 # Configure CORS
@@ -47,6 +50,19 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
+
+
+# Mount OpenAPI docs under /api/v1/docs and /api/v1/redoc
+@app.get("/api/v1/docs", include_in_schema=False)
+def custom_swagger_ui_html():
+    return get_swagger_ui_html(
+        openapi_url="/openapi.json", title="PantryPilot API Docs"
+    )
+
+
+@app.get("/api/v1/redoc", include_in_schema=False)
+def redoc_html():
+    return get_redoc_html(openapi_url="/openapi.json", title="PantryPilot API Redoc")
 
 
 @app.get("/")
