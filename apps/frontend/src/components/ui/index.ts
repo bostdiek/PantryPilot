@@ -24,6 +24,7 @@ export { IconDemo } from './IconDemo';
 export { Input } from './Input';
 export type { InputProps, InputSize, InputType, InputVariant } from './Input';
 export { InputDemo } from './InputDemo';
+export { LoadingSpinner } from './LoadingSpinner';
 export { Select } from './Select';
 export type { SelectOption } from './Select';
 export { SelectDemo } from './SelectDemo';
