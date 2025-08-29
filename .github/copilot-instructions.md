@@ -239,7 +239,6 @@ cd apps/frontend && npm run test:coverage              # Frontend coverage
 cd apps/frontend && npm run build        # Takes ~8 seconds
 
 # Start individual services locally
-cd apps/backend && PYTHONPATH=./src uv run fastapi dev src/main.py --host 0.0.0.0 --port 8000
 cd apps/frontend && npm run dev          # Starts on port 5173
 
 # Preview production build
