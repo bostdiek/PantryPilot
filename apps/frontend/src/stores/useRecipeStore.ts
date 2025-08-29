@@ -348,8 +348,12 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   duplicateRecipe: async (id: string) => {
     set({ isLoading: true, error: null });
     try {
-      // Fetch the original recipe
-      const originalRecipe = await getRecipeById(id);
+      // Try to find the original recipe in the store first
+      let originalRecipe = get().recipes.find((r) => r.id === id);
+      if (!originalRecipe) {
+        // If not found, fetch from API
+        originalRecipe = await getRecipeById(id);
+      }
       if (!originalRecipe) {
         throw new Error('Recipe not found');
       }

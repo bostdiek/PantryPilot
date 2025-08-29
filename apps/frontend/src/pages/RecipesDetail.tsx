@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -18,7 +18,10 @@ const RecipesDetail: React.FC = () => {
   const { recipes } = useRecipeStore();
 
   // Find the recipe in the store first, fallback to loader data
-  const storeRecipe = id ? recipes.find((r) => r.id === id) : null;
+  const storeRecipe = useMemo(
+    () => (id ? recipes.find((r) => r.id === id) : null),
+    [id, recipes]
+  );
   const recipe = storeRecipe || loaderRecipe;
 
   // State for delete confirmation modal

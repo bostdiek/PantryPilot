@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useReducer, useState } from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -9,6 +9,10 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
+import {
+  mapIngredientsForApi,
+  normalizeIngredientsForForm,
+} from '../utils/ingredients';
 import type { Recipe } from '../types/Recipe';
 import {
   RECIPE_CATEGORIES,
@@ -35,55 +39,104 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   const { id } = useParams<{ id: string }>();
   const { updateRecipe } = useRecipeStore();
 
-  // Initialize state lazily from recipe props to avoid useEffect hydration
-  const [title, setTitle] = useState(() => recipe.title);
-  const [description, setDescription] = useState(
-    () => recipe.description || ''
-  );
-  const [category, setCategory] = useState<SelectOption>(
-    () =>
-      categoryOptions.find((c) => c.id === recipe.category) ||
-      categoryOptions[0]
-  );
-  const [difficulty, setDifficulty] = useState<SelectOption>(
-    () =>
-      difficultyOptions.find((d) => d.id === recipe.difficulty) ||
-      difficultyOptions[0]
-  );
-  const [prepTime, setPrepTime] = useState(() => recipe.prep_time_minutes || 0);
-  const [cookTime, setCookTime] = useState(() => recipe.cook_time_minutes || 0);
-  const [servingMin, setServingMin] = useState(() => recipe.serving_min || 1);
-  const [servingMax, setServingMax] = useState<number | undefined>(
-    () => recipe.serving_max || undefined
-  );
-  const [ethnicity, setEthnicity] = useState(() => recipe.ethnicity || '');
-  const [ovenTemperatureF, setOvenTemperatureF] = useState<number | undefined>(
-    () => recipe.oven_temperature_f || undefined
-  );
-  const [userNotes, setUserNotes] = useState(() => recipe.user_notes || '');
-  const [ingredients, setIngredients] = useState<Ingredient[]>(() =>
-    recipe.ingredients && recipe.ingredients.length > 0
-      ? recipe.ingredients.map((ing) => ({
-          name: ing.name || '',
-          quantity_value: ing.quantity_value || undefined,
-          quantity_unit: ing.quantity_unit || '',
-          prep: ing.prep || {},
-          is_optional: ing.is_optional || false,
-        }))
-      : [
-          {
-            name: '',
-            quantity_value: undefined,
-            quantity_unit: '',
-            prep: {},
-            is_optional: false,
-          },
-        ]
-  );
-  const [instructions, setInstructions] = useState<string[]>(() =>
-    recipe.instructions && recipe.instructions.length > 0
-      ? recipe.instructions
-      : ['']
+  type FormState = {
+    title: string;
+    description: string;
+    category: SelectOption;
+    difficulty: SelectOption;
+    prepTime: number;
+    cookTime: number;
+    servingMin: number;
+    servingMax?: number;
+    ethnicity: string;
+    ovenTemperatureF?: number;
+    userNotes: string;
+    ingredients: Ingredient[];
+    instructions: string[];
+  };
+
+  type Action =
+    | { type: 'SET_FIELD'; field: keyof FormState; value: any }
+    | { type: 'SET_INGREDIENT'; index: number; value: Partial<Ingredient> }
+    | { type: 'ADD_INGREDIENT' }
+    | { type: 'REMOVE_INGREDIENT'; index: number }
+    | { type: 'SET_INSTRUCTION'; index: number; value: string }
+    | { type: 'ADD_INSTRUCTION' }
+    | { type: 'REMOVE_INSTRUCTION'; index: number };
+
+  function reducer(state: FormState, action: Action): FormState {
+    switch (action.type) {
+      case 'SET_FIELD':
+        return { ...state, [action.field]: action.value } as FormState;
+      case 'SET_INGREDIENT': {
+        const next = [...state.ingredients];
+        next[action.index] = { ...next[action.index], ...action.value };
+        return { ...state, ingredients: next };
+      }
+      case 'ADD_INGREDIENT':
+        return {
+          ...state,
+          ingredients: [
+            ...state.ingredients,
+            {
+              name: '',
+              quantity_value: undefined,
+              quantity_unit: '',
+              prep: {},
+              is_optional: false,
+            },
+          ],
+        };
+      case 'REMOVE_INGREDIENT': {
+        const next = [...state.ingredients];
+        next.splice(action.index, 1);
+        return {
+          ...state,
+          ingredients: next.length ? next : normalizeIngredientsForForm([]),
+        };
+      }
+      case 'SET_INSTRUCTION': {
+        const next = [...state.instructions];
+        next[action.index] = action.value;
+        return { ...state, instructions: next };
+      }
+      case 'ADD_INSTRUCTION':
+        return { ...state, instructions: [...state.instructions, ''] };
+      case 'REMOVE_INSTRUCTION': {
+        const next = [...state.instructions];
+        next.splice(action.index, 1);
+        return { ...state, instructions: next.length ? next : [''] };
+      }
+      default:
+        return state;
+    }
+  }
+
+  const [form, dispatch] = useReducer(
+    reducer,
+    undefined as unknown as FormState,
+    () => ({
+      title: recipe.title,
+      description: recipe.description || '',
+      category:
+        categoryOptions.find((c) => c.id === recipe.category) ||
+        categoryOptions[0],
+      difficulty:
+        difficultyOptions.find((d) => d.id === recipe.difficulty) ||
+        difficultyOptions[0],
+      prepTime: recipe.prep_time_minutes || 0,
+      cookTime: recipe.cook_time_minutes || 0,
+      servingMin: recipe.serving_min || 1,
+      servingMax: recipe.serving_max || undefined,
+      ethnicity: recipe.ethnicity || '',
+      ovenTemperatureF: recipe.oven_temperature_f || undefined,
+      userNotes: recipe.user_notes || '',
+      ingredients: normalizeIngredientsForForm(recipe.ingredients),
+      instructions:
+        recipe.instructions && recipe.instructions.length > 0
+          ? recipe.instructions
+          : [''],
+    })
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,10 +154,10 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     setIsSubmitting(true);
 
     // Filter out empty instructions and ingredients
-    const filteredInstructions = instructions.filter(
+    const filteredInstructions = form.instructions.filter(
       (step) => step.trim() !== ''
     );
-    const filteredIngredients = ingredients.filter(
+    const filteredIngredients = form.ingredients.filter(
       (ing) => ing.name.trim() !== ''
     );
 
@@ -124,31 +177,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     try {
       // Create the recipe update data object
       const recipeUpdateData = {
-        title,
-        description,
-        category: category.id as RecipeCategory,
-        difficulty: difficulty.id as RecipeDifficulty,
-        prep_time_minutes: prepTime,
-        cook_time_minutes: cookTime,
-        serving_min: servingMin,
-        serving_max: servingMax,
-        ethnicity: ethnicity || undefined,
-        oven_temperature_f: ovenTemperatureF,
-        user_notes: userNotes || undefined,
+        title: form.title,
+        description: form.description,
+        category: form.category.id as RecipeCategory,
+        difficulty: form.difficulty.id as RecipeDifficulty,
+        prep_time_minutes: form.prepTime,
+        cook_time_minutes: form.cookTime,
+        serving_min: form.servingMin,
+        serving_max: form.servingMax,
+        ethnicity: form.ethnicity || undefined,
+        oven_temperature_f: form.ovenTemperatureF,
+        user_notes: form.userNotes || undefined,
         instructions: filteredInstructions,
-        ingredients: filteredIngredients.map((ing) => ({
-          name: ing.name,
-          quantity_value: ing.quantity_value,
-          quantity_unit: ing.quantity_unit || undefined,
-          prep:
-            ing.prep && (ing.prep.method || ing.prep.size_descriptor)
-              ? {
-                  method: ing.prep.method,
-                  size_descriptor: ing.prep.size_descriptor,
-                }
-              : undefined,
-          is_optional: ing.is_optional || false,
-        })),
+        ingredients: mapIngredientsForApi(filteredIngredients),
       };
 
       // Use the store to update the recipe
@@ -181,15 +222,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           {/* Name & Description */}
           <Input
             label="Recipe Name"
-            value={title}
-            onChange={setTitle}
+            value={form.title}
+            onChange={(v) =>
+              dispatch({ type: 'SET_FIELD', field: 'title', value: v })
+            }
             placeholder="Enter recipe name"
             required
           />
           <Input
             label="Description"
-            value={description}
-            onChange={setDescription}
+            value={form.description}
+            onChange={(v) =>
+              dispatch({ type: 'SET_FIELD', field: 'description', value: v })
+            }
             placeholder="Brief description of the recipe"
           />
 
@@ -198,15 +243,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
             <Select
               label="Category"
               options={categoryOptions}
-              value={category}
-              onChange={setCategory}
+              value={form.category}
+              onChange={(v) =>
+                dispatch({ type: 'SET_FIELD', field: 'category', value: v })
+              }
             />
 
             <Select
               label="Difficulty"
               options={difficultyOptions}
-              value={difficulty}
-              onChange={setDifficulty}
+              value={form.difficulty}
+              onChange={(v) =>
+                dispatch({ type: 'SET_FIELD', field: 'difficulty', value: v })
+              }
             />
           </div>
 
@@ -215,26 +264,50 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
             <Input
               label="Prep (min)"
               type="number"
-              value={prepTime.toString()}
-              onChange={(v) => setPrepTime(Number(v))}
+              value={form.prepTime.toString()}
+              onChange={(v) =>
+                dispatch({
+                  type: 'SET_FIELD',
+                  field: 'prepTime',
+                  value: Number(v),
+                })
+              }
             />
             <Input
               label="Cook (min)"
               type="number"
-              value={cookTime.toString()}
-              onChange={(v) => setCookTime(Number(v))}
+              value={form.cookTime.toString()}
+              onChange={(v) =>
+                dispatch({
+                  type: 'SET_FIELD',
+                  field: 'cookTime',
+                  value: Number(v),
+                })
+              }
             />
             <Input
               label="Min Servings"
               type="number"
-              value={servingMin.toString()}
-              onChange={(v) => setServingMin(Number(v))}
+              value={form.servingMin.toString()}
+              onChange={(v) =>
+                dispatch({
+                  type: 'SET_FIELD',
+                  field: 'servingMin',
+                  value: Number(v),
+                })
+              }
             />
             <Input
               label="Max Servings"
               type="number"
-              value={servingMax?.toString() ?? ''}
-              onChange={(v) => setServingMax(v ? Number(v) : undefined)}
+              value={form.servingMax?.toString() ?? ''}
+              onChange={(v) =>
+                dispatch({
+                  type: 'SET_FIELD',
+                  field: 'servingMax',
+                  value: v ? Number(v) : undefined,
+                })
+              }
               placeholder="Optional"
             />
           </div>
@@ -243,15 +316,23 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Ethnicity/Cuisine"
-              value={ethnicity}
-              onChange={setEthnicity}
+              value={form.ethnicity}
+              onChange={(v) =>
+                dispatch({ type: 'SET_FIELD', field: 'ethnicity', value: v })
+              }
               placeholder="e.g., Italian, Mexican, etc."
             />
             <Input
               label="Oven Temperature (°F)"
               type="number"
-              value={ovenTemperatureF?.toString() ?? ''}
-              onChange={(v) => setOvenTemperatureF(v ? Number(v) : undefined)}
+              value={form.ovenTemperatureF?.toString() ?? ''}
+              onChange={(v) =>
+                dispatch({
+                  type: 'SET_FIELD',
+                  field: 'ovenTemperatureF',
+                  value: v ? Number(v) : undefined,
+                })
+              }
               placeholder="Optional"
             />
           </div>
@@ -260,8 +341,10 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           <div className="grid grid-cols-1 gap-4">
             <Input
               label="Notes"
-              value={userNotes}
-              onChange={setUserNotes}
+              value={form.userNotes}
+              onChange={(v) =>
+                dispatch({ type: 'SET_FIELD', field: 'userNotes', value: v })
+              }
               placeholder="Any additional notes about this recipe"
             />
           </div>
@@ -269,17 +352,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           {/* Ingredients List */}
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Ingredients</h2>
-            {ingredients.map((ing, idx) => (
+            {form.ingredients.map((ing, idx) => (
               <div key={idx} className="grid grid-cols-6 items-end gap-2">
                 <Input
                   label={`Ingredient ${idx + 1}`}
                   className="col-span-2"
                   value={ing.name}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = { ...list[idx], name: v };
-                    setIngredients(list);
-                  }}
+                  onChange={(v) =>
+                    dispatch({
+                      type: 'SET_INGREDIENT',
+                      index: idx,
+                      value: { name: v },
+                    })
+                  }
                   placeholder={`e.g., Onion`}
                 />
                 <Input
@@ -287,63 +372,66 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                   type="number"
                   className="col-span-1"
                   value={ing.quantity_value?.toString() ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    const val = v === '' ? undefined : Number(v);
-                    list[idx] = { ...list[idx], quantity_value: val };
-                    setIngredients(list);
-                  }}
+                  onChange={(v) =>
+                    dispatch({
+                      type: 'SET_INGREDIENT',
+                      index: idx,
+                      value: {
+                        quantity_value: v === '' ? undefined : Number(v),
+                      },
+                    })
+                  }
                   placeholder="1"
                 />
                 <Input
                   label="Unit"
                   className="col-span-1"
                   value={ing.quantity_unit ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = { ...list[idx], quantity_unit: v };
-                    setIngredients(list);
-                  }}
+                  onChange={(v) =>
+                    dispatch({
+                      type: 'SET_INGREDIENT',
+                      index: idx,
+                      value: { quantity_unit: v },
+                    })
+                  }
                   placeholder="count, cup, g"
                 />
                 <Input
                   label="Method"
                   className="col-span-1"
                   value={ing.prep?.method ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = {
-                      ...list[idx],
-                      prep: { ...(list[idx].prep || {}), method: v },
-                    };
-                    setIngredients(list);
-                  }}
+                  onChange={(v) =>
+                    dispatch({
+                      type: 'SET_INGREDIENT',
+                      index: idx,
+                      value: { prep: { ...(ing.prep || {}), method: v } },
+                    })
+                  }
                   placeholder="chopped, sliced"
                 />
                 <Input
                   label="Size"
                   className="col-span-1"
                   value={ing.prep?.size_descriptor ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = {
-                      ...list[idx],
-                      prep: { ...(list[idx].prep || {}), size_descriptor: v },
-                    };
-                    setIngredients(list);
-                  }}
+                  onChange={(v) =>
+                    dispatch({
+                      type: 'SET_INGREDIENT',
+                      index: idx,
+                      value: {
+                        prep: { ...(ing.prep || {}), size_descriptor: v },
+                      },
+                    })
+                  }
                   placeholder="small, medium, large"
                 />
-                {ingredients.length > 1 && (
+                {form.ingredients.length > 1 && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      const list = [...ingredients];
-                      list.splice(idx, 1);
-                      setIngredients(list);
-                    }}
+                    onClick={() =>
+                      dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
+                    }
                   >
                     Remove
                   </Button>
@@ -354,18 +442,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() =>
-                setIngredients([
-                  ...ingredients,
-                  {
-                    name: '',
-                    quantity_value: undefined,
-                    quantity_unit: '',
-                    prep: {},
-                    is_optional: false,
-                  },
-                ])
-              }
+              onClick={() => dispatch({ type: 'ADD_INGREDIENT' })}
             >
               + Add Ingredient
             </Button>
@@ -374,28 +451,24 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           {/* Instructions List */}
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Instructions</h2>
-            {instructions.map((step, idx) => (
+            {form.instructions.map((step, idx) => (
               <div key={idx} className="flex items-center space-x-2">
                 <Input
                   className="flex-1"
                   value={step}
-                  onChange={(v) => {
-                    const list = [...instructions];
-                    list[idx] = v;
-                    setInstructions(list);
-                  }}
+                  onChange={(v) =>
+                    dispatch({ type: 'SET_INSTRUCTION', index: idx, value: v })
+                  }
                   placeholder={`Step ${idx + 1}`}
                 />
-                {instructions.length > 1 && (
+                {form.instructions.length > 1 && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      const list = [...instructions];
-                      list.splice(idx, 1);
-                      setInstructions(list);
-                    }}
+                    onClick={() =>
+                      dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
+                    }
                   >
                     Remove
                   </Button>
@@ -406,7 +479,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => setInstructions([...instructions, ''])}
+              onClick={() => dispatch({ type: 'ADD_INSTRUCTION' })}
             >
               + Add Step
             </Button>
