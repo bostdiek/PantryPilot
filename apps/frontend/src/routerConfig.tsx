@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import MealPlanPage from './pages/MealPlanPage';
 import RecipesDetail from './pages/RecipesDetail';
+import RecipesEditPage from './pages/RecipesEditPage';
 import NewRecipePage from './pages/RecipesNewPage';
 import RecipesPage from './pages/RecipesPage';
 import ComponentShowcase from './pages/dev/ComponentShowcase';
@@ -77,6 +78,11 @@ export const router = createBrowserRouter([
       {
         path: 'recipes/:id',
         element: <RecipesDetail />,
+        loader: recipeDetailLoader,
+      },
+      {
+        path: 'recipes/:id/edit',
+        element: <RecipesEditPage />,
         loader: recipeDetailLoader,
       },
       {

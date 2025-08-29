@@ -86,7 +86,7 @@ export async function updateRecipe(
   updates: Partial<Recipe>
 ): Promise<Recipe> {
   return apiClient.request<Recipe>(`/api/v1/recipes/${id}`, {
-    method: 'PATCH',
+    method: 'PUT',
     body: JSON.stringify(updates),
   });
 }

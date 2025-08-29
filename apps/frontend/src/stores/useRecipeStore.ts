@@ -63,6 +63,7 @@ interface RecipeState {
     updates: Partial<Recipe>
   ) => Promise<Recipe | null>;
   deleteRecipe: (id: string) => Promise<boolean>;
+  duplicateRecipe: (id: string) => Promise<Recipe | null>;
 
   // Search, filter, and sort actions
   setFilters: (filters: Partial<RecipeFilters>) => void;
@@ -341,6 +342,75 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       });
 
       return false;
+    }
+  },
+
+  duplicateRecipe: async (id: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      // Try to find the original recipe in the store first
+      let originalRecipe = get().recipes.find((r) => r.id === id);
+      if (!originalRecipe) {
+        // If not found, fetch from API
+        originalRecipe = await getRecipeById(id);
+      }
+      if (!originalRecipe) {
+        throw new Error('Recipe not found');
+      }
+
+      // Create a new recipe with modified title and no ID
+      const duplicateData: RecipeCreate = {
+        title: `${originalRecipe.title} (Copy)`,
+        description: originalRecipe.description,
+        ingredients: originalRecipe.ingredients.map((ing) => ({
+          name: ing.name,
+          quantity_value: ing.quantity_value,
+          quantity_unit: ing.quantity_unit,
+          prep: ing.prep,
+          is_optional: ing.is_optional,
+        })),
+        instructions: [...originalRecipe.instructions],
+        prep_time_minutes: originalRecipe.prep_time_minutes,
+        cook_time_minutes: originalRecipe.cook_time_minutes,
+        serving_min: originalRecipe.serving_min,
+        serving_max: originalRecipe.serving_max,
+        difficulty: originalRecipe.difficulty,
+        category: originalRecipe.category,
+        ethnicity: originalRecipe.ethnicity,
+        oven_temperature_f: originalRecipe.oven_temperature_f,
+        user_notes: originalRecipe.user_notes,
+        link_source: originalRecipe.link_source,
+      };
+
+      // Create the new recipe using the existing addRecipe logic
+      const newRecipe = await apiCreateRecipe(duplicateData);
+
+      // Fetch all recipes to ensure we have the complete list
+      const allRecipes = await getAllRecipes();
+
+      set({
+        recipes: allRecipes,
+        isLoading: false,
+      });
+
+      // Apply filters after adding
+      get().applyFiltersAndSort();
+
+      return newRecipe;
+    } catch (error) {
+      console.error('Error duplicating recipe:', error);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : (error as ApiError)?.message ||
+            `Failed to duplicate recipe with ID: ${id}`;
+
+      set({
+        error: errorMessage,
+        isLoading: false,
+      });
+
+      return null;
     }
   },
 
