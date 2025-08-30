@@ -63,7 +63,7 @@ export function Toast({
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 w-full max-w-md ${bgColor} border ${borderColor} rounded-lg p-4 shadow-lg transition-all duration-300 ${
+      className={`z-50 w-full max-w-md ${bgColor} border ${borderColor} rounded-lg p-4 shadow-lg transition-all duration-300 ${
         isExiting
           ? 'translate-x-full transform opacity-0'
           : 'translate-x-0 transform opacity-100'

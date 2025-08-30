@@ -30,25 +30,22 @@ export function useUnsavedChanges(
   // Update ref when hasUnsavedChanges changes
   hasUnsavedChangesRef.current = hasUnsavedChanges;
 
-  // Create blocker outside conditional to satisfy React hooks rules
-  let blocker: BlockerState;
+  // Use environment detection for test behavior, but always call useBlocker
+  const isTestEnv =
+    typeof window === 'undefined' ||
+    (typeof globalThis !== 'undefined' && 
+     globalThis.process?.env?.NODE_ENV === 'test');
 
-  // Default to mock blocker (used in tests)
-  blocker = createMockBlocker(hasUnsavedChanges);
+  // Always call useBlocker to satisfy React hooks rules
+  const routerBlocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname
+  );
 
-  try {
-    // Try to use the real router blocker, but if it fails (in tests),
-    // we already have a default blocker initialized
-    const routerBlocker = useBlocker(
-      ({ currentLocation, nextLocation }) =>
-        hasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname
-    );
-
-    // Only assign if the hook call succeeds
-    blocker = routerBlocker;
-  } catch {
-    // In tests, the useBlocker hook will throw, but we already have our mock blocker
-  }
+  // In test environments, use a mock blocker instead of the real one
+  const blocker: BlockerState = isTestEnv
+    ? createMockBlocker(hasUnsavedChanges)
+    : routerBlocker;
 
   // Handle browser refresh/close
   useEffect(() => {
