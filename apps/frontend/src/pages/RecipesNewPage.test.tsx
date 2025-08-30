@@ -17,6 +17,11 @@ vi.mock('react-router-dom', async () => ({
   useNavigate: () => navigateMock,
 }));
 
+// Mock useUnsavedChanges hook to avoid window.confirm issues in tests
+vi.mock('../hooks/useUnsavedChanges', () => ({
+  useUnsavedChanges: () => ({ state: 'unblocked' }),
+}));
+
 describe('RecipesNewPage', () => {
   test('renders form fields and buttons', () => {
     render(
