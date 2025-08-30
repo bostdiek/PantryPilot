@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import Navigation from './Navigation';
-import { ToastContainer } from './ui/Toast';
+import { ToastContainer } from './ui/ToastContainer';
 
 /**
  * Root layout component that wraps all routes

@@ -7,7 +7,8 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
-import { useToast } from '../components/ui/Toast';
+import { useToast } from '../components/ui/useToast';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
 import {
@@ -16,9 +17,8 @@ import {
   type RecipeCategory,
   type RecipeDifficulty,
 } from '../types/Recipe';
-import { useApiHealth } from '../utils/useApiHealth';
 import { saveRecipeOffline } from '../utils/offlineSync';
-import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { useApiHealth } from '../utils/useApiHealth';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -70,15 +70,15 @@ const RecipesNewPage: React.FC = () => {
   const apiUnavailable = !isApiOnline;
 
   // Check if there are unsaved changes
-  const hasUnsavedChanges = 
-    title.trim() !== '' || 
-    description.trim() !== '' || 
-    prepTime > 0 || 
-    cookTime > 0 || 
-    ethnicity.trim() !== '' || 
+  const hasUnsavedChanges =
+    title.trim() !== '' ||
+    description.trim() !== '' ||
+    prepTime > 0 ||
+    cookTime > 0 ||
+    ethnicity.trim() !== '' ||
     userNotes.trim() !== '' ||
-    ingredients.some(ing => ing.name.trim() !== '') ||
-    instructions.some(inst => inst.trim() !== '');
+    ingredients.some((ing) => ing.name.trim() !== '') ||
+    instructions.some((inst) => inst.trim() !== '');
 
   // Block navigation if there are unsaved changes
   useUnsavedChanges(hasUnsavedChanges && !isSubmitting);
@@ -430,11 +430,19 @@ const RecipesNewPage: React.FC = () => {
                       }
                     }}
                     disabled={idx === 0}
-                    className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
                     aria-label={`Move step ${idx + 1} up`}
                   >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                   <button
@@ -447,11 +455,19 @@ const RecipesNewPage: React.FC = () => {
                       }
                     }}
                     disabled={idx === instructions.length - 1}
-                    className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed"
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
                     aria-label={`Move step ${idx + 1} down`}
                   >
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
                     </svg>
                   </button>
                 </div>

@@ -1,6 +1,21 @@
 import { useEffect, useRef } from 'react';
 import { useBlocker } from 'react-router-dom';
 
+interface BlockerState {
+  state: string;
+  proceed?: () => void;
+  reset?: () => void;
+}
+
+// Create a mock blocker for testing
+function createMockBlocker(shouldBlock: boolean): BlockerState {
+  return {
+    state: shouldBlock ? 'blocked' : 'unblocked',
+    proceed: () => {},
+    reset: () => {},
+  };
+}
+
 /**
  * Hook for blocking navigation when there are unsaved changes
  * @param hasUnsavedChanges - Whether there are unsaved changes
@@ -11,20 +26,28 @@ export function useUnsavedChanges(
   message = 'You have unsaved changes. Are you sure you want to leave?'
 ) {
   const hasUnsavedChangesRef = useRef(hasUnsavedChanges);
-  
+
   // Update ref when hasUnsavedChanges changes
   hasUnsavedChangesRef.current = hasUnsavedChanges;
 
-  // Try to use blocker, but handle cases where it's not available (like in tests)
-  let blocker;
+  // Create blocker outside conditional to satisfy React hooks rules
+  let blocker: BlockerState;
+
+  // Default to mock blocker (used in tests)
+  blocker = createMockBlocker(hasUnsavedChanges);
+
   try {
-    blocker = useBlocker(
+    // Try to use the real router blocker, but if it fails (in tests),
+    // we already have a default blocker initialized
+    const routerBlocker = useBlocker(
       ({ currentLocation, nextLocation }) =>
-        hasUnsavedChangesRef.current && currentLocation.pathname !== nextLocation.pathname
+        hasUnsavedChanges && currentLocation.pathname !== nextLocation.pathname
     );
-  } catch (error) {
-    // useBlocker not available (e.g., in tests with MemoryRouter)
-    blocker = { state: 'unblocked' };
+
+    // Only assign if the hook call succeeds
+    blocker = routerBlocker;
+  } catch {
+    // In tests, the useBlocker hook will throw, but we already have our mock blocker
   }
 
   // Handle browser refresh/close
@@ -43,7 +66,7 @@ export function useUnsavedChanges(
 
   // Show confirmation dialog for router navigation
   useEffect(() => {
-    if (blocker && blocker.state === 'blocked') {
+    if (blocker.state === 'blocked' && blocker.proceed && blocker.reset) {
       const shouldProceed = window.confirm(message);
       if (shouldProceed) {
         blocker.proceed();

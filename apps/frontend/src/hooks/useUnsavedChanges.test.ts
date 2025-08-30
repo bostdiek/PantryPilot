@@ -1,6 +1,15 @@
 import { renderHook } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useUnsavedChanges } from '../useUnsavedChanges';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useUnsavedChanges } from './useUnsavedChanges';
+
+// Mock useBlocker to simulate React Router
+vi.mock('react-router-dom', () => ({
+  useBlocker: vi.fn(() => ({
+    state: 'unblocked',
+    proceed: vi.fn(),
+    reset: vi.fn(),
+  })),
+}));
 
 // Mock window.confirm
 const mockConfirm = vi.fn();
@@ -32,20 +41,20 @@ describe('useUnsavedChanges', () => {
 
   it('adds beforeunload listener when there are unsaved changes', () => {
     renderHook(() => useUnsavedChanges(true));
-    
+
     expect(mockAddEventListener).toHaveBeenCalledWith(
-      'beforeunload', 
+      'beforeunload',
       expect.any(Function)
     );
   });
 
   it('removes beforeunload listener on cleanup', () => {
     const { unmount } = renderHook(() => useUnsavedChanges(true));
-    
+
     unmount();
-    
+
     expect(mockRemoveEventListener).toHaveBeenCalledWith(
-      'beforeunload', 
+      'beforeunload',
       expect.any(Function)
     );
   });
@@ -60,10 +69,10 @@ describe('useUnsavedChanges', () => {
   it('uses custom message when provided', () => {
     const customMessage = 'Custom unsaved changes message';
     renderHook(() => useUnsavedChanges(true, customMessage));
-    
+
     // Verify the beforeunload listener was added
     expect(mockAddEventListener).toHaveBeenCalledWith(
-      'beforeunload', 
+      'beforeunload',
       expect.any(Function)
     );
   });
@@ -79,7 +88,7 @@ describe('useUnsavedChanges', () => {
 
     // Change to having unsaved changes
     rerender({ hasChanges: true });
-    
+
     // Should still have the listener
     expect(mockAddEventListener).toHaveBeenCalled();
   });

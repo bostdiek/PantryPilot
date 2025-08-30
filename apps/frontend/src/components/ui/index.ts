@@ -36,8 +36,10 @@ export { SwitchDemo } from './SwitchDemo';
 export { Tabs } from './Tabs';
 export type { TabsProps } from './Tabs';
 export { TabsDemo } from './TabsDemo';
-export { Toast, ToastContainer, useToast } from './Toast';
+export { Toast } from './Toast';
 export type { ToastProps } from './Toast';
+export { ToastContainer } from './ToastContainer';
+export { useToast } from './useToast';
 
 // Export icons as React components for colorable usage with Tailwind
 export { default as CalendarIcon } from './icons/calendar.svg?react';
