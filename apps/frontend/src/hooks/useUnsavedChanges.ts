@@ -33,8 +33,8 @@ export function useUnsavedChanges(
   // Use environment detection for test behavior, but always call useBlocker
   const isTestEnv =
     typeof window === 'undefined' ||
-    (typeof globalThis !== 'undefined' && 
-     globalThis.process?.env?.NODE_ENV === 'test');
+    (typeof globalThis !== 'undefined' &&
+      globalThis.process?.env?.NODE_ENV === 'test');
 
   // Always call useBlocker to satisfy React hooks rules
   const routerBlocker = useBlocker(
