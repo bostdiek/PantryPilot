@@ -7,6 +7,8 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { useToast } from '../components/ui/useToast';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
 import {
@@ -15,8 +17,8 @@ import {
   type RecipeCategory,
   type RecipeDifficulty,
 } from '../types/Recipe';
-import { useApiHealth } from '../utils/useApiHealth';
 import { saveRecipeOffline } from '../utils/offlineSync';
+import { useApiHealth } from '../utils/useApiHealth';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -31,6 +33,7 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
 
 const RecipesNewPage: React.FC = () => {
   const navigate = useNavigate();
+  const { success } = useToast();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<SelectOption>(
@@ -65,6 +68,20 @@ const RecipesNewPage: React.FC = () => {
   // Use the custom hook instead of direct useEffect
   const { isApiOnline } = useApiHealth();
   const apiUnavailable = !isApiOnline;
+
+  // Check if there are unsaved changes
+  const hasUnsavedChanges =
+    title.trim() !== '' ||
+    description.trim() !== '' ||
+    prepTime > 0 ||
+    cookTime > 0 ||
+    ethnicity.trim() !== '' ||
+    userNotes.trim() !== '' ||
+    ingredients.some((ing) => ing.name.trim() !== '') ||
+    instructions.some((inst) => inst.trim() !== '');
+
+  // Block navigation if there are unsaved changes
+  useUnsavedChanges(hasUnsavedChanges && !isSubmitting);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -174,7 +191,8 @@ const RecipesNewPage: React.FC = () => {
       const result = await addRecipe(recipeData);
 
       if (result) {
-        // Navigate back to recipes list on success
+        // Show success toast and navigate back to recipes list
+        success('Recipe created successfully!');
         navigate('/recipes');
       } else {
         setError('Failed to create recipe. Please try again.');
@@ -401,6 +419,58 @@ const RecipesNewPage: React.FC = () => {
             <h2 className="text-lg font-semibold">Instructions</h2>
             {instructions.map((step, idx) => (
               <div key={idx} className="flex items-center space-x-2">
+                <div className="flex flex-col space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (idx > 0) {
+                        const list = [...instructions];
+                        [list[idx], list[idx - 1]] = [list[idx - 1], list[idx]];
+                        setInstructions(list);
+                      }
+                    }}
+                    disabled={idx === 0}
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label={`Move step ${idx + 1} up`}
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (idx < instructions.length - 1) {
+                        const list = [...instructions];
+                        [list[idx], list[idx + 1]] = [list[idx + 1], list[idx]];
+                        setInstructions(list);
+                      }
+                    }}
+                    disabled={idx === instructions.length - 1}
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label={`Move step ${idx + 1} down`}
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
                 <Input
                   className="flex-1"
                   value={step}
@@ -410,6 +480,7 @@ const RecipesNewPage: React.FC = () => {
                     setInstructions(list);
                   }}
                   placeholder={`Step ${idx + 1}`}
+                  aria-label={`Step ${idx + 1}`}
                 />
                 {instructions.length > 1 && (
                   <Button
@@ -421,6 +492,7 @@ const RecipesNewPage: React.FC = () => {
                       list.splice(idx, 1);
                       setInstructions(list);
                     }}
+                    aria-label={`Remove step ${idx + 1}`}
                   >
                     Remove
                   </Button>
@@ -440,7 +512,7 @@ const RecipesNewPage: React.FC = () => {
           {/* Actions */}
           <div className="flex items-center justify-end space-x-2">
             {error && (
-              <div className="mr-auto">
+              <div className="mr-auto" role="alert" aria-live="polite">
                 <ErrorMessage message={error} />
               </div>
             )}
