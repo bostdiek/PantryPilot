@@ -1,4 +1,7 @@
-import { Disclosure as HeadlessDisclosure } from '@headlessui/react';
+import {
+  DisclosurePanel,
+  Disclosure as HeadlessDisclosure,
+} from '@headlessui/react';
 import clsx from 'clsx';
 import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { Icon } from './Icon';
@@ -97,14 +100,14 @@ export function Disclosure({
             />
           </HeadlessDisclosure.Button>
 
-          <HeadlessDisclosure.Panel
+          <DisclosurePanel
             className={clsx(
               'px-4 pt-4 pb-2 text-sm text-gray-700',
               panelClassName
             )}
           >
             {children}
-          </HeadlessDisclosure.Panel>
+          </DisclosurePanel>
         </>
       )}
     </HeadlessDisclosure>

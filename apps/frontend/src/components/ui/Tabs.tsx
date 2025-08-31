@@ -1,4 +1,4 @@
-import { Tab as HeadlessTab } from '@headlessui/react';
+import { Tab as HeadlessTab, TabPanel } from '@headlessui/react';
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { Fragment } from 'react';
@@ -172,7 +172,7 @@ export function Tabs({
 
       <HeadlessTab.Panels className={clsx('mt-2', panelsClassName)}>
         {tabs.map((tab) => (
-          <HeadlessTab.Panel
+          <TabPanel
             key={tab.id}
             className={clsx(
               'rounded-md p-3 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none',
@@ -180,7 +180,7 @@ export function Tabs({
             )}
           >
             {tab.content}
-          </HeadlessTab.Panel>
+          </TabPanel>
         ))}
       </HeadlessTab.Panels>
     </HeadlessTab.Group>

@@ -35,6 +35,7 @@ import { Select, type SelectOption } from '../components/ui/Select';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
+import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 
 function toYyyyMmDd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -144,6 +145,13 @@ const MealPlanPage: React.FC = () => {
   const [pageError, setPageError] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(true);
 
+  // Recipe quick preview state
+  const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null);
+  const [previewDateContext, setPreviewDateContext] = useState<string | null>(
+    null
+  );
+  const [previewEntryId, setPreviewEntryId] = useState<string | null>(null);
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
@@ -216,6 +224,41 @@ const MealPlanPage: React.FC = () => {
     const day = currentWeek?.days.find((d) => d.date === date);
     if (!day || day.entries.length === 0) return 0;
     return Math.max(...day.entries.map((e) => e.orderIndex)) + 1;
+  }
+
+  // Recipe preview handlers
+  function handleRecipeClick(entryId: string, date: string) {
+    const entry = currentWeek?.days
+      .flatMap((d) => d.entries)
+      .find((e) => e.id === entryId);
+
+    if (!entry?.recipeId) return;
+
+    const recipe = recipes.find((r) => r.id === entry.recipeId);
+    if (recipe) {
+      setPreviewRecipe(recipe);
+      setPreviewDateContext(date);
+      setPreviewEntryId(entryId);
+    }
+  }
+
+  function handleClosePreview() {
+    setPreviewRecipe(null);
+    setPreviewDateContext(null);
+    setPreviewEntryId(null);
+  }
+
+  async function handleRemoveFromDay() {
+    if (previewEntryId) {
+      try {
+        await removeEntry(previewEntryId);
+        // Close the modal after successful removal
+        handleClosePreview();
+      } catch (error) {
+        console.error('Failed to remove entry:', error);
+        // Don't close modal on error so user can try again
+      }
+    }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -449,6 +492,8 @@ const MealPlanPage: React.FC = () => {
     cookedAt,
     onCook,
     onRemove,
+    isRecipe = false,
+    onRecipeClick,
   }: {
     entryId: string;
     label: string;
@@ -457,6 +502,8 @@ const MealPlanPage: React.FC = () => {
     cookedAt?: string;
     onCook?: () => void;
     onRemove?: () => void;
+    isRecipe?: boolean;
+    onRecipeClick?: () => void;
   }) {
     const {
       attributes,
@@ -495,12 +542,33 @@ const MealPlanPage: React.FC = () => {
               title="Drag handle"
             />
           </button>
-          <span className="min-w-0">
-            <span className="block leading-5 font-medium break-words whitespace-normal">
-              {label}
-            </span>
-            {meta && (
-              <span className="mt-0.5 block text-xs text-gray-500">{meta}</span>
+          <span className="min-w-0 flex-1">
+            {isRecipe ? (
+              <button
+                onClick={onRecipeClick}
+                className="w-full rounded-sm text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
+                aria-label={`View ${label} recipe preview`}
+              >
+                <span className="block leading-5 font-medium break-words whitespace-normal text-blue-600 hover:text-blue-800">
+                  {label}
+                </span>
+                {meta && (
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    {meta}
+                  </span>
+                )}
+              </button>
+            ) : (
+              <span>
+                <span className="block leading-5 font-medium break-words whitespace-normal">
+                  {label}
+                </span>
+                {meta && (
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    {meta}
+                  </span>
+                )}
+              </span>
             )}
           </span>
         </span>
@@ -671,6 +739,10 @@ const MealPlanPage: React.FC = () => {
                                   cookedAt={e.cookedAt}
                                   onCook={() => markCooked(e.id)}
                                   onRemove={() => removeEntry(e.id)}
+                                  isRecipe={!!e.recipeId}
+                                  onRecipeClick={() =>
+                                    handleRecipeClick(e.id, day.date)
+                                  }
                                 />
                               </React.Fragment>
                             ))}
@@ -710,7 +782,7 @@ const MealPlanPage: React.FC = () => {
                             >
                               <Menu.Items className="absolute right-0 z-10 mt-2 w-36 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg focus:outline-none">
                                 <div className="py-1 text-sm">
-                                  <Menu.Item>
+                                  <Menu.Item as={React.Fragment}>
                                     {({ active }) => (
                                       <button
                                         className={[
@@ -728,7 +800,7 @@ const MealPlanPage: React.FC = () => {
                                       </button>
                                     )}
                                   </Menu.Item>
-                                  <Menu.Item>
+                                  <Menu.Item as={React.Fragment}>
                                     {({ active }) => (
                                       <button
                                         className={[
@@ -900,6 +972,15 @@ const MealPlanPage: React.FC = () => {
           </DragOverlay>
         </DndContext>
       </div>
+
+      {/* Recipe Quick Preview Modal */}
+      <RecipeQuickPreview
+        isOpen={!!previewRecipe}
+        onClose={handleClosePreview}
+        recipe={previewRecipe}
+        dateContext={previewDateContext || undefined}
+        onRemoveFromDay={handleRemoveFromDay}
+      />
     </Container>
   );
 };
