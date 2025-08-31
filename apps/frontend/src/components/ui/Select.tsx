@@ -1,6 +1,5 @@
 import { Listbox, Transition } from '@headlessui/react';
 import clsx from 'clsx';
-import { Fragment } from 'react';
 import { Icon } from './Icon';
 import CheckIcon from './icons/check.svg?react';
 import ChevronUpDown from './icons/chevron-up-down.svg?react';
@@ -52,7 +51,7 @@ export function Select({
 }: SelectProps) {
   return (
     <div className={className}>
-      <Listbox value={value} onChange={onChange} disabled={disabled}>
+      <Listbox as="div" value={value} onChange={onChange} disabled={disabled}>
         {({ open }) => (
           <>
             {label && (
@@ -70,7 +69,7 @@ export function Select({
 
               <Transition
                 show={open}
-                as={Fragment}
+                as="div"
                 leave="transition ease-in duration-100"
                 leaveFrom="opacity-100"
                 leaveTo="opacity-0"

@@ -1,4 +1,3 @@
-import { Button as HeadlessButton } from '@headlessui/react';
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import React, { forwardRef } from 'react';
@@ -12,7 +11,11 @@ export type ButtonVariant =
   | 'ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
-export interface ButtonProps {
+export interface ButtonProps
+  extends Omit<
+    React.ButtonHTMLAttributes<HTMLButtonElement>,
+    'size' | 'color'
+  > {
   /**
    * Button content
    */
@@ -74,22 +77,6 @@ export interface ButtonProps {
    * Additional CSS classes
    */
   className?: string;
-
-  /**
-   * Click handler
-   */
-  onClick?: () => void;
-
-  /**
-   * Button type
-   * @default 'button'
-   */
-  type?: 'button' | 'submit' | 'reset';
-
-  /**
-   * Native title attribute (tooltip)
-   */
-  title?: string;
 }
 
 /**
@@ -116,7 +103,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       leftIconSvg,
       rightIconSvg,
       className = '',
-      onClick,
       type = 'button',
       ...props
     },
@@ -192,11 +178,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       .join(' ');
 
     return (
-      <HeadlessButton
+      <button
         ref={ref}
         type={type}
         disabled={disabled || loading}
-        onClick={onClick}
         className={combinedStyles}
         {...props}
       >
@@ -214,7 +199,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {!loading && rightIconSvg && (
           <Icon svg={rightIconSvg} className={clsx('ml-2', iconSize[size])} />
         )}
-      </HeadlessButton>
+      </button>
     );
   }
 );

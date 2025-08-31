@@ -1,9 +1,15 @@
-import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
+import {
+  DialogPanel,
+  DialogTitle,
+  Dialog as HeadlessDialog,
+  Transition,
+  TransitionChild,
+} from '@headlessui/react';
 import clsx from 'clsx';
-import { Fragment, useEffect } from 'react';
+import { Fragment, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from './ui/Button';
 import type { Recipe } from '../types/Recipe';
+import { Button } from './ui/Button';
 
 export interface RecipeQuickPreviewProps {
   /**
@@ -34,7 +40,7 @@ export interface RecipeQuickPreviewProps {
 
 /**
  * RecipeQuickPreview component that shows a modal on desktop and bottom sheet on mobile
- * 
+ *
  * Displays recipe title, image placeholder, key metadata, first 5 ingredients,
  * and action buttons (View Full, Edit, Remove from day).
  */
@@ -47,12 +53,17 @@ export function RecipeQuickPreview({
 }: RecipeQuickPreviewProps) {
   const navigate = useNavigate();
 
+  // Centralized close handler
+  const handleClose = useCallback(() => {
+    onClose();
+  }, [onClose]);
+
   // Close on Escape key - only register once
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isOpen) {
         event.preventDefault();
-        onClose();
+        handleClose();
       }
     };
 
@@ -60,27 +71,28 @@ export function RecipeQuickPreview({
       document.addEventListener('keydown', handleEscape);
       return () => document.removeEventListener('keydown', handleEscape);
     }
-  }, [isOpen, onClose]);
+  }, [isOpen, handleClose]);
 
   if (!recipe) {
     return null;
   }
 
-  const handleViewFull = () => {
+  const buildViewFullUrl = () => {
     const queryParams = new URLSearchParams();
     if (dateContext) {
       queryParams.set('from', 'mealplan');
       queryParams.set('d', dateContext);
     }
     const searchString = queryParams.toString();
-    const url = `/recipes/${recipe.id}${searchString ? `?${searchString}` : ''}`;
-    navigate(url);
-    onClose();
+    return `/recipes/${recipe.id}${searchString ? `?${searchString}` : ''}`;
   };
 
-  const handleEdit = () => {
-    navigate(`/recipes/${recipe.id}/edit`);
-    onClose();
+  const viewFullUrl = buildViewFullUrl();
+
+  const handleViewFullClick = () => {
+    const url = viewFullUrl;
+    // Intentionally do not call onClose; routing will unmount this dialog
+    navigate(url);
   };
 
   const handleRemove = () => {
@@ -98,10 +110,10 @@ export function RecipeQuickPreview({
       <HeadlessDialog
         as="div"
         className="relative z-50"
-        onClose={onClose}
+        onClose={() => {}} // Disable automatic close, handle manually
       >
         {/* Background overlay */}
-        <Transition.Child
+        <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
           enterFrom="opacity-0"
@@ -111,16 +123,17 @@ export function RecipeQuickPreview({
           leaveTo="opacity-0"
         >
           <div
-            className="fixed inset-0 bg-black/30 backdrop-blur-sm"
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
+            onClick={handleClose}
             aria-hidden="true"
           />
-        </Transition.Child>
+        </TransitionChild>
 
         {/* Mobile bottom sheet and desktop modal */}
-        <div className="fixed inset-0 overflow-y-auto">
+        <div className="fixed inset-0 z-50 overflow-y-auto">
           {/* Desktop modal positioning */}
-          <div className="hidden md:flex min-h-full items-center justify-center p-4 text-center">
-            <Transition.Child
+          <div className="hidden min-h-full items-center justify-center p-4 text-center md:flex">
+            <TransitionChild
               as={Fragment}
               enter="ease-out duration-300"
               enterFrom="opacity-0 scale-95"
@@ -129,25 +142,22 @@ export function RecipeQuickPreview({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <HeadlessDialog.Panel
-                className="w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all"
-              >
+              <DialogPanel className="relative z-50 w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all">
                 <RecipePreviewContent
                   recipe={recipe}
                   firstFiveIngredients={firstFiveIngredients}
                   hasMoreIngredients={hasMoreIngredients}
-                  onViewFull={handleViewFull}
-                  onEdit={handleEdit}
+                  onViewFull={handleViewFullClick}
                   onRemove={onRemoveFromDay ? handleRemove : undefined}
                   onClose={onClose}
                 />
-              </HeadlessDialog.Panel>
-            </Transition.Child>
+              </DialogPanel>
+            </TransitionChild>
           </div>
 
           {/* Mobile bottom sheet positioning */}
-          <div className="md:hidden flex min-h-full items-end justify-center">
-            <Transition.Child
+          <div className="flex min-h-full items-end justify-center md:hidden">
+            <TransitionChild
               as={Fragment}
               enter="ease-out duration-300"
               enterFrom="opacity-0 translate-y-full"
@@ -156,21 +166,18 @@ export function RecipeQuickPreview({
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-full"
             >
-              <HeadlessDialog.Panel
-                className="w-full max-h-[85vh] transform overflow-hidden rounded-t-lg bg-white text-left align-middle shadow-xl transition-all"
-              >
+              <DialogPanel className="relative z-50 max-h-[85vh] w-full transform overflow-hidden rounded-t-lg bg-white text-left align-middle shadow-xl transition-all">
                 <RecipePreviewContent
                   recipe={recipe}
                   firstFiveIngredients={firstFiveIngredients}
                   hasMoreIngredients={hasMoreIngredients}
-                  onViewFull={handleViewFull}
-                  onEdit={handleEdit}
+                  onViewFull={handleViewFullClick}
                   onRemove={onRemoveFromDay ? handleRemove : undefined}
                   onClose={onClose}
                   isMobile
                 />
-              </HeadlessDialog.Panel>
-            </Transition.Child>
+              </DialogPanel>
+            </TransitionChild>
           </div>
         </div>
       </HeadlessDialog>
@@ -183,7 +190,6 @@ interface RecipePreviewContentProps {
   firstFiveIngredients: Recipe['ingredients'];
   hasMoreIngredients: boolean;
   onViewFull: () => void;
-  onEdit: () => void;
   onRemove?: () => void;
   onClose: () => void;
   isMobile?: boolean;
@@ -194,7 +200,6 @@ function RecipePreviewContent({
   firstFiveIngredients,
   hasMoreIngredients,
   onViewFull,
-  onEdit,
   onRemove,
   onClose,
   isMobile = false,
@@ -204,27 +209,37 @@ function RecipePreviewContent({
       {/* Mobile handle bar */}
       {isMobile && (
         <div className="flex justify-center pb-4">
-          <div className="w-10 h-1 bg-gray-300 rounded-full" />
+          <div className="h-1 w-10 rounded-full bg-gray-300" />
         </div>
       )}
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <HeadlessDialog.Title
+      <div className="mb-4 flex items-start justify-between">
+        <DialogTitle
           as="h3"
-          className="text-lg leading-6 font-semibold text-gray-900 pr-4"
+          className="pr-4 text-lg leading-6 font-semibold text-gray-900"
         >
           {recipe.title}
-        </HeadlessDialog.Title>
+        </DialogTitle>
         {!isMobile && (
           <button
             onClick={onClose}
-            className="flex-shrink-0 rounded-md text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-shrink-0 rounded-md text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
             aria-label="Close preview"
           >
             <span className="sr-only">Close</span>
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         )}
@@ -232,31 +247,47 @@ function RecipePreviewContent({
 
       {/* Recipe description */}
       {recipe.description && (
-        <p className="text-sm text-gray-600 mb-4 leading-relaxed">
+        <p className="mb-4 text-sm leading-relaxed text-gray-600">
           {recipe.description}
         </p>
       )}
 
       {/* Image placeholder */}
-      <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-        <svg className="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      <div className="mb-4 flex h-32 w-full items-center justify-center rounded-lg bg-gray-100">
+        <svg
+          className="h-12 w-12 text-gray-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+          />
         </svg>
       </div>
 
       {/* Key metadata */}
-      <div className="grid grid-cols-3 gap-4 mb-4 text-sm">
+      <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
         <div className="text-center">
-          <div className="font-medium text-gray-900">{recipe.total_time_minutes}</div>
+          <div className="font-medium text-gray-900">
+            {recipe.total_time_minutes}
+          </div>
           <div className="text-gray-500">minutes</div>
         </div>
         <div className="text-center">
-          <div className="font-medium text-gray-900 capitalize">{recipe.difficulty}</div>
+          <div className="font-medium text-gray-900 capitalize">
+            {recipe.difficulty}
+          </div>
           <div className="text-gray-500">difficulty</div>
         </div>
         <div className="text-center">
           <div className="font-medium text-gray-900">
-            {recipe.serving_max ? `${recipe.serving_min}-${recipe.serving_max}` : recipe.serving_min}
+            {recipe.serving_max
+              ? `${recipe.serving_min}-${recipe.serving_max}`
+              : recipe.serving_min}
           </div>
           <div className="text-gray-500">servings</div>
         </div>
@@ -264,46 +295,35 @@ function RecipePreviewContent({
 
       {/* First 5 ingredients */}
       <div className="mb-6">
-        <h4 className="font-medium text-gray-900 mb-3">Ingredients</h4>
+        <h4 className="mb-3 font-medium text-gray-900">Ingredients</h4>
         <ul className="space-y-2">
           {firstFiveIngredients.map((ingredient, index) => (
-            <li key={ingredient.id || index} className="text-sm text-gray-700 flex">
-              <span className="font-medium w-16 flex-shrink-0">
-                {ingredient.quantity_value || ''} {ingredient.quantity_unit || ''}
+            <li
+              key={ingredient.id || index}
+              className="flex text-sm text-gray-700"
+            >
+              <span className="w-16 flex-shrink-0 font-medium">
+                {ingredient.quantity_value || ''}{' '}
+                {ingredient.quantity_unit || ''}
               </span>
               <span>{ingredient.name}</span>
             </li>
           ))}
         </ul>
         {hasMoreIngredients && (
-          <p className="text-sm text-gray-500 mt-2">
+          <p className="mt-2 text-sm text-gray-500">
             +{recipe.ingredients.length - 5} more ingredients
           </p>
         )}
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-3 pt-4 border-t">
-        <Button
-          variant="primary"
-          onClick={onViewFull}
-          className="flex-1"
-        >
+      <div className="flex gap-3 border-t pt-4">
+        <Button variant="primary" className="flex-1" onClick={onViewFull}>
           View Full Recipe
         </Button>
-        <Button
-          variant="outline"
-          onClick={onEdit}
-          className="flex-1"
-        >
-          Edit
-        </Button>
         {onRemove && (
-          <Button
-            variant="danger"
-            onClick={onRemove}
-            className="flex-1"
-          >
+          <Button variant="danger" onClick={onRemove} className="flex-1">
             Remove from Day
           </Button>
         )}

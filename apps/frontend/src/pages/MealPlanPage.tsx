@@ -147,7 +147,9 @@ const MealPlanPage: React.FC = () => {
 
   // Recipe quick preview state
   const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null);
-  const [previewDateContext, setPreviewDateContext] = useState<string | null>(null);
+  const [previewDateContext, setPreviewDateContext] = useState<string | null>(
+    null
+  );
   const [previewEntryId, setPreviewEntryId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -229,9 +231,9 @@ const MealPlanPage: React.FC = () => {
     const entry = currentWeek?.days
       .flatMap((d) => d.entries)
       .find((e) => e.id === entryId);
-    
+
     if (!entry?.recipeId) return;
-    
+
     const recipe = recipes.find((r) => r.id === entry.recipeId);
     if (recipe) {
       setPreviewRecipe(recipe);
@@ -544,14 +546,16 @@ const MealPlanPage: React.FC = () => {
             {isRecipe ? (
               <button
                 onClick={onRecipeClick}
-                className="text-left w-full rounded-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+                className="w-full rounded-sm text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
                 aria-label={`View ${label} recipe preview`}
               >
                 <span className="block leading-5 font-medium break-words whitespace-normal text-blue-600 hover:text-blue-800">
                   {label}
                 </span>
                 {meta && (
-                  <span className="mt-0.5 block text-xs text-gray-500">{meta}</span>
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    {meta}
+                  </span>
                 )}
               </button>
             ) : (
@@ -560,7 +564,9 @@ const MealPlanPage: React.FC = () => {
                   {label}
                 </span>
                 {meta && (
-                  <span className="mt-0.5 block text-xs text-gray-500">{meta}</span>
+                  <span className="mt-0.5 block text-xs text-gray-500">
+                    {meta}
+                  </span>
                 )}
               </span>
             )}
@@ -734,7 +740,9 @@ const MealPlanPage: React.FC = () => {
                                   onCook={() => markCooked(e.id)}
                                   onRemove={() => removeEntry(e.id)}
                                   isRecipe={!!e.recipeId}
-                                  onRecipeClick={() => handleRecipeClick(e.id, day.date)}
+                                  onRecipeClick={() =>
+                                    handleRecipeClick(e.id, day.date)
+                                  }
                                 />
                               </React.Fragment>
                             ))}
@@ -774,7 +782,7 @@ const MealPlanPage: React.FC = () => {
                             >
                               <Menu.Items className="absolute right-0 z-10 mt-2 w-36 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg focus:outline-none">
                                 <div className="py-1 text-sm">
-                                  <Menu.Item>
+                                  <Menu.Item as={React.Fragment}>
                                     {({ active }) => (
                                       <button
                                         className={[
@@ -792,7 +800,7 @@ const MealPlanPage: React.FC = () => {
                                       </button>
                                     )}
                                   </Menu.Item>
-                                  <Menu.Item>
+                                  <Menu.Item as={React.Fragment}>
                                     {({ active }) => (
                                       <button
                                         className={[

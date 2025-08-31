@@ -1,4 +1,11 @@
-import { Dialog as HeadlessDialog, Transition } from '@headlessui/react';
+import {
+  DialogDescription,
+  DialogPanel,
+  DialogTitle,
+  Dialog as HeadlessDialog,
+  Transition,
+  TransitionChild,
+} from '@headlessui/react';
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
 import { Fragment } from 'react';
@@ -100,7 +107,7 @@ export function Dialog({
         static={isStatic}
       >
         {/* Background overlay */}
-        <Transition.Child
+        <TransitionChild
           as={Fragment}
           enter="ease-out duration-300"
           enterFrom="opacity-0"
@@ -113,12 +120,12 @@ export function Dialog({
             className="fixed inset-0 bg-black/30 backdrop-blur-sm"
             aria-hidden="true"
           />
-        </Transition.Child>
+        </TransitionChild>
 
         {/* Dialog panel */}
         <div className="fixed inset-0 overflow-y-auto">
           <div className="flex min-h-full items-center justify-center p-4 text-center">
-            <Transition.Child
+            <TransitionChild
               as={Fragment}
               enter="ease-out duration-300"
               enterFrom="opacity-0 scale-95"
@@ -127,7 +134,7 @@ export function Dialog({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <HeadlessDialog.Panel
+              <DialogPanel
                 className={clsx(
                   'w-full',
                   sizeClasses[size],
@@ -137,19 +144,19 @@ export function Dialog({
               >
                 {/* Title */}
                 {title && (
-                  <HeadlessDialog.Title
+                  <DialogTitle
                     as="h3"
                     className="text-lg leading-6 font-medium text-gray-900"
                   >
                     {title}
-                  </HeadlessDialog.Title>
+                  </DialogTitle>
                 )}
 
                 {/* Description */}
                 {description && (
-                  <HeadlessDialog.Description className="mt-2 text-sm text-gray-500">
+                  <DialogDescription className="mt-2 text-sm text-gray-500">
                     {description}
-                  </HeadlessDialog.Description>
+                  </DialogDescription>
                 )}
 
                 {/* Content */}
@@ -159,8 +166,8 @@ export function Dialog({
 
                 {/* Footer */}
                 {footer && <div className="mt-6">{footer}</div>}
-              </HeadlessDialog.Panel>
-            </Transition.Child>
+              </DialogPanel>
+            </TransitionChild>
           </div>
         </div>
       </HeadlessDialog>

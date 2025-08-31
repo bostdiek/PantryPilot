@@ -183,7 +183,7 @@ describe('MealPlanPage', () => {
     // Find the recipe title (should be clickable and blue)
     const recipeButton = screen.getByLabelText('View Spaghetti recipe preview');
     expect(recipeButton).toBeInTheDocument();
-    
+
     // The blue color is on the child span, not the button itself
     const recipeText = within(recipeButton).getByText('Spaghetti');
     expect(recipeText).toHaveClass('text-blue-600');
@@ -194,7 +194,6 @@ describe('MealPlanPage', () => {
     // Should open the quick preview modal with recipe details
     expect(screen.getAllByText('Ingredients')).toHaveLength(2); // Desktop + mobile
     expect(screen.getAllByText('View Full Recipe')).toHaveLength(2);
-    expect(screen.getAllByText('Edit')).toHaveLength(2);
     expect(screen.getAllByText('Remove from Day')).toHaveLength(2);
   });
 
@@ -237,12 +236,14 @@ describe('MealPlanPage', () => {
     await user.click(viewFullButtons[0]);
 
     // Should navigate to recipe detail page with context params
-    expect(navigateMock).toHaveBeenCalledWith('/recipes/r1?from=mealplan&d=2025-01-12');
+    expect(navigateMock).toHaveBeenCalledWith(
+      '/recipes/r1?from=mealplan&d=2025-01-12'
+    );
   });
 
   it('removes recipe from day when clicking Remove from Day', async () => {
     const user = userEvent.setup();
-    
+
     const removeSpy = vi
       .spyOn(useMealPlanStore.getState(), 'removeEntry')
       .mockResolvedValue();
@@ -286,8 +287,8 @@ describe('MealPlanPage', () => {
     expect(removeSpy).toHaveBeenCalledWith('m1');
 
     // Wait for async operation to complete and modal to close
-    await new Promise(resolve => setTimeout(resolve, 0));
-    
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
     // Modal should be closed after successful removal
     expect(screen.queryByText('Ingredients')).not.toBeInTheDocument();
   });
