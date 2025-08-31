@@ -197,4 +197,98 @@ describe('MealPlanPage', () => {
     expect(screen.getAllByText('Edit')).toHaveLength(2);
     expect(screen.getAllByText('Remove from Day')).toHaveLength(2);
   });
+
+  it('navigates to recipe detail when clicking View Full Recipe', async () => {
+    const user = userEvent.setup();
+
+    // Setup a recipe entry
+    useMealPlanStore.setState({
+      currentWeek: {
+        weekStartDate: '2025-01-12',
+        days: [
+          {
+            dayOfWeek: 'Sunday',
+            date: '2025-01-12',
+            entries: [
+              {
+                id: 'm1',
+                plannedForDate: '2025-01-12',
+                mealType: 'dinner',
+                recipeId: 'r1',
+                isLeftover: false,
+                isEatingOut: false,
+                orderIndex: 0,
+                wasCooked: false,
+              },
+            ],
+          },
+        ],
+      },
+    } as any);
+
+    render(<MealPlanPage />);
+
+    // Open the quick preview
+    const recipeButton = screen.getByLabelText('View Spaghetti recipe preview');
+    await user.click(recipeButton);
+
+    // Click "View Full Recipe" button (desktop version)
+    const viewFullButtons = screen.getAllByText('View Full Recipe');
+    await user.click(viewFullButtons[0]);
+
+    // Should navigate to recipe detail page with context params
+    expect(navigateMock).toHaveBeenCalledWith('/recipes/r1?from=mealplan&d=2025-01-12');
+  });
+
+  it('removes recipe from day when clicking Remove from Day', async () => {
+    const user = userEvent.setup();
+    
+    const removeSpy = vi
+      .spyOn(useMealPlanStore.getState(), 'removeEntry')
+      .mockResolvedValue();
+
+    // Setup a recipe entry
+    useMealPlanStore.setState({
+      currentWeek: {
+        weekStartDate: '2025-01-12',
+        days: [
+          {
+            dayOfWeek: 'Sunday',
+            date: '2025-01-12',
+            entries: [
+              {
+                id: 'm1',
+                plannedForDate: '2025-01-12',
+                mealType: 'dinner',
+                recipeId: 'r1',
+                isLeftover: false,
+                isEatingOut: false,
+                orderIndex: 0,
+                wasCooked: false,
+              },
+            ],
+          },
+        ],
+      },
+    } as any);
+
+    render(<MealPlanPage />);
+
+    // Open the quick preview
+    const recipeButton = screen.getByLabelText('View Spaghetti recipe preview');
+    await user.click(recipeButton);
+
+    // Click "Remove from Day" button (desktop version)
+    const removeButtons = screen.getAllByText('Remove from Day');
+    await user.click(removeButtons[0]);
+
+    // Should call removeEntry with the correct entry ID
+    expect(removeSpy).toHaveBeenCalledWith('m1');
+
+    // Wait for async operation to complete and modal to close
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
+    // Modal should be closed after successful removal
+    expect(screen.queryByText('Ingredients')).not.toBeInTheDocument();
+  });
 });

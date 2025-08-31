@@ -246,9 +246,16 @@ const MealPlanPage: React.FC = () => {
     setPreviewEntryId(null);
   }
 
-  function handleRemoveFromDay() {
+  async function handleRemoveFromDay() {
     if (previewEntryId) {
-      removeEntry(previewEntryId);
+      try {
+        await removeEntry(previewEntryId);
+        // Close the modal after successful removal
+        handleClosePreview();
+      } catch (error) {
+        console.error('Failed to remove entry:', error);
+        // Don't close modal on error so user can try again
+      }
     }
   }
 

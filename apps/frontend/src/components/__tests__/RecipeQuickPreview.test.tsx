@@ -202,4 +202,77 @@ describe('RecipeQuickPreview', () => {
     expect(screen.getAllByText('Garlic')).toHaveLength(2);
     expect(screen.queryByText('+1 more ingredients')).not.toBeInTheDocument();
   });
+
+  it('navigates to recipe detail when View Full Recipe is clicked', async () => {
+    const onCloseMock = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <RecipeQuickPreview
+          isOpen={true}
+          onClose={onCloseMock}
+          recipe={mockRecipe}
+          dateContext="2025-01-15"
+        />
+      </MemoryRouter>
+    );
+
+    // Click the View Full Recipe button (desktop version)
+    const viewFullButtons = screen.getAllByText('View Full Recipe');
+    await user.click(viewFullButtons[0]);
+
+    // Should navigate with proper query params
+    expect(mockNavigate).toHaveBeenCalledWith('/recipes/recipe-1?from=mealplan&d=2025-01-15');
+    expect(onCloseMock).toHaveBeenCalled();
+  });
+
+  it('navigates to recipe edit when Edit is clicked', async () => {
+    const onCloseMock = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <RecipeQuickPreview
+          isOpen={true}
+          onClose={onCloseMock}
+          recipe={mockRecipe}
+        />
+      </MemoryRouter>
+    );
+
+    // Click the Edit button (desktop version)
+    const editButtons = screen.getAllByText('Edit');
+    await user.click(editButtons[0]);
+
+    // Should navigate to edit page
+    expect(mockNavigate).toHaveBeenCalledWith('/recipes/recipe-1/edit');
+    expect(onCloseMock).toHaveBeenCalled();
+  });
+
+  it('calls onRemoveFromDay when Remove from Day is clicked', async () => {
+    const onCloseMock = vi.fn();
+    const onRemoveFromDayMock = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <RecipeQuickPreview
+          isOpen={true}
+          onClose={onCloseMock}
+          recipe={mockRecipe}
+          onRemoveFromDay={onRemoveFromDayMock}
+        />
+      </MemoryRouter>
+    );
+
+    // Click the Remove from Day button (desktop version)
+    const removeButtons = screen.getAllByText('Remove from Day');
+    await user.click(removeButtons[0]);
+
+    // Should call the remove function
+    expect(onRemoveFromDayMock).toHaveBeenCalled();
+    // Should not close the modal (parent handles closure)
+    expect(onCloseMock).not.toHaveBeenCalled();
+  });
 });

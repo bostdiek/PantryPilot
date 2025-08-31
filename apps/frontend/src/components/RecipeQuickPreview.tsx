@@ -87,7 +87,7 @@ export function RecipeQuickPreview({
     if (onRemoveFromDay) {
       onRemoveFromDay();
     }
-    onClose();
+    // Don't call onClose() here - let the parent handle it after the async operation
   };
 
   const firstFiveIngredients = recipe.ingredients?.slice(0, 5) || [];
