@@ -5,6 +5,13 @@ import { useMealPlanStore } from '../../stores/useMealPlanStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import MealPlanPage from '../MealPlanPage';
 
+// Mock router navigation
+const navigateMock = vi.fn();
+vi.mock('react-router-dom', async () => ({
+  ...(await vi.importActual('react-router-dom')),
+  useNavigate: () => navigateMock,
+}));
+
 // Minimal mock for dnd-kit portal usage in tests (no real DnD simulation here)
 vi.mock('@dnd-kit/core', async (orig) => {
   const actual = await (orig as any)();
