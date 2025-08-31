@@ -7,12 +7,10 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { useToast } from '../components/ui/useToast';
+import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
-import {
-  mapIngredientsForApi,
-  normalizeIngredientsForForm,
-} from '../utils/ingredients';
 import type { Recipe } from '../types/Recipe';
 import {
   RECIPE_CATEGORIES,
@@ -20,6 +18,10 @@ import {
   type RecipeCategory,
   type RecipeDifficulty,
 } from '../types/Recipe';
+import {
+  mapIngredientsForApi,
+  normalizeIngredientsForForm,
+} from '../utils/ingredients';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -38,6 +40,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { updateRecipe } = useRecipeStore();
+  const { success } = useToast();
 
   type FormState = {
     title: string;
@@ -62,7 +65,9 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     | { type: 'REMOVE_INGREDIENT'; index: number }
     | { type: 'SET_INSTRUCTION'; index: number; value: string }
     | { type: 'ADD_INSTRUCTION' }
-    | { type: 'REMOVE_INSTRUCTION'; index: number };
+    | { type: 'REMOVE_INSTRUCTION'; index: number }
+    | { type: 'MOVE_INSTRUCTION_UP'; index: number }
+    | { type: 'MOVE_INSTRUCTION_DOWN'; index: number };
 
   function reducer(state: FormState, action: Action): FormState {
     switch (action.type) {
@@ -107,6 +112,28 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
         next.splice(action.index, 1);
         return { ...state, instructions: next.length ? next : [''] };
       }
+      case 'MOVE_INSTRUCTION_UP': {
+        if (action.index > 0) {
+          const next = [...state.instructions];
+          [next[action.index], next[action.index - 1]] = [
+            next[action.index - 1],
+            next[action.index],
+          ];
+          return { ...state, instructions: next };
+        }
+        return state;
+      }
+      case 'MOVE_INSTRUCTION_DOWN': {
+        if (action.index < state.instructions.length - 1) {
+          const next = [...state.instructions];
+          [next[action.index], next[action.index + 1]] = [
+            next[action.index + 1],
+            next[action.index],
+          ];
+          return { ...state, instructions: next };
+        }
+        return state;
+      }
       default:
         return state;
     }
@@ -140,6 +167,27 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if there are unsaved changes by comparing current form state with original recipe
+  const hasUnsavedChanges =
+    form.title !== recipe.title ||
+    form.description !== (recipe.description || '') ||
+    form.category.id !== recipe.category ||
+    form.difficulty.id !== recipe.difficulty ||
+    form.prepTime !== (recipe.prep_time_minutes || 0) ||
+    form.cookTime !== (recipe.cook_time_minutes || 0) ||
+    form.servingMin !== (recipe.serving_min || 1) ||
+    form.servingMax !== recipe.serving_max ||
+    form.ethnicity !== (recipe.ethnicity || '') ||
+    form.ovenTemperatureF !== recipe.oven_temperature_f ||
+    form.userNotes !== (recipe.user_notes || '') ||
+    JSON.stringify(form.ingredients) !==
+      JSON.stringify(normalizeIngredientsForForm(recipe.ingredients)) ||
+    JSON.stringify(form.instructions) !==
+      JSON.stringify(recipe.instructions || ['']);
+
+  // Block navigation if there are unsaved changes
+  useUnsavedChanges(hasUnsavedChanges && !isSubmitting);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -196,7 +244,8 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
       const result = await updateRecipe(id, recipeUpdateData);
 
       if (result) {
-        // Navigate back to the recipe detail page on success
+        // Show success toast and navigate back to the recipe detail page
+        success('Recipe updated successfully!');
         navigate(`/recipes/${id}`);
       } else {
         setError('Failed to update recipe. Please try again.');
@@ -453,6 +502,50 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
             <h2 className="text-lg font-semibold">Instructions</h2>
             {form.instructions.map((step, idx) => (
               <div key={idx} className="flex items-center space-x-2">
+                <div className="flex flex-col space-y-1">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      dispatch({ type: 'MOVE_INSTRUCTION_UP', index: idx })
+                    }
+                    disabled={idx === 0}
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label={`Move step ${idx + 1} up`}
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      dispatch({ type: 'MOVE_INSTRUCTION_DOWN', index: idx })
+                    }
+                    disabled={idx === form.instructions.length - 1}
+                    className="p-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                    aria-label={`Move step ${idx + 1} down`}
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </button>
+                </div>
                 <Input
                   className="flex-1"
                   value={step}
@@ -460,6 +553,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                     dispatch({ type: 'SET_INSTRUCTION', index: idx, value: v })
                   }
                   placeholder={`Step ${idx + 1}`}
+                  aria-label={`Step ${idx + 1}`}
                 />
                 {form.instructions.length > 1 && (
                   <Button
@@ -469,6 +563,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                     onClick={() =>
                       dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
                     }
+                    aria-label={`Remove step ${idx + 1}`}
                   >
                     Remove
                   </Button>
@@ -488,7 +583,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           {/* Actions */}
           <div className="flex items-center justify-end space-x-2">
             {error && (
-              <div className="mr-auto">
+              <div className="mr-auto" role="alert" aria-live="polite">
                 <ErrorMessage message={error} />
               </div>
             )}
