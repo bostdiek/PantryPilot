@@ -80,6 +80,14 @@ beforeEach(() => {
       {
         id: 'r1',
         title: 'Spaghetti',
+        ingredients: [
+          {
+            id: 'ing-1',
+            name: 'Pasta',
+            quantity_value: 200,
+            quantity_unit: 'g',
+          },
+        ],
         total_time_minutes: 30,
         difficulty: 'easy',
       } as any,
@@ -140,5 +148,53 @@ describe('MealPlanPage', () => {
 
     // Given weekStartDate is 2025-01-12 in beforeEach, previous week is 2025-01-05
     expect(loadSpy).toHaveBeenCalledWith('2025-01-05');
+  });
+
+  it('opens recipe preview when clicking on recipe name', async () => {
+    const user = userEvent.setup();
+
+    // Setup a recipe entry instead of the default planned item
+    useMealPlanStore.setState({
+      currentWeek: {
+        weekStartDate: '2025-01-12',
+        days: [
+          {
+            dayOfWeek: 'Sunday',
+            date: '2025-01-12',
+            entries: [
+              {
+                id: 'm1',
+                plannedForDate: '2025-01-12',
+                mealType: 'dinner',
+                recipeId: 'r1', // This connects to the recipe in our mock data
+                isLeftover: false,
+                isEatingOut: false,
+                orderIndex: 0,
+                wasCooked: false,
+              },
+            ],
+          },
+        ],
+      },
+    } as any);
+
+    render(<MealPlanPage />);
+
+    // Find the recipe title (should be clickable and blue)
+    const recipeButton = screen.getByLabelText('View Spaghetti recipe preview');
+    expect(recipeButton).toBeInTheDocument();
+    
+    // The blue color is on the child span, not the button itself
+    const recipeText = within(recipeButton).getByText('Spaghetti');
+    expect(recipeText).toHaveClass('text-blue-600');
+
+    // Click the recipe name
+    await user.click(recipeButton);
+
+    // Should open the quick preview modal with recipe details
+    expect(screen.getAllByText('Ingredients')).toHaveLength(2); // Desktop + mobile
+    expect(screen.getAllByText('View Full Recipe')).toHaveLength(2);
+    expect(screen.getAllByText('Edit')).toHaveLength(2);
+    expect(screen.getAllByText('Remove from Day')).toHaveLength(2);
   });
 });

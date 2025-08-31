@@ -90,8 +90,8 @@ export function RecipeQuickPreview({
     onClose();
   };
 
-  const firstFiveIngredients = recipe.ingredients.slice(0, 5);
-  const hasMoreIngredients = recipe.ingredients.length > 5;
+  const firstFiveIngredients = recipe.ingredients?.slice(0, 5) || [];
+  const hasMoreIngredients = (recipe.ingredients?.length || 0) > 5;
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
