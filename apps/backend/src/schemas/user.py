@@ -1,11 +1,12 @@
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserBase(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     username: str = Field(..., min_length=3, max_length=50, description="Username")
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserCreate(UserBase):
@@ -36,6 +37,8 @@ class UserUpdate(BaseModel):
 
 class UserPublic(UserBase):
     id: UUID = Field(..., description="Unique identifier for the user")
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserInDB(UserBase):
