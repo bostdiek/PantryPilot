@@ -1,5 +1,4 @@
 import logging
-import os
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
@@ -7,21 +6,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 
 from api.v1.api import api_router
+from core.config import get_settings
 
 
-def validate_cors_origins(origins_str: str) -> list[str]:
-    """Validate and sanitize CORS origins."""
+settings = get_settings()
 
-    origins = [origin.strip() for origin in origins_str.split(",") if origin.strip()]
-    validated_origins = []
+
+def validate_cors_origins(origins: list[str]) -> list[str]:
+    """Validate and sanitize CORS origins provided as a list of strings."""
+
+    validated_origins: list[str] = []
 
     def is_valid_url(url: str) -> bool:
         parsed = urlparse(url)
         return bool(parsed.scheme in {"http", "https"} and parsed.netloc)
 
     for origin in origins:
-        if is_valid_url(origin):
-            validated_origins.append(origin)
+        candidate = origin.strip()
+        if not candidate:
+            continue
+        if is_valid_url(candidate):
+            validated_origins.append(candidate)
         else:
             logging.warning(f"Invalid CORS origin '{origin}' ignored")
 
@@ -32,18 +37,17 @@ app = FastAPI(
     title="PantryPilot API",
     description="A smart pantry management system",
     version="0.1.0",
-    docs_url=None,  # We'll mount docs under /api/v1/docs
+    docs_url=None,
     redoc_url=None,
 )
 
 # Configure CORS
-origins_str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
-origins = validate_cors_origins(origins_str)
+origins = validate_cors_origins(settings.CORS_ORIGINS)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_credentials=settings.ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )

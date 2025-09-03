@@ -12,6 +12,10 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "asyncpg>=0.29.0",
     "greenlet>=3.0.0",
+    "python-jose[cryptography]>=3.5.0",
+    "argon2-cffi>=25.1.0",
+    "pydantic-settings>=2.10.1",
+    "types-python-jose>=3.5.0.20250531",
 ]
 
 [dependency-groups]

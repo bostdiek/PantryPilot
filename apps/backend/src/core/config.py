@@ -1,0 +1,83 @@
+"""Application settings and CORS configuration."""
+
+import json
+import os
+from functools import lru_cache
+
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=(".env"), env_file_encoding="utf-8")
+
+    # App
+    APP_NAME: str = "PantryPilot"
+    ENVIRONMENT: str = "development"  # development | production
+
+    # Security
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # in minutes
+
+    # CORS
+    # Accept list or CSV/JSON string from env; normalized to list[str] by validators
+    CORS_ORIGINS: list[str] | str = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+    ALLOW_CREDENTIALS: bool = True
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: object) -> list[str]:
+        """Allow list, CSV string, or JSON array string for CORS origins."""
+        if isinstance(v, list):
+            return [str(i).strip() for i in v]
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            if s.startswith("["):
+                try:
+                    parsed = json.loads(s)
+                except json.JSONDecodeError as e:
+                    raise ValueError(
+                        "CORS_ORIGINS must be a CSV list or JSON array string"
+                    ) from e
+                if not isinstance(parsed, list):
+                    raise ValueError("CORS_ORIGINS JSON must be a list")
+                return [str(i).strip() for i in parsed]
+            # CSV fallback
+            return [i.strip() for i in s.split(",") if i.strip()]
+        raise ValueError("Invalid CORS_ORIGINS type; expected str or list[str]")
+
+    @model_validator(mode="after")
+    def _validate_cors_credentials(self) -> "Settings":
+        """Ensure wildcard origins are not used when credentials are allowed."""
+        # Normalize in case the union allows a stray string at runtime
+        if isinstance(self.CORS_ORIGINS, str):
+            self.CORS_ORIGINS = self.assemble_cors_origins(self.CORS_ORIGINS)
+        if self.ALLOW_CREDENTIALS and any(
+            o.strip() == "*" for o in (self.CORS_ORIGINS or [])
+        ):
+            raise ValueError(
+                "CORS configuration error: ALLOW_CREDENTIALS=True but "
+                "CORS_ORIGINS contains '*'. Use explicit origins when credentials "
+                "are allowed."
+            )
+        return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    env = os.getenv("ENVIRONMENT", "development").lower()
+    if env not in {"development", "production"}:
+        raise ValueError("ENVIRONMENT must be 'development' or 'production'")
+
+    if env == "development":
+        env_file = ".env.dev"
+    else:
+        env_file = ".env.prod"
+    # pydantic-settings supports _env_file at runtime; mypy doesn't type it.
+    return Settings(_env_file=env_file)  # type: ignore[call-arg]
