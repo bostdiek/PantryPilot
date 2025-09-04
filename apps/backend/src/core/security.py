@@ -8,7 +8,9 @@ from core.config import get_settings
 from schemas.auth import TokenData
 
 
-settings = get_settings()
+def _settings():  # lazy accessor to allow tests to set env first
+    return get_settings()
+
 
 # Reuse a single PasswordHasher instance (Argon2id by default)
 _password_hasher = PasswordHasher()
@@ -21,12 +23,11 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         expire = datetime.now(UTC) + expires_delta
     else:
         expire = datetime.now(UTC) + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+            minutes=_settings().ACCESS_TOKEN_EXPIRE_MINUTES
         )
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
-    )
+    s = _settings()
+    encoded_jwt = jwt.encode(to_encode, s.SECRET_KEY, algorithm=s.ALGORITHM)
     return encoded_jwt
 
 
@@ -53,10 +54,11 @@ def decode_token(token: str) -> TokenData:
     Expects a `sub` claim (user identifier). Also supports optional `scopes`.
     """
     try:
+        s = _settings()
         payload = jwt.decode(
             token,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
+            s.SECRET_KEY,
+            algorithms=[s.ALGORITHM],
             options={"verify_aud": False},
         )
     except JWTError as err:

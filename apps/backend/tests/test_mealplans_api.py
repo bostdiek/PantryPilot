@@ -14,6 +14,7 @@ import pytest
 import pytest_asyncio
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import StaticPool
 
+from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from main import app
 from models.base import Base
@@ -66,8 +68,28 @@ async def mealplans_client() -> AsyncIterator[AsyncClient]:
         async with SessionLocal() as session:
             yield session
 
+    # Auth override: always return first user (create one if none)
+    async def _override_get_current_user():  # pragma: no cover (simple helper)
+        async with SessionLocal() as session:
+            result = await session.execute(select(User).limit(1))
+            user = result.scalars().first()
+            if not user:
+                demo = User(
+                    username="demo",
+                    email="demo@tests.local",
+                    hashed_password="x",
+                    first_name="Demo",
+                    last_name="User",
+                )
+                session.add(demo)
+                await session.commit()
+                await session.refresh(demo)
+                user = demo
+            return user
+
     # Apply the dependency override only for this client lifetime
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_get_current_user
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -75,6 +97,7 @@ async def mealplans_client() -> AsyncIterator[AsyncClient]:
             yield client
         finally:
             app.dependency_overrides.pop(get_db, None)
+            app.dependency_overrides.pop(get_current_user, None)
             await engine.dispose()
 
 
@@ -289,13 +312,33 @@ async def mealplans_env() -> AsyncIterator[_MealplansEnv]:
         async with SessionLocal() as session:
             yield session
 
+    async def _override_get_current_user():  # pragma: no cover
+        async with SessionLocal() as session:
+            result = await session.execute(select(User).limit(1))
+            user = result.scalars().first()
+            if not user:
+                demo = User(
+                    username="demo",
+                    email="demo@tests.local",
+                    hashed_password="x",
+                    first_name="Demo",
+                    last_name="User",
+                )
+                session.add(demo)
+                await session.commit()
+                await session.refresh(demo)
+                user = demo
+            return user
+
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_get_current_user
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         try:
             yield _MealplansEnv(client, engine)
         finally:
             app.dependency_overrides.pop(get_db, None)
+            app.dependency_overrides.pop(get_current_user, None)
             await engine.dispose()
 
 

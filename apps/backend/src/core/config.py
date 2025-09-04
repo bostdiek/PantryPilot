@@ -80,4 +80,7 @@ def get_settings() -> Settings:
     else:
         env_file = ".env.prod"
     # pydantic-settings supports _env_file at runtime; mypy doesn't type it.
+    # Provide safe fallbacks for tests if env file is absent.
+    if not os.path.exists(env_file):  # pragma: no cover - defensive
+        os.environ.setdefault("SECRET_KEY", "dev-test-secret")
     return Settings(_env_file=env_file)  # type: ignore[call-arg]
