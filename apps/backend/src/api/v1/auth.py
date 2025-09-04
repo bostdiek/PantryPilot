@@ -11,7 +11,7 @@ from dependencies.db import DbSession
 from schemas.auth import Token
 
 
-router = APIRouter(prefix="", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 PasswordForm = Annotated[OAuth2PasswordRequestForm, Depends()]
 

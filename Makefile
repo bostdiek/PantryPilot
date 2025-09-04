@@ -219,6 +219,15 @@ test-coverage:
 	# Run backend tests with coverage
 	cd apps/backend && uv run pytest --cov=src --cov-report=term --cov-report=html
 
+# Create a development user in the backend DB (idempotent). Run inside backend container.
+.PHONY: create-dev-user
+create-dev-user:
+	@echo "Creating dev user in backend DB..."
+	# The backend container mounts the backend source at /app, so the script
+	# is available at /app/scripts/create_dev_user.py inside the container.
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T backend sh -lc "uv run python /app/scripts/create_dev_user.py"
+
+
 # Convenience targets
 check: lint type-check check-migrations
 	# Run all code quality checks
