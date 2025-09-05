@@ -13,6 +13,7 @@ import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -33,16 +34,12 @@ async def _ensure_demo_user(db: AsyncSession) -> User:
     remove this override to exercise the real dependency chain.
     """
     result = await db.execute(
-        # Simple query; defer import complexity by inline text
-        User.__table__.select().limit(1)  # type: ignore[arg-type]
+        # Use ORM-style select for better typing and consistent result shapes
+        select(User).limit(1)
     )
-    row = result.first()
-    if row:
-        # Row 0 is the user instance when selecting table directly may differ;
-        # safest is to re-query via ORM if needed, but for simplicity return id lookup.
-        user = await db.get(User, row[0])  # type: ignore[index]
-        if user:
-            return user
+    user = result.scalars().one_or_none()
+    if user:
+        return user
     demo = User(
         id=uuid.uuid4(),
         username="demo",
@@ -73,6 +70,9 @@ class _FakeResult:
         return self
 
     def first(self):  # pragma: no cover - trivial
+        return None
+
+    def one_or_none(self):  # pragma: no cover - trivial
         return None
 
 

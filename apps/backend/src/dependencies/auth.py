@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.exc import SQLAlchemyError
 
 from core.security import decode_token
 from crud.user import get_user_by_id
@@ -48,12 +49,9 @@ async def get_current_user(
         If the token is missing, malformed, expired, or the user does not exist.
     """
 
-    # Decode the JWT – any error already triggers a 401
-    try:
-        token_data = decode_token(token)
-    except Exception as exc:  # pragma: no cover
-        LOGGER.debug("Token decoding failed", exc_info=exc)
-        raise unauthorized() from exc
+    # Decode the JWT – `decode_token` raises HTTPException(401) on failure,
+    # so allow that to surface instead of catching a broad Exception here.
+    token_data = decode_token(token)
 
     # Validate the subject claim
     sub = getattr(token_data, "sub", None)
@@ -71,7 +69,7 @@ async def get_current_user(
     # Pull the user from the DB
     try:
         user = await get_user_by_id(db, user_id)
-    except Exception as exc:  # pragma: no cover
+    except SQLAlchemyError as exc:  # pragma: no cover - DB errors should be explicit
         LOGGER.error("DB lookup failed", exc_info=exc)
         # Let FastAPI surface a 500 – or raise a custom 503 if you prefer
         raise
