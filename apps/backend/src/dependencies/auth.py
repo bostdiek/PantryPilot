@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any, Protocol, TypeVar
+from typing import Annotated, Protocol, TypeVar
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
