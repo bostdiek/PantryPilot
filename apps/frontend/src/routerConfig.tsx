@@ -1,15 +1,20 @@
+import React, { Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import MealPlanPage from './pages/MealPlanPage';
-import RecipesDetail from './pages/RecipesDetail';
-import RecipesEditPage from './pages/RecipesEditPage';
-import NewRecipePage from './pages/RecipesNewPage';
-import RecipesPage from './pages/RecipesPage';
-import ComponentShowcase from './pages/dev/ComponentShowcase';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
+// Lazy loaded pages for code-splitting
+const HomePage = React.lazy(() => import('./pages/HomePage'));
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const MealPlanPage = React.lazy(() => import('./pages/MealPlanPage'));
+const RecipesDetail = React.lazy(() => import('./pages/RecipesDetail'));
+const RecipesEditPage = React.lazy(() => import('./pages/RecipesEditPage'));
+const NewRecipePage = React.lazy(() => import('./pages/RecipesNewPage'));
+const RecipesPage = React.lazy(() => import('./pages/RecipesPage'));
+const ComponentShowcase = React.lazy(
+  () => import('./pages/dev/ComponentShowcase')
+);
 import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
@@ -103,12 +108,25 @@ export const router = createBrowserRouter([
     children: [
       {
         path: 'login',
-        element: <LoginPage />,
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <LoginPage />
+          </Suspense>
+        ),
       },
-      {
-        path: 'dev/components',
-        element: <ComponentShowcase />,
-      },
+      // Development-only component showcase (excluded from production bundle)
+      ...(import.meta.env.DEV
+        ? [
+            {
+              path: 'dev/components',
+              element: (
+                <Suspense fallback={<LoadingSpinner />}>
+                  <ComponentShowcase />
+                </Suspense>
+              ),
+            },
+          ]
+        : []),
       // Protected routes - require authentication
       {
         path: '/',
@@ -116,31 +134,55 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <HomePage />,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <HomePage />
+              </Suspense>
+            ),
             loader: homeLoader,
           },
           {
             path: 'recipes',
-            element: <RecipesPage />,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <RecipesPage />
+              </Suspense>
+            ),
             loader: recipesLoader,
           },
           {
             path: 'recipes/new',
-            element: <NewRecipePage />,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <NewRecipePage />
+              </Suspense>
+            ),
           },
           {
             path: 'recipes/:id',
-            element: <RecipesDetail />,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <RecipesDetail />
+              </Suspense>
+            ),
             loader: recipeDetailLoader,
           },
           {
             path: 'recipes/:id/edit',
-            element: <RecipesEditPage />,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <RecipesEditPage />
+              </Suspense>
+            ),
             loader: recipeDetailLoader,
           },
           {
             path: 'meal-plan',
-            element: <MealPlanPage />,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <MealPlanPage />
+              </Suspense>
+            ),
             loader: mealPlanLoader,
           },
         ],
