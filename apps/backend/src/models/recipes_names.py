@@ -12,7 +12,7 @@ class Recipe(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
     user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
     )  # TODO: Make NOT NULL after migration
     name = Column(String(255), nullable=False, index=True)
     prep_time_minutes = Column(Integer, nullable=True)
@@ -33,4 +33,4 @@ class Recipe(Base):
 
     # Relationships
     recipeingredients = relationship("RecipeIngredient", back_populates="recipe")
-    user = relationship("User")
+    user = relationship("User", back_populates="recipes")

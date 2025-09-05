@@ -9,7 +9,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
+    from .ingredient_names import Ingredient
     from .meal_history import Meal
+    from .recipes_names import Recipe
 
 from .base import Base
 
@@ -35,7 +37,7 @@ class User(Base):
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
+        Boolean, nullable=False, server_default=func.false()
     )
     first_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -48,3 +50,5 @@ class User(Base):
 
     # Relationships
     meal: Mapped[list[Meal]] = relationship("Meal", back_populates="user")
+    recipes: Mapped[list[Recipe]] = relationship("Recipe", back_populates="user")
+    ingredients: Mapped[list[Ingredient]] = relationship("Ingredient", back_populates="user")

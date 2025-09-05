@@ -25,7 +25,7 @@ def upgrade() -> None:
     # Add is_admin column to users table
     op.add_column(
         "users",
-        sa.Column("is_admin", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("is_admin", sa.Boolean(), nullable=False, server_default=sa.false()),
     )
 
     # Add user_id foreign key to recipe_names table

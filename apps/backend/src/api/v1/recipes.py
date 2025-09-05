@@ -310,7 +310,8 @@ async def _get_or_create_ingredient(
 ) -> Ingredient:
     """Return an existing Ingredient by name for the user or create a new one.
 
-    Keeps DB interaction isolated to reduce complexity in route handlers.
+    Handles concurrent creation gracefully by catching IntegrityError and retrying
+    the lookup if a duplicate is created between the initial check and insert.
 
     Args:
         db: The SQLAlchemy async session used for queries and persistence.
@@ -321,9 +322,8 @@ async def _get_or_create_ingredient(
         Ingredient: The existing (or newly created) `Ingredient` ORM object.
 
     Raises:
-        sqlalchemy.exc.IntegrityError: If a unique/constraint violation occurs while
-            creating a new ingredient.
-        sqlalchemy.exc.SQLAlchemyError: For other SQLAlchemy-related database errors.
+        sqlalchemy.exc.SQLAlchemyError: For SQLAlchemy-related database errors
+            that are not handled as concurrent creation conflicts.
     """
     # Look for ingredient by name for this user or legacy null user_id
     stmt = select(Ingredient).where(
@@ -337,10 +337,23 @@ async def _get_or_create_ingredient(
     )
     result = await db.execute(stmt)
     ingredient = result.scalars().first()
+    
     if not ingredient:
-        ingredient = Ingredient(id=uuid.uuid4(), user_id=user_id, ingredient_name=name)
-        db.add(ingredient)
-        await db.flush()
+        try:
+            # Try to create new ingredient
+            ingredient = Ingredient(id=uuid.uuid4(), user_id=user_id, ingredient_name=name)
+            db.add(ingredient)
+            await db.flush()
+        except IntegrityError:
+            # Another process created the same ingredient concurrently
+            # Rollback and retry the lookup
+            await db.rollback()
+            result = await db.execute(stmt)
+            ingredient = result.scalars().first()
+            if not ingredient:
+                # This should be extremely rare - re-raise the original error
+                raise
+    
     return ingredient
 
 
