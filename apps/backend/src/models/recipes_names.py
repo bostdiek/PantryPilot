@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import UUID, Column, DateTime, Integer, String, Text, func
+from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,9 @@ class Recipe(Base):
     __tablename__ = "recipe_names"
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )  # TODO: Make NOT NULL after migration
     name = Column(String(255), nullable=False, index=True)
     prep_time_minutes = Column(Integer, nullable=True)
     cook_time_minutes = Column(Integer, nullable=True)
@@ -30,3 +33,4 @@ class Recipe(Base):
 
     # Relationships
     recipeingredients = relationship("RecipeIngredient", back_populates="recipe")
+    user = relationship("User", back_populates="recipes")
