@@ -1,39 +1,19 @@
-import type { ApiResponse } from '../../types/api';
-import type { User } from '../../types/User';
+import type { LoginFormData, TokenResponse } from '../../types/auth';
 import { apiClient } from '../client';
 
-// Login: expects { email, password }, returns token and user info
-export async function login(
-  email: string,
-  password: string
-): Promise<ApiResponse<{ token: string; user: User }>> {
-  return apiClient.request<ApiResponse<{ token: string; user: User }>>(
-    '/api/v1/auth/login',
-    {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    }
-  );
-}
+// Login using OAuth2 form format to match backend
+export async function login(form: LoginFormData): Promise<TokenResponse> {
+  const entries: [string, string][] = [
+    ['username', form.username],
+    ['password', form.password],
+  ];
 
-// Register: expects { username, email, password }, returns token and user info
-export async function register(
-  username: string,
-  email: string,
-  password: string
-): Promise<ApiResponse<{ token: string; user: User }>> {
-  return apiClient.request<ApiResponse<{ token: string; user: User }>>(
-    '/api/v1/auth/register',
-    {
-      method: 'POST',
-      body: JSON.stringify({ username, email, password }),
-    }
-  );
-}
-
-// Logout: typically just invalidates token server-side, may return success/failure
-export async function logout(): Promise<ApiResponse<null>> {
-  return apiClient.request<ApiResponse<null>>('/api/v1/auth/logout', {
+  return apiClient.request<TokenResponse>('/api/v1/auth/login', {
     method: 'POST',
+    headers: {
+      // Override default application/json with form data
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams(entries),
   });
 }

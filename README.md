@@ -71,6 +71,15 @@ Environment variables
 
 - CORS_ORIGINS: comma-separated origins (dev defaults to `http://localhost:5173`)
 - Database vars: see `.env.dev` and `.env.prod`
+- **SECRET_KEY**: Required for JWT token signing. Generate a secure development key:
+  ```bash
+  # Generate a development SECRET_KEY (do not commit real secrets)
+  python -c "import secrets; print(secrets.token_urlsafe(32))"
+  ```
+  Add the generated key to your `.env.dev` file:
+  ```
+  SECRET_KEY=<paste_generated_value>
+  ```
 
 See `docs/API_DESIGN.md` and `docs/DEPLOYMENT.md` for more details. Contribution guidelines in `docs/CONTRIBUTING.md`.
 

@@ -49,8 +49,12 @@ vi.mock('../../components/ui/icons/chevron-up-down.svg?react', () => ({
 }));
 
 beforeEach(() => {
+  // Get the initial state with all methods
+  const initialState = useMealPlanStore.getState();
+
   // Seed store state with a simple week and one entry
   useMealPlanStore.setState({
+    ...initialState,
     currentWeek: {
       weekStartDate: '2025-01-12',
       days: [
@@ -99,29 +103,43 @@ describe('MealPlanPage', () => {
   it('renders a planned entry and marks it cooked', async () => {
     const user = userEvent.setup();
 
-    // Spy on store markCooked to ensure it is invoked by the button
-    const markSpy = vi
-      .spyOn(useMealPlanStore.getState(), 'markCooked')
-      .mockResolvedValue();
+    // Store the original markCooked method
+    const originalMarkCooked = useMealPlanStore.getState().markCooked;
+
+    // Create a spy on the store's markCooked method
+    // Provide explicit undefined so TS satisfies mockResolvedValue(value: Awaited<ReturnType<T>>)
+    const markSpy = vi.fn().mockResolvedValue(undefined);
+
+    // Update the store state to include our spy
+    useMealPlanStore.setState((state) => ({
+      ...state,
+      markCooked: markSpy,
+    }));
 
     render(<MealPlanPage />);
 
     // Find the entry item and then the scoped Cooked button within it
     const entryItem = screen.getByText('Planned item').closest('li')!;
     const cookedBtn = within(entryItem).getByRole('button', {
-      name: /Cooked/i,
+      name: /Mark.*cooked/i,
     });
     await user.click(cookedBtn);
 
     expect(markSpy).toHaveBeenCalledTimes(1);
     expect(markSpy.mock.calls[0][0]).toBe('m1');
+
+    // Restore the original markCooked method
+    useMealPlanStore.setState((state) => ({
+      ...state,
+      markCooked: originalMarkCooked,
+    }));
   });
 
   it('removes an entry when clicking Remove', async () => {
     const user = userEvent.setup();
     const removeSpy = vi
       .spyOn(useMealPlanStore.getState(), 'removeEntry')
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
 
     render(<MealPlanPage />);
 
@@ -139,7 +157,7 @@ describe('MealPlanPage', () => {
     const user = userEvent.setup();
     const loadSpy = vi
       .spyOn(useMealPlanStore.getState(), 'loadWeek')
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
 
     render(<MealPlanPage />);
 
@@ -246,7 +264,7 @@ describe('MealPlanPage', () => {
 
     const removeSpy = vi
       .spyOn(useMealPlanStore.getState(), 'removeEntry')
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
 
     // Setup a recipe entry
     useMealPlanStore.setState({

@@ -30,6 +30,17 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins,
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ['react', 'react-dom'],
+            state: ['zustand'],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 800,
+    },
     test: {
       globals: true,
       environment: 'jsdom',

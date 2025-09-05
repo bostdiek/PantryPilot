@@ -1,20 +1,36 @@
+import React, { Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import HydrateFallback from './components/HydrateFallback';
+import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
-import HomePage from './pages/HomePage';
-import LoginPage from './pages/LoginPage';
-import MealPlanPage from './pages/MealPlanPage';
-import RecipesDetail from './pages/RecipesDetail';
-import RecipesEditPage from './pages/RecipesEditPage';
-import NewRecipePage from './pages/RecipesNewPage';
-import RecipesPage from './pages/RecipesPage';
-import ComponentShowcase from './pages/dev/ComponentShowcase';
+import { LoadingSpinner } from './components/ui/LoadingSpinner';
+// Lazy loaded pages for code-splitting
+const HomePage = React.lazy(() => import('./pages/HomePage'));
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const MealPlanPage = React.lazy(() => import('./pages/MealPlanPage'));
+const RecipesDetail = React.lazy(() => import('./pages/RecipesDetail'));
+const RecipesEditPage = React.lazy(() => import('./pages/RecipesEditPage'));
+const NewRecipePage = React.lazy(() => import('./pages/RecipesNewPage'));
+const RecipesPage = React.lazy(() => import('./pages/RecipesPage'));
+const ComponentShowcase = React.lazy(
+  () => import('./pages/dev/ComponentShowcase')
+);
+import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
 
-// Loader functions
+// Loader functions with auth checks
 const homeLoader = async () => {
   console.log('Home loader executing...');
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
+  // Wait for hydration and check authentication
+  if (!hasHydrated || !isAuthenticated) {
+    console.log('Home loader: not authenticated, skipping data fetch');
+    return null;
+  }
+
   const { fetchRecipes } = useRecipeStore.getState();
   const { loadWeek } = useMealPlanStore.getState();
 
@@ -28,6 +44,15 @@ const homeLoader = async () => {
 };
 
 const recipesLoader = async () => {
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
+  // Wait for hydration and check authentication
+  if (!hasHydrated || !isAuthenticated) {
+    console.log('Recipes loader: not authenticated, skipping data fetch');
+    return null;
+  }
+
   const { recipes, fetchRecipes } = useRecipeStore.getState();
 
   // Only fetch if we don't already have recipes
@@ -39,6 +64,15 @@ const recipesLoader = async () => {
 };
 
 const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
+  // Wait for hydration and check authentication
+  if (!hasHydrated || !isAuthenticated) {
+    console.log('Recipe detail loader: not authenticated, skipping data fetch');
+    return null;
+  }
+
   const { fetchRecipeById } = useRecipeStore.getState();
   if (params.id) {
     return fetchRecipeById(params.id);
@@ -47,6 +81,15 @@ const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
 };
 
 const mealPlanLoader = async () => {
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
+  // Wait for hydration and check authentication
+  if (!hasHydrated || !isAuthenticated) {
+    console.log('Meal plan loader: not authenticated, skipping data fetch');
+    return null;
+  }
+
   const { loadWeek } = useMealPlanStore.getState();
   const { recipes, fetchRecipes } = useRecipeStore.getState();
   await Promise.all([
@@ -64,41 +107,85 @@ export const router = createBrowserRouter([
     HydrateFallback,
     children: [
       {
-        index: true,
-        element: <HomePage />,
-        loader: homeLoader,
-      },
-      {
-        path: 'recipes',
-        element: <RecipesPage />,
-        loader: recipesLoader,
-      },
-      {
-        path: 'recipes/new',
-        element: <NewRecipePage />,
-      },
-      {
-        path: 'recipes/:id',
-        element: <RecipesDetail />,
-        loader: recipeDetailLoader,
-      },
-      {
-        path: 'recipes/:id/edit',
-        element: <RecipesEditPage />,
-        loader: recipeDetailLoader,
-      },
-      {
-        path: 'meal-plan',
-        element: <MealPlanPage />,
-        loader: mealPlanLoader,
-      },
-      {
         path: 'login',
-        element: <LoginPage />,
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <LoginPage />
+          </Suspense>
+        ),
       },
+      // Development-only component showcase (excluded from production bundle)
+      ...(import.meta.env.DEV
+        ? [
+            {
+              path: 'dev/components',
+              element: (
+                <Suspense fallback={<LoadingSpinner />}>
+                  <ComponentShowcase />
+                </Suspense>
+              ),
+            },
+          ]
+        : []),
+      // Protected routes - require authentication
       {
-        path: 'dev/components',
-        element: <ComponentShowcase />,
+        path: '/',
+        element: <ProtectedRoute />,
+        children: [
+          {
+            index: true,
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <HomePage />
+              </Suspense>
+            ),
+            loader: homeLoader,
+          },
+          {
+            path: 'recipes',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <RecipesPage />
+              </Suspense>
+            ),
+            loader: recipesLoader,
+          },
+          {
+            path: 'recipes/new',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <NewRecipePage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'recipes/:id',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <RecipesDetail />
+              </Suspense>
+            ),
+            loader: recipeDetailLoader,
+          },
+          {
+            path: 'recipes/:id/edit',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <RecipesEditPage />
+              </Suspense>
+            ),
+            loader: recipeDetailLoader,
+          },
+          {
+            path: 'meal-plan',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <MealPlanPage />
+              </Suspense>
+            ),
+            loader: mealPlanLoader,
+          },
+        ],
       },
     ],
   },
