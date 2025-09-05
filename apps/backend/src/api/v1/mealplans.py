@@ -110,6 +110,11 @@ def _apply_cooked_patch(meal: Meal, patch: MealEntryPatch) -> None:
     "/weekly",
     summary="Get weekly meal plan",
     response_model=ApiResponse[WeeklyMealPlanOut],
+    description="Return the weekly meal plan for the authenticated user.",
+    responses={
+        200: {"description": "Weekly meal plan retrieved successfully"},
+        401: {"description": "Authentication required"},
+    },
 )
 async def get_weekly_meal_plan(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -238,6 +243,12 @@ async def replace_weekly_plan(
     "/",
     summary="Create a meal entry",
     response_model=ApiResponse[MealEntryOut],
+    description="Create a new meal plan entry for the authenticated user.",
+    responses={
+        201: {"description": "Meal entry created successfully"},
+        401: {"description": "Authentication required"},
+        422: {"description": "Validation error"},
+    },
 )
 async def create_meal_entry(
     entry: MealEntryIn,
@@ -281,6 +292,13 @@ async def create_meal_entry(
     "/{meal_id}",
     summary="Update a meal entry",
     response_model=ApiResponse[MealEntryOut],
+    description="Update an existing meal plan entry. Users can only update their own entries.",
+    responses={
+        200: {"description": "Meal entry updated successfully"},
+        401: {"description": "Authentication required"},
+        404: {"description": "Meal entry not found or access denied"},
+        422: {"description": "Validation error"},
+    },
 )
 async def update_meal_entry(
     meal_id: UUID,
@@ -310,6 +328,12 @@ async def update_meal_entry(
     "/{meal_id}",
     summary="Delete a meal entry",
     response_model=ApiResponse[dict[str, Any]],
+    description="Delete a meal entry. Users can only delete their own entries.",
+    responses={
+        200: {"description": "Meal entry deleted successfully"},
+        401: {"description": "Authentication required"},
+        404: {"description": "Meal entry not found or access denied"},
+    },
 )
 async def delete_meal_entry(
     meal_id: UUID,

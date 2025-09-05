@@ -44,8 +44,14 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
     summary="Create a new recipe",
     description=(
         "Create a new recipe with its ingredients, "
-        "returning the created recipe with IDs."
+        "returning the created recipe with IDs. "
+        "Requires authentication."
     ),
+    responses={
+        201: {"description": "Recipe created successfully"},
+        401: {"description": "Authentication required"},
+        422: {"description": "Validation error"},
+    },
 )
 async def create_recipe(
     recipe_data: RecipeCreate, 
@@ -420,6 +426,15 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
     "/",
     response_model=ApiResponse[RecipeSearchResponse],
     summary="Search recipes with optional filters and pagination",
+    description=(
+        "Return recipes with filters applied and paginated results. "
+        "Users can only see their own recipes unless they are an admin. "
+        "Requires authentication."
+    ),
+    responses={
+        200: {"description": "Recipes retrieved successfully"},
+        401: {"description": "Authentication required"},
+    },
 )
 async def list_recipes(
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -502,7 +517,14 @@ async def list_recipes(
 
 
 @router.get(
-    "/{recipe_id}", response_model=ApiResponse[RecipeOut], summary="Get a recipe by id"
+    "/{recipe_id}", 
+    response_model=ApiResponse[RecipeOut], 
+    summary="Get a recipe by id",
+    responses={
+        200: {"description": "Recipe retrieved successfully"},
+        401: {"description": "Authentication required"},
+        404: {"description": "Recipe not found or access denied"},
+    },
 )
 async def get_recipe(
     recipe_id: UUIDType,
@@ -536,7 +558,15 @@ async def get_recipe(
 
 
 @router.put(
-    "/{recipe_id}", response_model=ApiResponse[RecipeOut], summary="Update a recipe"
+    "/{recipe_id}", 
+    response_model=ApiResponse[RecipeOut], 
+    summary="Update a recipe",
+    responses={
+        200: {"description": "Recipe updated successfully"},
+        401: {"description": "Authentication required"},
+        404: {"description": "Recipe not found or access denied"},
+        422: {"description": "Validation error"},
+    },
 )
 async def update_recipe(
     recipe_id: UUIDType,
@@ -598,7 +628,14 @@ async def update_recipe(
 
 
 @router.delete(
-    "/{recipe_id}", response_model=ApiResponse[None], summary="Delete a recipe"
+    "/{recipe_id}", 
+    response_model=ApiResponse[None], 
+    summary="Delete a recipe",
+    responses={
+        200: {"description": "Recipe deleted successfully"},
+        401: {"description": "Authentication required"},
+        404: {"description": "Recipe not found or access denied"},
+    },
 )
 async def delete_recipe(
     recipe_id: UUIDType,
