@@ -63,7 +63,7 @@ class ApiClient {
 
       if (!resp.ok) {
         const apiError: ApiError = {
-          message: body.message ?? `Request failed (${resp.status})`,
+          message: body.detail ?? body.message ?? `Request failed (${resp.status})`,
           status: resp.status,
         };
         throw apiError;
@@ -88,6 +88,11 @@ class ApiClient {
       // Fallback for non-wrapped responses (e.g., health check)
       return body as T;
     } catch (err: unknown) {
+      // If we already created an ApiError, just re-throw it
+      if (err && typeof err === 'object' && 'message' in err && 'status' in err) {
+        throw err;
+      }
+      
       const apiError: ApiError =
         err instanceof Error
           ? { message: err.message }
