@@ -1,4 +1,5 @@
 import { createBrowserRouter } from 'react-router-dom';
+import HydrateFallback from './components/HydrateFallback';
 import Root from './components/Root';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <Root />,
+    HydrateFallback,
     children: [
       {
         index: true,

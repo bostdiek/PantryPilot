@@ -43,6 +43,40 @@
                 "reveal": "always",
                 "panel": "new"
             }
+        },
+        {
+            "label": "Test: Run Pattern (-k)",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run pytest -k \"${input:pytestPattern}\" -q",
+            "group": "test",
+            "presentation": {"reveal": "always", "panel": "dedicated"}
+        },
+        {
+            "label": "Test: Run Single Node",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run pytest ${input:pytestNode} -q",
+            "group": "test",
+            "presentation": {"reveal": "always", "panel": "dedicated"}
+        },
+        {
+            "label": "Test: Rerun Last Failures",
+            "type": "shell",
+            "command": "cd ${workspaceFolder}/apps/backend && uv run pytest --last-failed -q",
+            "group": "test",
+            "presentation": {"reveal": "always", "panel": "dedicated"}
+        }
+    ]
+    ,
+    "inputs": [
+        {
+            "id": "pytestPattern",
+            "type": "promptString",
+            "description": "Pytest -k expression (pattern)"
+        },
+        {
+            "id": "pytestNode",
+            "type": "promptString",
+            "description": "Test node path (e.g. tests/test_auth.py::test_login_success)"
         }
     ]
 }

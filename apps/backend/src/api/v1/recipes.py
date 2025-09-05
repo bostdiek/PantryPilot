@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from models.ingredient_names import Ingredient
 from models.recipe_ingredients import RecipeIngredient
@@ -30,23 +31,6 @@ from schemas.recipes import (
     RecipeSearchResponse,
     RecipeUpdate,
 )
-
-
-# NOTE: This project does not yet have a user system wired into the Recipe model
-# (there is no `user_id` column on `Recipe`). Endpoints below accept an optional
-# `current_user` dependency so they can be wired into an auth system later. When
-# the `Recipe` model adds `user_id`, the ownership checks will automatically be
-# applied by the helpers below.
-
-
-async def _get_current_user_stub() -> dict | None:
-    """Placeholder dependency for current user.
-
-    Replace this with your real `get_current_user` dependency when available.
-    Returning None means "no user linked" and endpoints fall back to public
-    behaviour (returns all recipes).
-    """
-    return None
 
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -416,7 +400,7 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
 )
 async def list_recipes(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
+    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
     query: str | None = None,
     difficulty: RecipeDifficulty | None = None,
     max_total_time: int | None = None,
@@ -495,7 +479,7 @@ async def list_recipes(
 async def get_recipe(
     recipe_id: UUIDType,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
+    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
 ) -> ApiResponse[RecipeOut]:
     stmt = (
         select(Recipe)
@@ -535,7 +519,7 @@ async def update_recipe(
     recipe_id: UUIDType,
     recipe_data: RecipeUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
+    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
 ) -> ApiResponse[RecipeOut]:
     # Load existing recipe with ingredients
     stmt = (
@@ -599,7 +583,7 @@ async def update_recipe(
 async def delete_recipe(
     recipe_id: UUIDType,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(_get_current_user_stub)] = None,
+    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
 ) -> ApiResponse[None]:
     stmt = select(Recipe).where(Recipe.id == recipe_id)
     result = await db.execute(stmt)
