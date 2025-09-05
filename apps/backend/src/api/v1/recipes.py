@@ -337,11 +337,13 @@ async def _get_or_create_ingredient(
     )
     result = await db.execute(stmt)
     ingredient = result.scalars().first()
-    
+
     if not ingredient:
         try:
             # Try to create new ingredient
-            ingredient = Ingredient(id=uuid.uuid4(), user_id=user_id, ingredient_name=name)
+            ingredient = Ingredient(
+                id=uuid.uuid4(), user_id=user_id, ingredient_name=name
+            )
             db.add(ingredient)
             await db.flush()
         except IntegrityError:
@@ -353,7 +355,7 @@ async def _get_or_create_ingredient(
             if not ingredient:
                 # This should be extremely rare - re-raise the original error
                 raise
-    
+
     return ingredient
 
 

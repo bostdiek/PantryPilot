@@ -8,10 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, asc, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies.auth import (
-    check_resource_write_access,
-    get_current_user,
-)
+from dependencies.auth import check_resource_write_access, get_current_user
 from dependencies.db import get_db
 from models.meal_history import Meal
 from models.users import User

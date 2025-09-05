@@ -6,10 +6,8 @@ import uuid
 
 import pytest
 from fastapi import status
-from httpx import AsyncClient
 
 from dependencies.auth import check_resource_access, check_resource_write_access
-from models.recipes_names import Recipe
 from models.users import User
 
 
@@ -74,11 +72,11 @@ class TestEndpointAuthorization:
             check_resource_access(recipe, user)
 
         # Should return 404 to avoid leaking resource existence
-        assert hasattr(exc_info.value, 'status_code')
+        assert hasattr(exc_info.value, "status_code")
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
     def test_recipe_write_authorization_user_can_modify_own_recipe(self):
-        """Test that a user can modify their own recipe through write authorization check."""
+        """Ensure a user can modify their own recipe via write authorization."""
         user_id = uuid.uuid4()
         user = User(
             id=user_id,
@@ -126,10 +124,10 @@ class TestEndpointAuthorization:
         with pytest.raises(Exception) as exc_info:
             check_resource_access(recipe, admin_user, allow_admin_override=False)
 
-        assert hasattr(exc_info.value, 'status_code')
+        assert hasattr(exc_info.value, "status_code")
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
 
-# Note: Full endpoint integration tests would require database setup and 
+# Note: Full endpoint integration tests would require database setup and
 # HTTP client testing. These tests focus on the authorization logic patterns
 # that would be used by the actual endpoints.

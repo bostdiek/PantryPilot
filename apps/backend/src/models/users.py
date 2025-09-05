@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import UUID, Boolean, CheckConstraint, DateTime, String, func
+from sqlalchemy import UUID, Boolean, CheckConstraint, DateTime, String, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
@@ -37,7 +37,7 @@ class User(Base):
     )
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_admin: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=func.false()
+        Boolean, nullable=False, server_default=false()
     )
     first_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -51,4 +51,6 @@ class User(Base):
     # Relationships
     meal: Mapped[list[Meal]] = relationship("Meal", back_populates="user")
     recipes: Mapped[list[Recipe]] = relationship("Recipe", back_populates="user")
-    ingredients: Mapped[list[Ingredient]] = relationship("Ingredient", back_populates="user")
+    ingredients: Mapped[list[Ingredient]] = relationship(
+        "Ingredient", back_populates="user"
+    )
