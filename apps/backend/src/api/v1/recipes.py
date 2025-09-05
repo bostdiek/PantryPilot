@@ -17,7 +17,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from dependencies.auth import check_resource_access, check_resource_write_access, get_current_user
+from dependencies.auth import (
+    check_resource_access,
+    check_resource_write_access,
+    get_current_user,
+)
 from dependencies.db import get_db
 from models.ingredient_names import Ingredient
 from models.recipe_ingredients import RecipeIngredient
@@ -54,7 +58,7 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
     },
 )
 async def create_recipe(
-    recipe_data: RecipeCreate, 
+    recipe_data: RecipeCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[RecipeOut]:
@@ -111,7 +115,7 @@ async def create_recipe(
                     or_(
                         Ingredient.user_id == current_user.id,
                         Ingredient.user_id.is_(None),  # Legacy ingredients
-                    )
+                    ),
                 )
             )
             result = await db.execute(stmt)
@@ -301,7 +305,9 @@ def _recipe_to_response(
     return RecipeOut(**response_data)
 
 
-async def _get_or_create_ingredient(db: AsyncSession, name: str, user_id: UUID) -> Ingredient:
+async def _get_or_create_ingredient(
+    db: AsyncSession, name: str, user_id: UUIDType
+) -> Ingredient:
     """Return an existing Ingredient by name for the user or create a new one.
 
     Keeps DB interaction isolated to reduce complexity in route handlers.
@@ -326,7 +332,7 @@ async def _get_or_create_ingredient(db: AsyncSession, name: str, user_id: UUID) 
             or_(
                 Ingredient.user_id == user_id,
                 Ingredient.user_id.is_(None),  # Legacy ingredients
-            )
+            ),
         )
     )
     result = await db.execute(stmt)
@@ -339,7 +345,7 @@ async def _get_or_create_ingredient(db: AsyncSession, name: str, user_id: UUID) 
 
 
 async def _replace_recipe_ingredients(
-    db: AsyncSession, recipe: Recipe, ingredients_data: list, user_id: UUID
+    db: AsyncSession, recipe: Recipe, ingredients_data: list, user_id: UUIDType
 ) -> list[RecipeIngredient]:
     """Replace all ingredient associations for a recipe with new ones.
 
@@ -517,8 +523,8 @@ async def list_recipes(
 
 
 @router.get(
-    "/{recipe_id}", 
-    response_model=ApiResponse[RecipeOut], 
+    "/{recipe_id}",
+    response_model=ApiResponse[RecipeOut],
     summary="Get a recipe by id",
     responses={
         200: {"description": "Recipe retrieved successfully"},
@@ -542,12 +548,10 @@ async def get_recipe(
     )
     result = await db.execute(stmt)
     recipe = result.scalars().first()
-    
+
     # Check ownership and access permissions
     recipe = check_resource_access(
-        recipe, 
-        current_user,
-        not_found_message="Recipe not found"
+        recipe, current_user, not_found_message="Recipe not found"
     )
 
     ingredients = list(recipe.recipeingredients or [])
@@ -558,8 +562,8 @@ async def get_recipe(
 
 
 @router.put(
-    "/{recipe_id}", 
-    response_model=ApiResponse[RecipeOut], 
+    "/{recipe_id}",
+    response_model=ApiResponse[RecipeOut],
     summary="Update a recipe",
     responses={
         200: {"description": "Recipe updated successfully"},
@@ -586,13 +590,13 @@ async def update_recipe(
     )
     result = await db.execute(stmt)
     recipe = result.scalars().first()
-    
+
     # Check write access permissions
     recipe = check_resource_write_access(
         recipe,
         current_user,
         not_found_message="Recipe not found",
-        forbidden_message="Not allowed to modify this recipe"
+        forbidden_message="Not allowed to modify this recipe",
     )
 
     try:
@@ -601,7 +605,9 @@ async def update_recipe(
 
         # If ingredients provided, replace associations
         if recipe_data.ingredients is not None:
-            await _replace_recipe_ingredients(db, recipe, recipe_data.ingredients, current_user.id)
+            await _replace_recipe_ingredients(
+                db, recipe, recipe_data.ingredients, current_user.id
+            )
 
         await db.commit()
         await db.refresh(recipe)
@@ -628,8 +634,8 @@ async def update_recipe(
 
 
 @router.delete(
-    "/{recipe_id}", 
-    response_model=ApiResponse[None], 
+    "/{recipe_id}",
+    response_model=ApiResponse[None],
     summary="Delete a recipe",
     responses={
         200: {"description": "Recipe deleted successfully"},
@@ -645,13 +651,13 @@ async def delete_recipe(
     stmt = select(Recipe).where(Recipe.id == recipe_id)
     result = await db.execute(stmt)
     recipe = result.scalars().first()
-    
+
     # Check delete permissions
     recipe = check_resource_write_access(
         recipe,
         current_user,
         not_found_message="Recipe not found",
-        forbidden_message="Not allowed to delete this recipe"
+        forbidden_message="Not allowed to delete this recipe",
     )
 
     try:

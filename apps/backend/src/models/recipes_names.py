@@ -11,7 +11,9 @@ class Recipe(Base):
     __tablename__ = "recipe_names"
 
     id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)  # TODO: Make NOT NULL after migration
+    user_id = Column(
+        UUID(as_uuid=True), ForeignKey("users.id"), nullable=True
+    )  # TODO: Make NOT NULL after migration
     name = Column(String(255), nullable=False, index=True)
     prep_time_minutes = Column(Integer, nullable=True)
     cook_time_minutes = Column(Integer, nullable=True)

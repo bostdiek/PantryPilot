@@ -8,7 +8,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, asc, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies.auth import check_resource_access, check_resource_write_access, get_current_user
+from dependencies.auth import (
+    check_resource_write_access,
+    get_current_user,
+)
 from dependencies.db import get_db
 from models.meal_history import Meal
 from models.users import User
@@ -236,7 +239,9 @@ async def replace_weekly_plan(
     await db.commit()
 
     # Return the newly built week
-    return await get_weekly_meal_plan(start=start_date, db=db, current_user=current_user)
+    return await get_weekly_meal_plan(
+        start=start_date, db=db, current_user=current_user
+    )
 
 
 @meals_router.post(
@@ -292,7 +297,9 @@ async def create_meal_entry(
     "/{meal_id}",
     summary="Update a meal entry",
     response_model=ApiResponse[MealEntryOut],
-    description="Update an existing meal plan entry. Users can only update their own entries.",
+    description=(
+        "Update an existing meal plan entry. Users can only update their own entries."
+    ),
     responses={
         200: {"description": "Meal entry updated successfully"},
         401: {"description": "Authentication required"},
@@ -309,13 +316,13 @@ async def update_meal_entry(
     """Update an existing meal plan entry (basic field updates)."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
-    
+
     # Check ownership
     meal = check_resource_write_access(
         meal,
         current_user,
         not_found_message="Meal entry not found",
-        forbidden_message="Not allowed to modify this meal entry"
+        forbidden_message="Not allowed to modify this meal entry",
     )
     _apply_meal_patch(meal, patch)
 
@@ -343,15 +350,15 @@ async def delete_meal_entry(
     """Delete a meal entry."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
-    
+
     # Check ownership before deletion
     meal = check_resource_write_access(
         meal,
         current_user,
         not_found_message="Meal entry not found",
-        forbidden_message="Not allowed to delete this meal entry"
+        forbidden_message="Not allowed to delete this meal entry",
     )
-    
+
     await db.execute(delete(Meal).where(Meal.id == meal_id))
     await db.commit()
     return ApiResponse(success=True, data={"id": str(meal_id)})
@@ -371,13 +378,13 @@ async def mark_meal_cooked(
     """Mark a meal as cooked (sets was_cooked and cooked_at)."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
-    
+
     # Check ownership
     meal = check_resource_write_access(
         meal,
         current_user,
         not_found_message="Meal entry not found",
-        forbidden_message="Not allowed to modify this meal entry"
+        forbidden_message="Not allowed to modify this meal entry",
     )
     cooked_at: datetime | None = payload.cooked_at if payload else None
     m_any = cast(Any, meal)

@@ -35,7 +35,7 @@ def upgrade() -> None:
     )
     op.create_foreign_key(
         "fk_recipe_names_user_id",
-        "recipe_names", 
+        "recipe_names",
         "users",
         ["user_id"],
         ["id"],
@@ -49,7 +49,7 @@ def upgrade() -> None:
     op.create_foreign_key(
         "fk_ingredient_names_user_id",
         "ingredient_names",
-        "users", 
+        "users",
         ["user_id"],
         ["id"],
     )
@@ -62,10 +62,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop foreign key constraints and columns
-    op.drop_constraint("fk_ingredient_names_user_id", "ingredient_names", type_="foreignkey")
+    op.drop_constraint(
+        "fk_ingredient_names_user_id", "ingredient_names", type_="foreignkey"
+    )
     op.drop_column("ingredient_names", "user_id")
-    
+
     op.drop_constraint("fk_recipe_names_user_id", "recipe_names", type_="foreignkey")
     op.drop_column("recipe_names", "user_id")
-    
+
     op.drop_column("users", "is_admin")
