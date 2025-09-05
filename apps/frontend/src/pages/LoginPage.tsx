@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
@@ -17,11 +17,11 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const authStore = useAuthStore();
 
-  // Get the intended destination or default to home
-  const from = (location.state as { from?: string })?.from || '/';
+  // Get the intended destination from query parameter or default to home
+  const from = searchParams.get('next') || '/';
 
   const handleInputChange = (name: string) => (value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));

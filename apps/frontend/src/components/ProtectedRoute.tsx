@@ -16,9 +16,10 @@ const ProtectedRoute: React.FC = () => {
     );
   }
 
-  // If not authenticated, navigate to login with current location
+  // If not authenticated, navigate to login with current location as query parameter
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    const loginUrl = `/login?next=${encodeURIComponent(location.pathname + location.search)}`;
+    return <Navigate to={loginUrl} replace />;
   }
 
   // If authenticated, render the protected route content
