@@ -24,14 +24,14 @@ const LoginPage: React.FC = () => {
   const from = (location.state as { from?: string })?.from || '/';
 
   const handleInputChange = (name: string) => (value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     // Clear error when user starts typing
     if (error) setError(null);
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    
+
     if (!formData.username || !formData.password) {
       setError('Please enter both username and password');
       return;
@@ -61,8 +61,10 @@ const LoginPage: React.FC = () => {
     <Container size="sm">
       <div className="flex min-h-screen flex-col items-center justify-center">
         <Card variant="default" className="w-full max-w-md p-6">
-          <h1 className="mb-6 text-center text-2xl font-bold">Login to PantryPilot</h1>
-          
+          <h1 className="mb-6 text-center text-2xl font-bold">
+            Login to PantryPilot
+          </h1>
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
               label="Username"
@@ -74,7 +76,7 @@ const LoginPage: React.FC = () => {
               required
               disabled={isLoading}
             />
-            
+
             <Input
               label="Password"
               name="password"

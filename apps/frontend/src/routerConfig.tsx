@@ -17,8 +17,9 @@ import { useRecipeStore } from './stores/useRecipeStore';
 // Loader functions with auth checks
 const homeLoader = async () => {
   console.log('Home loader executing...');
-  const { hasHydrated, isAuthenticated } = useAuthStore.getState();
-  
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
   // Wait for hydration and check authentication
   if (!hasHydrated || !isAuthenticated) {
     console.log('Home loader: not authenticated, skipping data fetch');
@@ -38,8 +39,9 @@ const homeLoader = async () => {
 };
 
 const recipesLoader = async () => {
-  const { hasHydrated, isAuthenticated } = useAuthStore.getState();
-  
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
   // Wait for hydration and check authentication
   if (!hasHydrated || !isAuthenticated) {
     console.log('Recipes loader: not authenticated, skipping data fetch');
@@ -57,8 +59,9 @@ const recipesLoader = async () => {
 };
 
 const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
-  const { hasHydrated, isAuthenticated } = useAuthStore.getState();
-  
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
   // Wait for hydration and check authentication
   if (!hasHydrated || !isAuthenticated) {
     console.log('Recipe detail loader: not authenticated, skipping data fetch');
@@ -73,9 +76,10 @@ const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
 };
 
 const mealPlanLoader = async () => {
-  const { hasHydrated, isAuthenticated } = useAuthStore.getState();
-  
-  // Wait for hydration and check authentication  
+  const { hasHydrated, token } = useAuthStore.getState();
+  const isAuthenticated = token !== null;
+
+  // Wait for hydration and check authentication
   if (!hasHydrated || !isAuthenticated) {
     console.log('Meal plan loader: not authenticated, skipping data fetch');
     return null;

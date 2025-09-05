@@ -1,9 +1,10 @@
 import React from 'react';
-import { Navigate, useLocation, Outlet } from 'react-router-dom';
-import { useAuthStore } from '../stores/useAuthStore';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
 
 const ProtectedRoute: React.FC = () => {
-  const { hasHydrated, isAuthenticated } = useAuthStore();
+  const { hasHydrated } = useAuthStore();
+  const isAuthenticated = useIsAuthenticated();
   const location = useLocation();
 
   // If not hydrated yet, render nothing or a skeleton

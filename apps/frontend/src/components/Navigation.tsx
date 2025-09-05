@@ -1,10 +1,11 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/useAuthStore';
+import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
 import { Button } from './ui/Button';
 
 const Navigation: React.FC = () => {
-  const { hasHydrated, isAuthenticated, logout } = useAuthStore();
+  const { hasHydrated, logout } = useAuthStore();
+  const isAuthenticated = useIsAuthenticated();
   const navigate = useNavigate();
 
   const handleLogout = () => {

@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/useAuthStore';
-import type { ApiError, ApiResponse, HealthCheckResponse } from '../types/api';
+import type { ApiResponse, HealthCheckResponse } from '../types/api';
+import { ApiErrorImpl } from '../types/api';
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
 
@@ -62,11 +63,10 @@ class ApiClient {
       }
 
       if (!resp.ok) {
-        const apiError: ApiError = {
-          message: body.detail ?? body.message ?? `Request failed (${resp.status})`,
-          status: resp.status,
-        };
-        throw apiError;
+        throw new ApiErrorImpl(
+          body.detail ?? body.message ?? `Request failed (${resp.status})`,
+          resp.status
+        );
       }
 
       // Handle wrapped API responses
@@ -75,11 +75,10 @@ class ApiClient {
         const apiResponse = body as ApiResponse<T>;
 
         if (!apiResponse.success) {
-          const apiError: ApiError = {
-            message: apiResponse.message ?? 'Request failed',
-            status: resp.status,
-          };
-          throw apiError;
+          throw new ApiErrorImpl(
+            apiResponse.message ?? 'Request failed',
+            resp.status
+          );
         }
 
         return apiResponse.data as T;
@@ -88,15 +87,13 @@ class ApiClient {
       // Fallback for non-wrapped responses (e.g., health check)
       return body as T;
     } catch (err: unknown) {
-      // If we already created an ApiError, just re-throw it
-      if (err && typeof err === 'object' && 'message' in err && 'status' in err) {
+      if (err instanceof ApiErrorImpl) {
         throw err;
       }
-      
-      const apiError: ApiError =
+      const apiError =
         err instanceof Error
-          ? { message: err.message }
-          : { message: 'Unknown error' };
+          ? new ApiErrorImpl(err.message)
+          : new ApiErrorImpl('Unknown error');
       console.error(`API request failed: ${url}`, apiError);
       throw apiError;
     }
