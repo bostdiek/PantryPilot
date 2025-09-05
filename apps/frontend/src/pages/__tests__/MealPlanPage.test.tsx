@@ -51,7 +51,7 @@ vi.mock('../../components/ui/icons/chevron-up-down.svg?react', () => ({
 beforeEach(() => {
   // Get the initial state with all methods
   const initialState = useMealPlanStore.getState();
-  
+
   // Seed store state with a simple week and one entry
   useMealPlanStore.setState({
     ...initialState,
@@ -105,10 +105,10 @@ describe('MealPlanPage', () => {
 
     // Store the original markCooked method
     const originalMarkCooked = useMealPlanStore.getState().markCooked;
-    
+
     // Create a spy on the store's markCooked method
     const markSpy = vi.fn().mockResolvedValue();
-    
+
     // Update the store state to include our spy
     useMealPlanStore.setState((state) => ({
       ...state,
@@ -126,7 +126,7 @@ describe('MealPlanPage', () => {
 
     expect(markSpy).toHaveBeenCalledTimes(1);
     expect(markSpy.mock.calls[0][0]).toBe('m1');
-    
+
     // Restore the original markCooked method
     useMealPlanStore.setState((state) => ({
       ...state,
