@@ -23,8 +23,7 @@ const LoginPage: React.FC = () => {
   // Get the intended destination or default to home
   const from = (location.state as { from?: string })?.from || '/';
 
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = event.target;
+  const handleInputChange = (name: string) => (value: string) => {
     setFormData(prev => ({ ...prev, [name]: value }));
     // Clear error when user starts typing
     if (error) setError(null);
@@ -70,7 +69,7 @@ const LoginPage: React.FC = () => {
               name="username"
               type="text"
               value={formData.username}
-              onChange={handleInputChange}
+              onChange={handleInputChange('username')}
               placeholder="Enter your username"
               required
               disabled={isLoading}
@@ -81,7 +80,7 @@ const LoginPage: React.FC = () => {
               name="password"
               type="password"
               value={formData.password}
-              onChange={handleInputChange}
+              onChange={handleInputChange('password')}
               placeholder="Enter your password"
               required
               disabled={isLoading}
