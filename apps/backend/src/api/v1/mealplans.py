@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, asc, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dependencies.auth import check_resource_access, check_resource_write_access, get_current_user
 from dependencies.db import get_db
 from models.meal_history import Meal
 from models.users import User
@@ -112,22 +113,18 @@ def _apply_cooked_patch(meal: Meal, patch: MealEntryPatch) -> None:
 )
 async def get_weekly_meal_plan(
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     start: date | None = None,
 ) -> ApiResponse[WeeklyMealPlanOut]:
-    """Return the weekly meal plan for the current (demo) user.
-
-    Until auth is wired, we use a demo user created on-demand.
-    TODO: Replace with real `current_user` dependency once available.
-    """
+    """Return the weekly meal plan for the authenticated user."""
     start_date = _sunday_start(start or date.today())
     end_date = start_date + timedelta(days=7)
-    user = await _get_or_create_demo_user(db)
 
     stmt = (
         select(Meal)
         .where(
             and_(
-                Meal.user_id == user.id,
+                Meal.user_id == current_user.id,
                 Meal.planned_for_date >= start_date,
                 Meal.planned_for_date < end_date,
             )
@@ -180,6 +177,7 @@ async def get_weekly_meal_plan(
 async def replace_weekly_plan(
     payload: list[MealEntryIn],
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     start: date | None = None,
 ) -> ApiResponse[WeeklyMealPlanOut]:
     """Replace the given week's entries with provided entries for the user.
@@ -188,7 +186,6 @@ async def replace_weekly_plan(
     """
     start_date = _sunday_start(start or date.today())
     end_date = start_date + timedelta(days=7)
-    user = await _get_or_create_demo_user(db)
 
     # Validate all entries are within the target week
     for e in payload:
@@ -202,7 +199,7 @@ async def replace_weekly_plan(
     await db.execute(
         delete(Meal).where(
             and_(
-                Meal.user_id == user.id,
+                Meal.user_id == current_user.id,
                 Meal.planned_for_date >= start_date,
                 Meal.planned_for_date < end_date,
             )
@@ -218,7 +215,7 @@ async def replace_weekly_plan(
         order_track[e.planned_for_date] = idx
 
         meal = Meal(
-            user_id=user.id,
+            user_id=current_user.id,
             recipe_id=e.recipe_id,
             planned_for_date=e.planned_for_date,
             meal_type=e.meal_type,
@@ -234,7 +231,7 @@ async def replace_weekly_plan(
     await db.commit()
 
     # Return the newly built week
-    return await get_weekly_meal_plan(start=start_date, db=db)
+    return await get_weekly_meal_plan(start=start_date, db=db, current_user=current_user)
 
 
 @meals_router.post(
@@ -245,16 +242,16 @@ async def replace_weekly_plan(
 async def create_meal_entry(
     entry: MealEntryIn,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[MealEntryOut]:
-    """Create a new meal plan entry for the (demo) user."""
-    user = await _get_or_create_demo_user(db)
+    """Create a new meal plan entry for the authenticated user."""
 
     # Determine next order_index if not provided
     idx = entry.order_index
     if idx is None:
         stmt = select(func.max(Meal.order_index)).where(
             and_(
-                Meal.user_id == user.id,
+                Meal.user_id == current_user.id,
                 Meal.planned_for_date == entry.planned_for_date,
             )
         )
@@ -263,7 +260,7 @@ async def create_meal_entry(
         idx = int(max_idx) + 1
 
     meal = Meal(
-        user_id=user.id,
+        user_id=current_user.id,
         recipe_id=entry.recipe_id,
         planned_for_date=entry.planned_for_date,
         meal_type=entry.meal_type,
@@ -289,12 +286,19 @@ async def update_meal_entry(
     meal_id: UUID,
     patch: MealEntryPatch,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[MealEntryOut]:
     """Update an existing meal plan entry (basic field updates)."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
-    if not meal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    
+    # Check ownership
+    meal = check_resource_write_access(
+        meal,
+        current_user,
+        not_found_message="Meal entry not found",
+        forbidden_message="Not allowed to modify this meal entry"
+    )
     _apply_meal_patch(meal, patch)
 
     await db.commit()
@@ -310,8 +314,20 @@ async def update_meal_entry(
 async def delete_meal_entry(
     meal_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[dict[str, Any]]:
     """Delete a meal entry."""
+    result = await db.execute(select(Meal).where(Meal.id == meal_id))
+    meal = result.scalars().first()
+    
+    # Check ownership before deletion
+    meal = check_resource_write_access(
+        meal,
+        current_user,
+        not_found_message="Meal entry not found",
+        forbidden_message="Not allowed to delete this meal entry"
+    )
+    
     await db.execute(delete(Meal).where(Meal.id == meal_id))
     await db.commit()
     return ApiResponse(success=True, data={"id": str(meal_id)})
@@ -325,13 +341,20 @@ async def delete_meal_entry(
 async def mark_meal_cooked(
     meal_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
     payload: MarkCookedIn | None = None,
 ) -> ApiResponse[MealEntryOut]:
     """Mark a meal as cooked (sets was_cooked and cooked_at)."""
     result = await db.execute(select(Meal).where(Meal.id == meal_id))
     meal = result.scalars().first()
-    if not meal:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    
+    # Check ownership
+    meal = check_resource_write_access(
+        meal,
+        current_user,
+        not_found_message="Meal entry not found",
+        forbidden_message="Not allowed to modify this meal entry"
+    )
     cooked_at: datetime | None = payload.cooked_at if payload else None
     m_any = cast(Any, meal)
     m_any.was_cooked = True

@@ -17,11 +17,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from dependencies.auth import get_current_user
+from dependencies.auth import check_resource_access, check_resource_write_access, get_current_user
 from dependencies.db import get_db
 from models.ingredient_names import Ingredient
 from models.recipe_ingredients import RecipeIngredient
 from models.recipes_names import Recipe
+from models.users import User
 from schemas.api import ApiResponse
 from schemas.recipes import (
     RecipeCategory,
@@ -47,7 +48,9 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
     ),
 )
 async def create_recipe(
-    recipe_data: RecipeCreate, db: Annotated[AsyncSession, Depends(get_db)]
+    recipe_data: RecipeCreate, 
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[RecipeOut]:
     """Create a new recipe with ingredients.
 
@@ -70,6 +73,7 @@ async def create_recipe(
         now_ts = datetime.now(UTC)
         new_recipe = Recipe(
             id=uuid.uuid4(),
+            user_id=current_user.id,  # Set owner
             name=recipe_data.title,
             prep_time_minutes=recipe_data.prep_time_minutes,
             cook_time_minutes=recipe_data.cook_time_minutes,
@@ -94,15 +98,24 @@ async def create_recipe(
         # Process ingredients
         recipe_ingredients = []
         for ing_data in recipe_data.ingredients:
-            # Check if ingredient already exists by name
-            stmt = select(Ingredient).where(Ingredient.ingredient_name == ing_data.name)
+            # Check if ingredient already exists by name for this user
+            stmt = select(Ingredient).where(
+                and_(
+                    Ingredient.ingredient_name == ing_data.name,
+                    or_(
+                        Ingredient.user_id == current_user.id,
+                        Ingredient.user_id.is_(None),  # Legacy ingredients
+                    )
+                )
+            )
             result = await db.execute(stmt)
             ingredient = result.scalars().first()
 
-            # If not, create a new ingredient
+            # If not, create a new ingredient for this user
             if not ingredient:
                 ingredient = Ingredient(
                     id=uuid.uuid4(),
+                    user_id=current_user.id,  # Set owner
                     ingredient_name=ing_data.name,
                 )
                 db.add(ingredient)
@@ -282,14 +295,15 @@ def _recipe_to_response(
     return RecipeOut(**response_data)
 
 
-async def _get_or_create_ingredient(db: AsyncSession, name: str) -> Ingredient:
-    """Return an existing Ingredient by name or create a new one.
+async def _get_or_create_ingredient(db: AsyncSession, name: str, user_id: UUID) -> Ingredient:
+    """Return an existing Ingredient by name for the user or create a new one.
 
     Keeps DB interaction isolated to reduce complexity in route handlers.
 
     Args:
         db: The SQLAlchemy async session used for queries and persistence.
         name: The ingredient name to look up or create.
+        user_id: The user ID to associate with the ingredient.
 
     Returns:
         Ingredient: The existing (or newly created) `Ingredient` ORM object.
@@ -299,18 +313,27 @@ async def _get_or_create_ingredient(db: AsyncSession, name: str) -> Ingredient:
             creating a new ingredient.
         sqlalchemy.exc.SQLAlchemyError: For other SQLAlchemy-related database errors.
     """
-    stmt = select(Ingredient).where(Ingredient.ingredient_name == name)
+    # Look for ingredient by name for this user or legacy null user_id
+    stmt = select(Ingredient).where(
+        and_(
+            Ingredient.ingredient_name == name,
+            or_(
+                Ingredient.user_id == user_id,
+                Ingredient.user_id.is_(None),  # Legacy ingredients
+            )
+        )
+    )
     result = await db.execute(stmt)
     ingredient = result.scalars().first()
     if not ingredient:
-        ingredient = Ingredient(id=uuid.uuid4(), ingredient_name=name)
+        ingredient = Ingredient(id=uuid.uuid4(), user_id=user_id, ingredient_name=name)
         db.add(ingredient)
         await db.flush()
     return ingredient
 
 
 async def _replace_recipe_ingredients(
-    db: AsyncSession, recipe: Recipe, ingredients_data: list
+    db: AsyncSession, recipe: Recipe, ingredients_data: list, user_id: UUID
 ) -> list[RecipeIngredient]:
     """Replace all ingredient associations for a recipe with new ones.
 
@@ -343,7 +366,7 @@ async def _replace_recipe_ingredients(
 
     new_ris: list[RecipeIngredient] = []
     for ing in ingredients_data:
-        ingredient = await _get_or_create_ingredient(db, ing.name)
+        ingredient = await _get_or_create_ingredient(db, ing.name, user_id)
 
         ri = RecipeIngredient(
             id=uuid.uuid4(),
@@ -400,7 +423,7 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
 )
 async def list_recipes(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
+    current_user: Annotated[User, Depends(get_current_user)],
     query: str | None = None,
     difficulty: RecipeDifficulty | None = None,
     max_total_time: int | None = None,
@@ -420,9 +443,14 @@ async def list_recipes(
 
     filters = []
 
-    # If the model has a user_id attribute and we have a current_user, filter by it
-    if hasattr(Recipe, "user_id") and current_user and "id" in current_user:
-        filters.append(Recipe.user_id == current_user["id"])  # type: ignore[misc]
+    # Filter by user ownership (admin can see all recipes)
+    if not current_user.is_admin:
+        filters.append(
+            or_(
+                Recipe.user_id == current_user.id,
+                Recipe.user_id.is_(None),  # Legacy recipes without owner
+            )
+        )
 
     if query:
         like = f"%{query}%"
@@ -479,7 +507,7 @@ async def list_recipes(
 async def get_recipe(
     recipe_id: UUIDType,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[RecipeOut]:
     stmt = (
         select(Recipe)
@@ -492,18 +520,13 @@ async def get_recipe(
     )
     result = await db.execute(stmt)
     recipe = result.scalars().first()
-    if not recipe:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found"
-        )
-
-    # ownership check if user_id exists on model
-    if hasattr(Recipe, "user_id") and current_user and "id" in current_user:
-        if getattr(recipe, "user_id", None) != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to access this recipe",
-            )
+    
+    # Check ownership and access permissions
+    recipe = check_resource_access(
+        recipe, 
+        current_user,
+        not_found_message="Recipe not found"
+    )
 
     ingredients = list(recipe.recipeingredients or [])
     recipe_response = _recipe_to_response(recipe, ingredients)
@@ -519,7 +542,7 @@ async def update_recipe(
     recipe_id: UUIDType,
     recipe_data: RecipeUpdate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[RecipeOut]:
     # Load existing recipe with ingredients
     stmt = (
@@ -533,17 +556,14 @@ async def update_recipe(
     )
     result = await db.execute(stmt)
     recipe = result.scalars().first()
-    if not recipe:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found"
-        )
-
-    if hasattr(Recipe, "user_id") and current_user and "id" in current_user:
-        if getattr(recipe, "user_id", None) != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to modify this recipe",
-            )
+    
+    # Check write access permissions
+    recipe = check_resource_write_access(
+        recipe,
+        current_user,
+        not_found_message="Recipe not found",
+        forbidden_message="Not allowed to modify this recipe"
+    )
 
     try:
         # Apply scalar updates
@@ -551,7 +571,7 @@ async def update_recipe(
 
         # If ingredients provided, replace associations
         if recipe_data.ingredients is not None:
-            await _replace_recipe_ingredients(db, recipe, recipe_data.ingredients)
+            await _replace_recipe_ingredients(db, recipe, recipe_data.ingredients, current_user.id)
 
         await db.commit()
         await db.refresh(recipe)
@@ -583,23 +603,19 @@ async def update_recipe(
 async def delete_recipe(
     recipe_id: UUIDType,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[dict | None, Depends(get_current_user)] = None,
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[None]:
     stmt = select(Recipe).where(Recipe.id == recipe_id)
     result = await db.execute(stmt)
     recipe = result.scalars().first()
-    if not recipe:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Recipe not found",
-        )
-
-    if hasattr(Recipe, "user_id") and current_user and "id" in current_user:
-        if getattr(recipe, "user_id", None) != current_user["id"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not allowed to delete this recipe",
-            )
+    
+    # Check delete permissions
+    recipe = check_resource_write_access(
+        recipe,
+        current_user,
+        not_found_message="Recipe not found",
+        forbidden_message="Not allowed to delete this recipe"
+    )
 
     try:
         # Remove ingredients associations then delete recipe
