@@ -12,7 +12,7 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest --coverage",
+    "test:coverage": "NODE_OPTIONS=--experimental-global-webcrypto vitest --coverage",
     "preview": "vite preview",
     "prepare": "husky"
   },

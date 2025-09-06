@@ -27,6 +27,8 @@ class RecipeIngredient(Base):
     ingredient_id = Column(
         UUID(as_uuid=True), ForeignKey("ingredient_names.id"), nullable=False
     )  # noqa: E501
+    # Long SQLAlchemy column definition above is clearer on one line; E501
+    # (line-length) is suppressed intentionally to avoid awkward wrapping.
     quantity_value = Column(Numeric, nullable=True)
     quantity_unit = Column(String(64), nullable=True)
     prep = Column(JSONB, nullable=False, server_default="{}")

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class Token(BaseModel):
@@ -22,3 +22,27 @@ class LoginResponse(Token):
 
     user_id: str = Field(..., description="Unique identifier for the user")
     email: str = Field(..., description="Email of the authenticated user")
+
+
+class UserRegister(BaseModel):
+    """Schema for user registration."""
+
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=32,
+        pattern=r"^[a-zA-Z0-9_\-]{3,32}$",
+        description="Username (3-32 chars, alphanumeric, underscore, hyphen)",
+    )
+    email: EmailStr = Field(..., description="Valid email address")
+    password: str = Field(
+        ...,
+        min_length=12,
+        description="Password with minimum length of 12 characters",
+    )
+    first_name: str | None = Field(
+        default=None, max_length=50, description="Optional first name"
+    )
+    last_name: str | None = Field(
+        default=None, max_length=50, description="Optional last name"
+    )

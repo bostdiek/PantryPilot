@@ -1,22 +1,30 @@
+import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from argon2 import PasswordHasher
+from argon2.exceptions import HashingError, VerifyMismatchError
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
 
-from core.config import get_settings
+from core.config import Settings, get_settings
 from schemas.auth import TokenData
 
 
-def _settings():  # lazy accessor to allow tests to set env first
+def _settings() -> Settings:  # lazy accessor to allow tests to set env first
     return get_settings()
 
 
 # Reuse a single PasswordHasher instance (Argon2id by default)
 _password_hasher = PasswordHasher()
 
+# Module logger for security helpers
+_logger = logging.getLogger(__name__)
 
-def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
+
+def create_access_token(
+    data: dict[str, Any], expires_delta: timedelta | None = None
+) -> str:
     """Encodes a JWT with `sub` (subject) and expiry"""
     to_encode = data.copy()
     if expires_delta:
@@ -34,12 +42,19 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plaintext password against an Argon2 hash.
 
-    Do NOT hash the plaintext and compare strings — Argon2 uses a random salt,
-    so re-hashing the same password yields a different hash. Always use verify().
+    Uses Argon2's verify which handles salts internally. Returns False for
+    verification failures. Unexpected errors are logged and result in False to
+    avoid leaking exception traces to callers.
     """
     try:
         return _password_hasher.verify(hashed, plain)
-    except Exception:
+    except (VerifyMismatchError, HashingError):
+        # Expected verification / hashing failures
+        return False
+    except Exception as exc:  # pragma: no cover - defensive logging path
+        # Log unexpected errors for operational visibility, but don't raise
+        # to keep caller semantics simple.
+        _logger.exception("Unexpected error verifying password: %s", exc)
         return False
 
 

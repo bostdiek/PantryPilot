@@ -7,6 +7,9 @@ Response envelope: `ApiResponse<T>` with `success`, `data`, `message`, `error`.
 ## Endpoints (v1)
 
 - GET `/api/v1/health` — health check
+- Authentication
+  - POST `/api/v1/auth/login` — user login (OAuth2-compatible)
+  - POST `/api/v1/auth/register` — user registration
 - Recipes
   - GET `/api/v1/recipes` — list with filters & pagination
   - POST `/api/v1/recipes` — create
@@ -17,6 +20,55 @@ Response envelope: `ApiResponse<T>` with `success`, `data`, `message`, `error`.
   - GET `/api/v1/mealplans/weekly`
   - PUT `/api/v1/mealplans/weekly`
   - POST `/api/v1/meals` `/api/v1/meals/{id}` (see schema)
+
+## Authentication Endpoints
+
+### POST `/api/v1/auth/register`
+
+**Description**: User registration endpoint that creates a new user account
+
+**Request Body**: JSON with UserRegister schema fields
+```json
+{
+  "username": "string (3-32 chars, alphanumeric, underscore, hyphen)",
+  "email": "string (valid email address)",
+  "password": "string (minimum 12 characters)",
+  "first_name": "string (optional)",
+  "last_name": "string (optional)"
+}
+```
+
+**Response**: 201 Created
+```json
+{
+  "access_token": "string",
+  "token_type": "bearer"
+}
+```
+
+**Error Responses**:
+- `400 Bad Request`: Password too short (less than 12 characters)
+- `409 Conflict`: Username or email already exists
+- `422 Unprocessable Entity`: Validation errors (invalid email, username pattern, missing required fields)
+
+### POST `/api/v1/auth/login`
+
+**Description**: OAuth2-compatible token login, get an access token for future requests
+
+**Request Body**: Form data (OAuth2PasswordRequestForm)
+- `username`: The user's username
+- `password`: The user's password
+
+**Response**: 200 OK
+```json
+{
+  "access_token": "string",
+  "token_type": "bearer"
+}
+```
+
+**Error Responses**:
+- `401 Unauthorized`: Incorrect username or password
 
 ## Schemas
 

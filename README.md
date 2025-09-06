@@ -60,6 +60,29 @@ make down
 
 API versioning strategy: path-based under `/api/v1`. Swagger UI available at `/api/v1/docs`.
 
+## API Endpoints
+
+### User Registration
+
+Register a new user account with the registration endpoint:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "newuser123",
+    "email": "newuser123@example.com",
+    "password": "averylongsecurepw",
+    "first_name": "New",
+    "last_name": "User"
+  }'
+```
+
+Expected 201 response:
+```json
+{ "access_token": "...", "token_type": "bearer" }
+```
+
 Database migrations: Alembic configured; run `make migrate` or applied on `make up` after DB is healthy.
 
 Frontend/backed commands:
