@@ -1,7 +1,20 @@
-import { mergeConfig, defineConfig } from 'vitest/config';
+import { webcrypto as nodeWebcrypto } from 'node:crypto';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import svgr from 'vite-plugin-svgr';
+
+// Provide Web Crypto globally before Vite/Vitest server bootstraps.
+// Vitest executes this config in Node, so setting it here ensures availability
+// during early Vite initialization where crypto.getRandomValues() is used.
+if (
+  typeof (globalThis as any).crypto === 'undefined' ||
+  typeof (globalThis as any).crypto?.getRandomValues !== 'function'
+) {
+  (globalThis as any).crypto = nodeWebcrypto as any;
+}
+
+// Dynamically import vitest config AFTER polyfill so Vite sees global crypto
+const { mergeConfig, defineConfig } = await import('vitest/config');
 
 // Ensure Vitest uses the same plugin pipeline (especially @vitejs/plugin-react)
 // as the main Vite config so JSX is transformed with the automatic runtime.

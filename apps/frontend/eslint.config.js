@@ -5,6 +5,12 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 
+// Provide a minimal structuredClone polyfill for environments where it's missing (e.g. some Node runtimes).
+// This affects only the ESLint process and does not impact application/runtime code.
+if (typeof globalThis.structuredClone !== 'function') {
+  globalThis.structuredClone = (obj) => JSON.parse(JSON.stringify(obj));
+}
+
 // Flat ESLint config using @typescript-eslint recommendedTypeChecked configs
 export default [
   {
@@ -52,7 +58,7 @@ export default [
       // disable core rule and let typescript-eslint handle it
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': [
-        'warn',
+        'error',
         {
           varsIgnorePattern: '^_',
           argsIgnorePattern: '^_',

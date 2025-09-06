@@ -1,5 +1,16 @@
+import { webcrypto as nodeWebcrypto } from 'node:crypto';
 import { mockAnimationsApi } from 'jsdom-testing-mocks';
 import { vi } from 'vitest';
+
+// Polyfill Web Crypto for test runtime if missing (fixes crypto.getRandomValues error)
+if (
+  typeof globalThis.crypto === 'undefined' ||
+  typeof (globalThis as any).crypto?.getRandomValues !== 'function'
+) {
+  // Assign Node's Web Crypto to the global for tests
+
+  (globalThis as any).crypto = nodeWebcrypto as unknown as Crypto;
+}
 
 // Setup animation mock for Headless UI
 mockAnimationsApi();

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
-import type { AuthState } from '../../types/auth';
+import type { AuthState } from '../../types/Auth';
 import { apiClient } from '../client';
 
 // Mock the auth store's getState to control token presence
