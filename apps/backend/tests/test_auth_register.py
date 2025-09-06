@@ -226,30 +226,30 @@ async def test_register_password_too_short(
 
 
 @pytest.mark.asyncio
-async def test_register_password_various_short_lengths(
-    auth_client: tuple[AsyncClient, AsyncSession],
-):
-    """Test passwords of various short lengths all return 400."""
-    client, _ = auth_client
-
-    short_passwords = [
+@pytest.mark.parametrize(
+    "password",
+    [
         "short",  # 5 characters
         "password10",  # 10 characters
         "password11",  # 11 characters
-    ]
+    ],
+)
+async def test_register_password_various_short_lengths(
+    auth_client: tuple[AsyncClient, AsyncSession], password: str
+):
+    client, _ = auth_client
 
-    for i, password in enumerate(short_passwords):
-        registration_data = {
-            "username": f"testuser{i}",
-            "email": f"test{i}@test.com",
-            "password": password,
-        }
+    registration_data = {
+        "username": "testuser",
+        "email": "test@test.com",
+        "password": password,
+    }
 
-        resp = await client.post("/api/v1/auth/register", json=registration_data)
+    resp = await client.post("/api/v1/auth/register", json=registration_data)
 
-        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-        # Pydantic validation error for min_length constraint
-        assert "detail" in resp.json()
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    # Pydantic validation error for min_length constraint
+    assert "detail" in resp.json()
 
 
 @pytest.mark.asyncio
@@ -298,59 +298,59 @@ async def test_register_invalid_email(auth_client: tuple[AsyncClient, AsyncSessi
 
 
 @pytest.mark.asyncio
-async def test_register_invalid_username_pattern(
-    auth_client: tuple[AsyncClient, AsyncSession],
-):
-    """Test username not matching pattern returns 422."""
-    client, _ = auth_client
-
-    invalid_usernames = [
+@pytest.mark.parametrize(
+    "username",
+    [
         "ab",  # Too short (< 3 chars)
         "a" * 33,  # Too long (> 32 chars)
         "user@name",  # Contains invalid character (@)
         "user name",  # Contains space
         "user.name",  # Contains period
-    ]
+    ],
+)
+async def test_register_invalid_username_pattern(
+    auth_client: tuple[AsyncClient, AsyncSession], username: str
+):
+    client, _ = auth_client
 
-    for i, username in enumerate(invalid_usernames):
-        registration_data = {
-            "username": username,
-            "email": f"test{i}@test.com",
-            "password": "securepassword123",
-        }
+    registration_data = {
+        "username": username,
+        "email": "test@test.com",
+        "password": "securepassword123",
+    }
 
-        resp = await client.post("/api/v1/auth/register", json=registration_data)
+    resp = await client.post("/api/v1/auth/register", json=registration_data)
 
-        assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 @pytest.mark.asyncio
-async def test_register_valid_username_patterns(
-    auth_client: tuple[AsyncClient, AsyncSession],
-):
-    """Test valid username patterns are accepted."""
-    client, _ = auth_client
-
-    valid_usernames = [
+@pytest.mark.parametrize(
+    "username",
+    [
         "abc",  # Minimum length (3 chars)
         "a" * 32,  # Maximum length (32 chars)
         "user_name",  # Contains underscore
         "user-name",  # Contains hyphen
         "user123",  # Contains numbers
         "User123",  # Contains uppercase
-    ]
+    ],
+)
+async def test_register_valid_username_patterns(
+    auth_client: tuple[AsyncClient, AsyncSession], username: str
+):
+    client, _ = auth_client
 
-    for i, username in enumerate(valid_usernames):
-        registration_data = {
-            "username": username,
-            "email": f"valid{i}@test.com",
-            "password": "securepassword123",
-        }
+    registration_data = {
+        "username": username,
+        "email": "valid@test.com",
+        "password": "securepassword123",
+    }
 
-        resp = await client.post("/api/v1/auth/register", json=registration_data)
+    resp = await client.post("/api/v1/auth/register", json=registration_data)
 
-        # Should succeed (not 422)
-        assert resp.status_code == status.HTTP_201_CREATED
+    # Should succeed (not 422)
+    assert resp.status_code == status.HTTP_201_CREATED
 
 
 @pytest.mark.asyncio

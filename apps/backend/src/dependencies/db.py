@@ -21,16 +21,15 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
-# Best-effort load of env files for local dev (optional dependency)
-try:  # pragma: no cover - optional convenience for local runs
-    from dotenv import load_dotenv  # type: ignore
-except Exception:  # pragma: no cover
-    load_dotenv = None  # type: ignore[assignment]
-
-
 def _load_env_files() -> None:  # pragma: no cover - side-effect only
-    if load_dotenv is None:
+    # Import dotenv lazily so the module is optional for users who don't
+    # need to load env files. This avoids module-level side effects and
+    # keeps mypy from assuming the symbol is always defined.
+    try:  # pragma: no cover - optional convenience for local runs
+        from dotenv import load_dotenv
+    except ImportError:  # pragma: no cover
         return
+
     # Try to load .env then .env.dev from repo root or any parent directory
     for fname in (".env", ".env.dev"):
         for p in Path(__file__).resolve().parents:

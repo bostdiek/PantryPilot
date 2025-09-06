@@ -29,6 +29,7 @@ from models.recipes_names import Recipe
 from models.users import User
 from schemas.api import ApiResponse
 from schemas.recipes import (
+    IngredientIn,
     RecipeCategory,
     RecipeCreate,
     RecipeDifficulty,
@@ -360,7 +361,10 @@ async def _get_or_create_ingredient(
 
 
 async def _replace_recipe_ingredients(
-    db: AsyncSession, recipe: Recipe, ingredients_data: list, user_id: UUIDType
+    db: AsyncSession,
+    recipe: Recipe,
+    ingredients_data: list[IngredientIn],
+    user_id: UUIDType,
 ) -> list[RecipeIngredient]:
     """Replace all ingredient associations for a recipe with new ones.
 
