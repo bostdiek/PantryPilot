@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { login, register } from '../endpoints/auth';
-import type { LoginFormData, RegisterFormData } from '../../types/Auth';
+import type { LoginFormData, RegisterFormData } from '../../types/auth';
 
 describe('Auth API', () => {
   const fetchMock = vi.fn();

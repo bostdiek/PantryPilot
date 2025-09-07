@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
 import { useAuthStore } from '../stores/useAuthStore';
-import type { RegisterFormData } from '../types/Auth';
+import type { RegisterFormData } from '../types/auth';
 
 interface ValidationErrors {
   username?: string;

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import RegisterPage from '../RegisterPage';
 import { useAuthStore } from '../../stores/useAuthStore';
 import * as authApi from '../../api/endpoints/auth';
-import type { TokenResponse } from '../../types/Auth';
+import type { TokenResponse } from '../../types/auth';
 
 // Mock the auth API
 vi.mock('../../api/endpoints/auth', () => ({

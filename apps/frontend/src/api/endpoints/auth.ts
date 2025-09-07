@@ -2,7 +2,7 @@ import type {
   LoginFormData,
   RegisterFormData,
   TokenResponse,
-} from '../../types/Auth';
+} from '../../types/auth';
 import { apiClient } from '../client';
 
 // Login using OAuth2 form format to match backend
