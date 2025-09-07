@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { LayoutDemo } from '../../components/layout/LayoutDemo';
 import {
   ButtonDemo,
@@ -19,7 +19,7 @@ import {
  * Component Showcase page for development
  * This page displays all UI components in a structured way for easy testing and review
  */
-const ComponentShowcase: React.FC = () => {
+const ComponentShowcase: FC = () => {
   const [activeSection, setActiveSection] = useState<string>('buttons');
 
   // Define navigation items

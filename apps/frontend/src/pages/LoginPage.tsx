@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useState, type FC, type FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { login } from '../api/endpoints/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -8,7 +8,7 @@ import { Input } from '../components/ui/Input';
 import { useAuthStore } from '../stores/useAuthStore';
 import type { LoginFormData } from '../types/auth';
 
-const LoginPage: React.FC = () => {
+const LoginPage: FC = () => {
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
     password: '',
@@ -17,11 +17,11 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const authStore = useAuthStore();
 
-  // Get the intended destination or default to home
-  const from = (location.state as { from?: string })?.from || '/';
+  // Get the intended destination from query parameter or default to home
+  const from = searchParams.get('next') || '/';
 
   const handleInputChange = (name: string) => (value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -29,7 +29,7 @@ const LoginPage: React.FC = () => {
     if (error) setError(null);
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!formData.username || !formData.password) {

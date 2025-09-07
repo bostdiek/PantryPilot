@@ -21,7 +21,16 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { Menu, Transition } from '@headlessui/react';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FC,
+  type ReactNode,
+  type CSSProperties,
+  Fragment,
+} from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -41,7 +50,7 @@ function toYyyyMmDd(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-const MealPlanPage: React.FC = () => {
+const MealPlanPage: FC = () => {
   const {
     currentWeek,
     isLoading,
@@ -436,7 +445,7 @@ const MealPlanPage: React.FC = () => {
     date: string;
     isToday: boolean;
     title: string;
-    children: React.ReactNode;
+    children: ReactNode;
   }) {
     const { setNodeRef, isOver } = useDroppable({
       id: `day-${date}`,
@@ -516,7 +525,7 @@ const MealPlanPage: React.FC = () => {
       id: `entry-${entryId}`,
       data: { type: 'entry', entryId },
     });
-    const style: React.CSSProperties = {
+    const style: CSSProperties = {
       transform: transform
         ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
         : undefined,
@@ -715,7 +724,7 @@ const MealPlanPage: React.FC = () => {
                         >
                           <ul className="mb-3 space-y-3">
                             {day.entries.map((e) => (
-                              <React.Fragment key={e.id}>
+                              <Fragment key={e.id}>
                                 {overDayDate === day.date &&
                                   overEntryId === e.id && (
                                     <li className="border-primary-300 bg-primary-50/60 -my-1 h-2 rounded border-2 border-dashed" />
@@ -744,7 +753,7 @@ const MealPlanPage: React.FC = () => {
                                     handleRecipeClick(e.id, day.date)
                                   }
                                 />
-                              </React.Fragment>
+                              </Fragment>
                             ))}
                             {day.entries.length === 0 && (
                               <li className="text-sm text-gray-400">
@@ -782,7 +791,7 @@ const MealPlanPage: React.FC = () => {
                             >
                               <Menu.Items className="absolute right-0 z-10 mt-2 w-36 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg focus:outline-none">
                                 <div className="py-1 text-sm">
-                                  <Menu.Item as={React.Fragment}>
+                                  <Menu.Item as={Fragment}>
                                     {({ active }) => (
                                       <button
                                         className={[
@@ -800,7 +809,7 @@ const MealPlanPage: React.FC = () => {
                                       </button>
                                     )}
                                   </Menu.Item>
-                                  <Menu.Item as={React.Fragment}>
+                                  <Menu.Item as={Fragment}>
                                     {({ active }) => (
                                       <button
                                         className={[

@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -7,18 +7,16 @@ import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
-// Lazy loaded pages for code-splitting
-const HomePage = React.lazy(() => import('./pages/HomePage'));
-const LoginPage = React.lazy(() => import('./pages/LoginPage'));
-const RegisterPage = React.lazy(() => import('./pages/RegisterPage'));
-const MealPlanPage = React.lazy(() => import('./pages/MealPlanPage'));
-const RecipesDetail = React.lazy(() => import('./pages/RecipesDetail'));
-const RecipesEditPage = React.lazy(() => import('./pages/RecipesEditPage'));
-const NewRecipePage = React.lazy(() => import('./pages/RecipesNewPage'));
-const RecipesPage = React.lazy(() => import('./pages/RecipesPage'));
-const ComponentShowcase = React.lazy(
-  () => import('./pages/dev/ComponentShowcase')
-);
+// Lazy loaded pages for code-splitting (use top-level `lazy` import)
+const HomePage = lazy(() => import('./pages/HomePage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const MealPlanPage = lazy(() => import('./pages/MealPlanPage'));
+const RecipesDetail = lazy(() => import('./pages/RecipesDetail'));
+const RecipesEditPage = lazy(() => import('./pages/RecipesEditPage'));
+const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
+const RecipesPage = lazy(() => import('./pages/RecipesPage'));
+const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 
 // Loader functions with auth checks
 const homeLoader = async () => {
