@@ -4,18 +4,19 @@ import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
-// Lazy loaded pages for code-splitting
+import { useAuthStore } from './stores/useAuthStore';
+import { useMealPlanStore } from './stores/useMealPlanStore';
+import { useRecipeStore } from './stores/useRecipeStore';
+// Lazy loaded pages for code-splitting (use top-level `lazy` import)
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const MealPlanPage = lazy(() => import('./pages/MealPlanPage'));
 const RecipesDetail = lazy(() => import('./pages/RecipesDetail'));
 const RecipesEditPage = lazy(() => import('./pages/RecipesEditPage'));
 const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = lazy(() => import('./pages/RecipesPage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
-import { useAuthStore } from './stores/useAuthStore';
-import { useMealPlanStore } from './stores/useMealPlanStore';
-import { useRecipeStore } from './stores/useRecipeStore';
 
 // Loader functions with auth checks
 const homeLoader = async () => {
@@ -109,6 +110,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<LoadingSpinner />}>
             <LoginPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'register',
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <RegisterPage />
           </Suspense>
         ),
       },

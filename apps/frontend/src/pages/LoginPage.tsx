@@ -1,11 +1,11 @@
 import { useState, type FC, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { login } from '../api/endpoints/auth';
 import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
+import { Input } from '../components/ui/Input';
 import { useAuthStore } from '../stores/useAuthStore';
-import { login } from '../api/endpoints/auth';
 import type { LoginFormData } from '../types/auth';
 
 const LoginPage: FC = () => {
@@ -104,6 +104,18 @@ const LoginPage: FC = () => {
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Need an account?{' '}
+              <Link
+                to="/register"
+                className="font-medium text-blue-600 transition-colors hover:text-blue-500"
+              >
+                Register
+              </Link>
+            </p>
+          </div>
         </Card>
       </div>
     </Container>

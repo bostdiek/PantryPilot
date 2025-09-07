@@ -10,6 +10,15 @@ export interface LoginFormData {
   password: string;
 }
 
+export interface RegisterFormData {
+  username: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 // Optional: Decoded token claims (if needed for storing basic claims like 'sub')
 export interface DecodedToken {
   sub: string;

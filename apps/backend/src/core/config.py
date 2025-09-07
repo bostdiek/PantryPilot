@@ -83,4 +83,8 @@ def get_settings() -> Settings:
     # Provide safe fallbacks for tests if env file is absent.
     if not os.path.exists(env_file):  # pragma: no cover - defensive
         os.environ.setdefault("SECRET_KEY", "dev-test-secret")
+    # The Settings initializer accepts a runtime-only `_env_file` kwarg used by
+    # pydantic-settings; mypy's stub doesn't allow this call argument. The
+    # ignore is scoped to the specific `call-arg` error to avoid hiding other
+    # issues.
     return Settings(_env_file=env_file)  # type: ignore[call-arg]

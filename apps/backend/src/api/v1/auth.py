@@ -5,10 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from core.security import create_access_token, verify_password
-from crud.user import get_user_by_username
+from core.exceptions import DuplicateUserError
+from core.security import create_access_token, get_password_hash, verify_password
+from crud.user import create_user, get_user_by_username
 from dependencies.db import DbSession
-from schemas.auth import Token
+from schemas.auth import Token, UserRegister
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -31,5 +32,50 @@ async def login(form_data: PasswordForm, db: DbSession) -> Token:
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    access_token = create_access_token(data={"sub": str(user.id)})
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@router.post("/register", response_model=Token, status_code=201)
+async def register(payload: UserRegister, db: DbSession) -> Token:
+    """
+    Register a new user account.
+
+    - **username**: The user's username (3-32 chars, alphanumeric, underscore, hyphen)
+    - **email**: Valid email address
+    - **password**: Password with minimum length of 12 characters
+    - **first_name**: Optional first name
+    - **last_name**: Optional last name
+    """
+    # Normalize email to lowercase
+    email = payload.email.lower()
+
+    # Validate password length (≥ 12 characters)
+    if len(payload.password) < 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password too short",
+        )
+
+    # Hash the password
+    hashed_password = get_password_hash(payload.password)
+
+    try:
+        # Create user
+        user = await create_user(
+            db=db,
+            email=email,
+            username=payload.username,
+            hashed_password=hashed_password,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
+        )
+    except DuplicateUserError as err:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Username or email already exists",
+        ) from err
+
+    # Create access token
     access_token = create_access_token(data={"sub": str(user.id)})
     return Token(access_token=access_token, token_type="bearer")
