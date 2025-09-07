@@ -32,7 +32,6 @@ from dependencies.db import get_db
 from main import app
 from models.base import Base
 from models.meal_history import Meal
-from models.user_preferences import UserPreferences
 from models.users import User
 
 

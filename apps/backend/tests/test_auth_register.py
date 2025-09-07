@@ -11,27 +11,16 @@ Covers:
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-
 import pytest
-import pytest_asyncio
 from fastapi import status
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
     AsyncSession,
-    async_sessionmaker,
-    create_async_engine,
 )
 
 from core.config import get_settings
 from core.security import verify_password
-from dependencies.auth import get_current_user
-from dependencies.db import get_db
-from main import app
-from models.base import Base
-from models.meal_history import Meal
 from models.users import User
 
 

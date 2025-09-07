@@ -1,5 +1,5 @@
+
 import pytest
-import json
 from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +30,9 @@ async def _create_test_user(db: AsyncSession, username: str = "testuser") -> Use
 class TestUserPreferencesAPI:
     """Test user preferences API endpoints."""
 
-    @pytest.mark.skip(reason="PostgreSQL ARRAY types not compatible with SQLite test environment")
+    @pytest.mark.skip(
+        reason="PostgreSQL ARRAY types not compatible with SQLite test environment"
+    )
     @pytest.mark.asyncio
     async def test_get_user_profile_creates_default_preferences(
         self, auth_client: tuple[AsyncClient, AsyncSession]
@@ -38,7 +40,9 @@ class TestUserPreferencesAPI:
         """Test that getting user profile creates default preferences if none exist."""
         pass
 
-    @pytest.mark.skip(reason="PostgreSQL ARRAY types not compatible with SQLite test environment")
+    @pytest.mark.skip(
+        reason="PostgreSQL ARRAY types not compatible with SQLite test environment"
+    )
     @pytest.mark.asyncio
     async def test_update_user_preferences(
         self, auth_client: tuple[AsyncClient, AsyncSession]
@@ -46,7 +50,9 @@ class TestUserPreferencesAPI:
         """Test updating user preferences."""
         pass
 
-    @pytest.mark.skip(reason="PostgreSQL ARRAY types not compatible with SQLite test environment")
+    @pytest.mark.skip(
+        reason="PostgreSQL ARRAY types not compatible with SQLite test environment"
+    )
     @pytest.mark.asyncio
     async def test_update_user_profile_info(
         self, auth_client: tuple[AsyncClient, AsyncSession]
