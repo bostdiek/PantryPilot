@@ -1,6 +1,11 @@
 import clsx from 'clsx';
-import type { ReactNode } from 'react';
-import React, { forwardRef } from 'react';
+import {
+  forwardRef,
+  type ReactNode,
+  type ButtonHTMLAttributes,
+  type ComponentType,
+  type SVGProps,
+} from 'react';
 import { Icon } from './Icon';
 
 export type ButtonVariant =
@@ -12,10 +17,7 @@ export type ButtonVariant =
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps
-  extends Omit<
-    React.ButtonHTMLAttributes<HTMLButtonElement>,
-    'size' | 'color'
-  > {
+  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size' | 'color'> {
   /**
    * Button content
    */
@@ -66,12 +68,12 @@ export interface ButtonProps
   /**
    * Left icon SVG component
    */
-  leftIconSvg?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  leftIconSvg?: ComponentType<SVGProps<SVGSVGElement>>;
 
   /**
    * Right icon SVG component
    */
-  rightIconSvg?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  rightIconSvg?: ComponentType<SVGProps<SVGSVGElement>>;
 
   /**
    * Additional CSS classes

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
@@ -8,7 +8,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { login } from '../api/endpoints/auth';
 import type { LoginFormData } from '../types/auth';
 
-const LoginPage: React.FC = () => {
+const LoginPage: FC = () => {
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
     password: '',
@@ -29,7 +29,7 @@ const LoginPage: React.FC = () => {
     if (error) setError(null);
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!formData.username || !formData.password) {

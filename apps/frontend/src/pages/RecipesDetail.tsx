@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, type FC } from 'react';
 import { Link, useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -8,7 +8,7 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe } from '../types/Recipe';
 
-const RecipesDetail: React.FC = () => {
+const RecipesDetail: FC = () => {
   // Get recipe data from loader as fallback
   const loaderRecipe = useLoaderData() as Recipe | null;
   const { id } = useParams<{ id: string }>();

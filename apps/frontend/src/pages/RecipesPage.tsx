@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, type FC } from 'react';
 import { Link } from 'react-router-dom';
 import { Grid } from '../components/layout/Grid';
 import { Button } from '../components/ui/Button';
@@ -14,7 +14,7 @@ import { RecipeSearchFilters } from '../components/recipes/RecipeSearchFilters';
 import { RecipePagination } from '../components/recipes/RecipePagination';
 import { RecipeCard } from '../components/recipes/RecipeCard';
 
-const RecipesPage: React.FC = () => {
+const RecipesPage: FC = () => {
   const {
     recipes,
     filteredRecipes,

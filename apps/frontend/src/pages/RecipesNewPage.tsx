@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -31,7 +31,7 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
   name: diff.charAt(0).toUpperCase() + diff.slice(1), // Capitalize first letter
 }));
 
-const RecipesNewPage: React.FC = () => {
+const RecipesNewPage: FC = () => {
   const navigate = useNavigate();
   const { success } = useToast();
   const [title, setTitle] = useState('');
@@ -83,7 +83,7 @@ const RecipesNewPage: React.FC = () => {
   // Block navigation if there are unsaved changes
   useUnsavedChanges(hasUnsavedChanges && !isSubmitting);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     // Clear previous errors
