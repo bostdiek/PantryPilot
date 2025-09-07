@@ -55,11 +55,11 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
     )
-    
+
     # Create indexes
     op.create_index("ix_user_preferences_id", "user_preferences", ["id"])
     op.create_index("ix_user_preferences_user_id", "user_preferences", ["user_id"])
-    
+
     # Add foreign key constraint to users table
     # For now, we'll skip this to avoid circular dependency issues
     # op.create_foreign_key(
@@ -77,10 +77,10 @@ def downgrade() -> None:
     # op.drop_constraint(
     #     "fk_user_preferences_user_id", "user_preferences", type_="foreignkey"
     # )
-    
+
     # Drop indexes
     op.drop_index("ix_user_preferences_user_id")
     op.drop_index("ix_user_preferences_id")
-    
+
     # Drop table
     op.drop_table("user_preferences")

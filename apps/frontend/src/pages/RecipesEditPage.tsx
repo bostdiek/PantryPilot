@@ -1,4 +1,4 @@
-import React, { useReducer, useState } from 'react';
+import { useReducer, useState, type FC, type FormEvent } from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -189,7 +189,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   // Block navigation if there are unsaved changes
   useUnsavedChanges(hasUnsavedChanges && !isSubmitting);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     if (!id) {
@@ -612,7 +612,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   );
 }
 
-const RecipesEditPage: React.FC = () => {
+const RecipesEditPage: FC = () => {
   const recipe = useLoaderData() as Recipe | null;
 
   if (!recipe) {

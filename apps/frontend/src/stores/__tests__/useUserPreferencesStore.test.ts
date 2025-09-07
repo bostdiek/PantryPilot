@@ -34,7 +34,9 @@ describe('useUserPreferencesStore', () => {
     expect(result.current.preferences.familySize).toBe(5);
     expect(result.current.preferences.theme).toBe('dark');
     // Other preferences should remain unchanged
-    expect(result.current.preferences.defaultServings).toBe(defaultUserPreferences.defaultServings);
+    expect(result.current.preferences.defaultServings).toBe(
+      defaultUserPreferences.defaultServings
+    );
   });
 
   it('should reset preferences to defaults', () => {
@@ -85,7 +87,10 @@ describe('useUserPreferencesStore', () => {
       });
     });
 
-    expect(result.current.preferences.allergies).toEqual(['Peanuts', 'Shellfish']);
+    expect(result.current.preferences.allergies).toEqual([
+      'Peanuts',
+      'Shellfish',
+    ]);
 
     // Update dietary restrictions
     act(() => {
@@ -94,9 +99,15 @@ describe('useUserPreferencesStore', () => {
       });
     });
 
-    expect(result.current.preferences.dietaryRestrictions).toEqual(['Vegan', 'Gluten-Free']);
+    expect(result.current.preferences.dietaryRestrictions).toEqual([
+      'Vegan',
+      'Gluten-Free',
+    ]);
     // Allergies should remain unchanged
-    expect(result.current.preferences.allergies).toEqual(['Peanuts', 'Shellfish']);
+    expect(result.current.preferences.allergies).toEqual([
+      'Peanuts',
+      'Shellfish',
+    ]);
 
     // Update preferred cuisines
     act(() => {
@@ -105,7 +116,11 @@ describe('useUserPreferencesStore', () => {
       });
     });
 
-    expect(result.current.preferences.preferredCuisines).toEqual(['Italian', 'Mexican', 'Thai']);
+    expect(result.current.preferences.preferredCuisines).toEqual([
+      'Italian',
+      'Mexican',
+      'Thai',
+    ]);
   });
 
   it('should update numeric preferences correctly', () => {

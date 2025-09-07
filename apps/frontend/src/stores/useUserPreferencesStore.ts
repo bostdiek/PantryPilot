@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { 
-  UserPreferences, 
-  UserPreferencesStore, 
-  UserPreferencesResponse
+import type {
+  UserPreferences,
+  UserPreferencesStore,
+  UserPreferencesResponse,
 } from '../types/UserPreferences';
-import { 
+import {
   defaultUserPreferences,
   toFrontendPreferences,
 } from '../types/UserPreferences';
@@ -46,8 +46,8 @@ export const useUserPreferencesStore = create<UserPreferencesStore>()(
     }),
     {
       name: 'user-preferences', // localStorage key
-      partialize: (state) => ({ 
-        preferences: state.preferences 
+      partialize: (state) => ({
+        preferences: state.preferences,
       }), // Only persist preferences, not loading state
       onRehydrateStorage: () => (state) => {
         // Set isLoaded=true after rehydration finishes
@@ -60,17 +60,17 @@ export const useUserPreferencesStore = create<UserPreferencesStore>()(
 );
 
 // Convenience hooks for specific preference values
-export const useThemePreference = () => 
+export const useThemePreference = () =>
   useUserPreferencesStore((state) => state.preferences.theme);
 
-export const useFamilySize = () => 
+export const useFamilySize = () =>
   useUserPreferencesStore((state) => state.preferences.familySize);
 
-export const useDefaultServings = () => 
+export const useDefaultServings = () =>
   useUserPreferencesStore((state) => state.preferences.defaultServings);
 
-export const useAllergies = () => 
+export const useAllergies = () =>
   useUserPreferencesStore((state) => state.preferences.allergies);
 
-export const useDietaryRestrictions = () => 
+export const useDietaryRestrictions = () =>
   useUserPreferencesStore((state) => state.preferences.dietaryRestrictions);

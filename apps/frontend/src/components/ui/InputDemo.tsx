@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FC } from 'react';
 import { Input } from './Input';
 import CalendarIcon from './icons/calendar.svg?react';
 import SearchIcon from './icons/search.svg?react';
@@ -9,7 +9,7 @@ import XIcon from './icons/x.svg?react';
  * Demo component for Input
  * Displays various input variants, sizes, and states
  */
-export const InputDemo: React.FC = () => {
+export const InputDemo: FC = () => {
   const [textValue, setTextValue] = useState('');
   const [emailValue, setEmailValue] = useState('');
   const [passwordValue, setPasswordValue] = useState('');

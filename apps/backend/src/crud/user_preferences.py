@@ -20,16 +20,10 @@ class UserPreferencesCRUD:
         return result.scalar_one_or_none()
 
     async def create(
-        self, 
-        db: AsyncSession, 
-        user_id: UUID, 
-        preferences_data: UserPreferencesCreate
+        self, db: AsyncSession, user_id: UUID, preferences_data: UserPreferencesCreate
     ) -> UserPreferences:
         """Create new user preferences."""
-        preferences = UserPreferences(
-            user_id=user_id,
-            **preferences_data.model_dump()
-        )
+        preferences = UserPreferences(user_id=user_id, **preferences_data.model_dump())
         db.add(preferences)
         await db.commit()
         await db.refresh(preferences)
@@ -39,22 +33,22 @@ class UserPreferencesCRUD:
         self,
         db: AsyncSession,
         db_preferences: UserPreferences,
-        preferences_update: UserPreferencesUpdate
+        preferences_update: UserPreferencesUpdate,
     ) -> UserPreferences:
         """Update existing user preferences."""
         update_data = preferences_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_preferences, field, value)
-        
+
         await db.commit()
         await db.refresh(db_preferences)
         return db_preferences
 
     async def get_or_create(
-        self, 
-        db: AsyncSession, 
-        user_id: UUID, 
-        preferences_data: UserPreferencesCreate | None = None
+        self,
+        db: AsyncSession,
+        user_id: UUID,
+        preferences_data: UserPreferencesCreate | None = None,
     ) -> UserPreferences:
         """Get existing preferences or create with defaults."""
         preferences = await self.get_by_user_id(db, user_id)

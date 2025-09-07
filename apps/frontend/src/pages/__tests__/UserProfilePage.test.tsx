@@ -58,7 +58,9 @@ describe('UserProfilePage', () => {
     renderUserProfilePage();
 
     expect(screen.getByText('Profile')).toBeInTheDocument();
-    expect(screen.getByText('Manage your account information and preferences')).toBeInTheDocument();
+    expect(
+      screen.getByText('Manage your account information and preferences')
+    ).toBeInTheDocument();
     expect(screen.getByDisplayValue('John')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Doe')).toBeInTheDocument();
     expect(screen.getByDisplayValue('testuser')).toBeInTheDocument();

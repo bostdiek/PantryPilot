@@ -27,10 +27,8 @@ async def get_current_user_profile(
 ) -> UserProfileResponse:
     """Get current user's profile with preferences."""
     # Get user preferences (create if they don't exist)
-    preferences = await user_preferences_crud.get_or_create(
-        db, current_user.id
-    )
-    
+    preferences = await user_preferences_crud.get_or_create(db, current_user.id)
+
     return UserProfileResponse(
         id=current_user.id,
         username=current_user.username,
@@ -53,16 +51,15 @@ async def update_current_user_profile(
         existing_user = await user_crud.get_by_username(db, profile_update.username)
         if existing_user:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Username already taken"
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Username already taken"
             )
-    
+
     # Update user profile
     updated_user = await user_crud.update(db, current_user, profile_update)
-    
+
     # Get user preferences
     preferences = await user_preferences_crud.get_or_create(db, updated_user.id)
-    
+
     return UserProfileResponse(
         id=updated_user.id,
         username=updated_user.username,
@@ -92,12 +89,12 @@ async def update_current_user_preferences(
     """Update current user's preferences."""
     # Get existing preferences (create if they don't exist)
     preferences = await user_preferences_crud.get_or_create(db, current_user.id)
-    
+
     # Update preferences
     updated_preferences = await user_preferences_crud.update(
         db, preferences, preferences_update
     )
-    
+
     return UserPreferencesResponse.model_validate(updated_preferences)
 
 
@@ -112,7 +109,7 @@ async def create_current_user_preferences(
     existing_preferences = await user_preferences_crud.get_by_user_id(
         db, current_user.id
     )
-    
+
     if existing_preferences:
         # Update existing preferences with new data
         update_data = UserPreferencesUpdate(**preferences_create.model_dump())

@@ -4,15 +4,15 @@ export interface UserPreferences {
   // Family and serving preferences
   familySize: number;
   defaultServings: number;
-  
+
   // Dietary restrictions and allergies
   allergies: string[];
   dietaryRestrictions: string[];
-  
+
   // App preferences
   theme: 'light' | 'dark' | 'system';
   units: 'metric' | 'imperial';
-  
+
   // Meal planning preferences
   mealPlanningDays: number; // How many days to plan ahead
   preferredCuisines: string[];
@@ -71,7 +71,7 @@ export interface UserProfile {
 export interface UserPreferencesStore {
   preferences: UserPreferences;
   isLoaded: boolean;
-  
+
   // Actions
   updatePreferences: (preferences: Partial<UserPreferences>) => void;
   resetPreferences: () => void;
@@ -80,7 +80,9 @@ export interface UserPreferencesStore {
 }
 
 // Conversion helpers
-export function toFrontendPreferences(backendPrefs: UserPreferencesResponse): UserPreferences {
+export function toFrontendPreferences(
+  backendPrefs: UserPreferencesResponse
+): UserPreferences {
   return {
     familySize: backendPrefs.family_size,
     defaultServings: backendPrefs.default_servings,
@@ -93,9 +95,11 @@ export function toFrontendPreferences(backendPrefs: UserPreferencesResponse): Us
   };
 }
 
-export function toBackendPreferences(frontendPrefs: Partial<UserPreferences>): UserPreferencesUpdate {
+export function toBackendPreferences(
+  frontendPrefs: Partial<UserPreferences>
+): UserPreferencesUpdate {
   const update: UserPreferencesUpdate = {};
-  
+
   if (frontendPrefs.familySize !== undefined) {
     update.family_size = frontendPrefs.familySize;
   }
@@ -120,7 +124,7 @@ export function toBackendPreferences(frontendPrefs: Partial<UserPreferences>): U
   if (frontendPrefs.preferredCuisines !== undefined) {
     update.preferred_cuisines = frontendPrefs.preferredCuisines;
   }
-  
+
   return update;
 }
 

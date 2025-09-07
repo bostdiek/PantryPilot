@@ -59,23 +59,20 @@ class UserCRUD:
         return new_user
 
     async def update(
-        self,
-        db: AsyncSession,
-        db_user: User,
-        user_update: UserProfileUpdate
+        self, db: AsyncSession, db_user: User, user_update: UserProfileUpdate
     ) -> User:
         """Update an existing user."""
         update_data = user_update.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(db_user, field, value)
-        
+
         try:
             await db.commit()
             await db.refresh(db_user)
         except IntegrityError as exc:
             await db.rollback()
             raise DuplicateUserError from exc
-        
+
         return db_user
 
 

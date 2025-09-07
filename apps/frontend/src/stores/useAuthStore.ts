@@ -15,14 +15,14 @@ export const useAuthStore = create<AuthState>()(
       getDisplayName: () => {
         const state = get();
         if (!state.user) return 'Guest';
-        
+
         const { first_name, last_name, username } = state.user;
-        
+
         // If we have first_name or last_name, construct display name
         if (first_name || last_name) {
           return [first_name, last_name].filter(Boolean).join(' ').trim();
         }
-        
+
         // Fall back to username
         return username;
       },
