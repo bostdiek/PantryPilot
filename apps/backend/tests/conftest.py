@@ -8,6 +8,7 @@ external .env file during tests.
 import os
 import uuid
 from collections.abc import AsyncGenerator, Generator
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -127,3 +128,29 @@ async def async_client() -> AsyncGenerator[AsyncClient, None]:
         yield client
     app.dependency_overrides.pop(get_db, None)
     app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture
+def payload_namespace():
+    """Factory fixture that builds SimpleNamespace-like payloads for unit tests.
+
+    Use this in unit tests that directly call route functions to bypass Pydantic
+    validation and exercise manual branches.
+    """
+
+    def _make(
+        username: str = "testuser",
+        email: str = "test@test.com",
+        password: str = "securepassword123",
+        first_name: str | None = None,
+        last_name: str | None = None,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            username=username,
+            email=email,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+        )
+
+    return _make
