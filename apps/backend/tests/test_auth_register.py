@@ -38,47 +38,6 @@ from models.users import User
 settings = get_settings()
 
 
-@pytest_asyncio.fixture
-async def auth_client() -> AsyncGenerator[tuple[AsyncClient, AsyncSession], None]:
-    """Client + real in-memory SQLite DB with full schema for auth tests.
-
-    Removes any auth override so routes are actually protected.
-    """
-    # Ensure no auth override from generic fixtures
-    app.dependency_overrides.pop(get_current_user, None)
-
-    engine: AsyncEngine = create_async_engine(
-        "sqlite+aiosqlite:///:memory:", future=True
-    )
-    async with engine.begin() as conn:
-        # Create minimal subset of tables to satisfy auth & mealplans tests.
-        # Avoid Recipe model (Postgres ARRAY) which SQLite can't compile.
-        await conn.exec_driver_sql(
-            "CREATE TABLE IF NOT EXISTS recipe_names (id BLOB PRIMARY KEY)"
-        )
-        await conn.run_sync(
-            lambda sync_conn: Base.metadata.create_all(
-                sync_conn, tables=[User.__table__, Meal.__table__]
-            )
-        )
-
-    SessionLocal = async_sessionmaker(
-        engine, expire_on_commit=False, class_=AsyncSession
-    )
-
-    async def _override_get_db():
-        async with SessionLocal() as session:
-            yield session
-
-    app.dependency_overrides[get_db] = _override_get_db
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
-        async with SessionLocal() as session:
-            yield c, session
-    app.dependency_overrides.pop(get_db, None)
-    await engine.dispose()
-
-
 async def _create_existing_user(
     db: AsyncSession, username: str = "existing", email: str = "existing@test.com"
 ) -> User:

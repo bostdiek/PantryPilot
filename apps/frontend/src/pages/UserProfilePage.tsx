@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { 
   Container, 
   Card, 
@@ -119,9 +119,9 @@ function UserProfilePage() {
   }, [formData, preferencesData]);
 
   const handleInputChange = useCallback((field: string) => (
-    event: React.ChangeEvent<HTMLInputElement>
+    value: string
   ) => {
-    setFormData(prev => ({ ...prev, [field]: event.target.value }));
+    setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
   const handlePreferenceChange = useCallback((field: keyof UserPreferences) => (
@@ -192,8 +192,7 @@ function UserProfilePage() {
     return (
       <Container size="md">
         <EmptyState
-          title="Not logged in"
-          description="Please log in to view your profile"
+          message="Please log in to view your profile"
         />
       </Container>
     );
@@ -288,6 +287,7 @@ function UserProfilePage() {
               label="Email"
               type="email"
               value={user.email}
+              onChange={() => {}} // No-op since field is disabled
               disabled={true}
               helperText="Email cannot be changed"
             />
@@ -309,37 +309,31 @@ function UserProfilePage() {
             <Input
               label="Family Size"
               type="number"
-              min="1"
-              max="20"
               value={preferencesData.familySize.toString()}
-              onChange={(e) => handlePreferenceChange('familySize')(parseInt(e.target.value) || 1)}
+              onChange={(value) => handlePreferenceChange('familySize')(parseInt(value) || 1)}
               disabled={!isEditing}
               error={errors.familySize}
-              helperText="Number of people in your household"
+              helperText="Number of people in your household (1-20)"
             />
             
             <Input
               label="Default Servings"
               type="number"
-              min="1"
-              max="50"
               value={preferencesData.defaultServings.toString()}
-              onChange={(e) => handlePreferenceChange('defaultServings')(parseInt(e.target.value) || 1)}
+              onChange={(value) => handlePreferenceChange('defaultServings')(parseInt(value) || 1)}
               disabled={!isEditing}
               error={errors.defaultServings}
-              helperText="Default servings for new recipes"
+              helperText="Default servings for new recipes (1-50)"
             />
             
             <Input
               label="Meal Planning Days"
               type="number"
-              min="1"
-              max="30"
               value={preferencesData.mealPlanningDays.toString()}
-              onChange={(e) => handlePreferenceChange('mealPlanningDays')(parseInt(e.target.value) || 7)}
+              onChange={(value) => handlePreferenceChange('mealPlanningDays')(parseInt(value) || 7)}
               disabled={!isEditing}
               error={errors.mealPlanningDays}
-              helperText="How many days to plan ahead"
+              helperText="How many days to plan ahead (1-30)"
             />
           </div>
         </Card>
@@ -409,13 +403,13 @@ function UserProfilePage() {
                 Theme
               </label>
               <Select
-                value={preferencesData.theme}
-                onChange={(value) => handlePreferenceChange('theme')(value)}
+                value={{ id: preferencesData.theme, name: preferencesData.theme === 'light' ? 'Light' : preferencesData.theme === 'dark' ? 'Dark' : 'System' }}
+                onChange={(option) => handlePreferenceChange('theme')(option.id)}
                 disabled={!isEditing}
                 options={[
-                  { value: 'light', label: 'Light' },
-                  { value: 'dark', label: 'Dark' },
-                  { value: 'system', label: 'System' },
+                  { id: 'light', name: 'Light' },
+                  { id: 'dark', name: 'Dark' },
+                  { id: 'system', name: 'System' },
                 ]}
               />
             </div>
@@ -425,12 +419,12 @@ function UserProfilePage() {
                 Units
               </label>
               <Select
-                value={preferencesData.units}
-                onChange={(value) => handlePreferenceChange('units')(value)}
+                value={{ id: preferencesData.units, name: preferencesData.units === 'imperial' ? 'Imperial (cups, lbs, °F)' : 'Metric (ml, kg, °C)' }}
+                onChange={(option) => handlePreferenceChange('units')(option.id)}
                 disabled={!isEditing}
                 options={[
-                  { value: 'imperial', label: 'Imperial (cups, lbs, °F)' },
-                  { value: 'metric', label: 'Metric (ml, kg, °C)' },
+                  { id: 'imperial', name: 'Imperial (cups, lbs, °F)' },
+                  { id: 'metric', name: 'Metric (ml, kg, °C)' },
                 ]}
               />
             </div>

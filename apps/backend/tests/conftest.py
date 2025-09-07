@@ -15,16 +15,28 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 
+from core.config import get_settings
 from core.security import get_password_hash
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from main import app
+from models.base import Base
+from models.meal_history import Meal
+from models.user_preferences import UserPreferences
 from models.users import User
+
+
+settings = get_settings()
 
 
 async def _ensure_demo_user(db: AsyncSession) -> User:
@@ -154,3 +166,61 @@ def payload_namespace():
         )
 
     return _make
+
+
+@pytest_asyncio.fixture
+async def auth_client() -> AsyncGenerator[tuple[AsyncClient, AsyncSession], None]:
+    """Client + real in-memory SQLite DB with full schema for auth tests.
+
+    Removes any auth override so routes are actually protected.
+    """
+    # Ensure no auth override from generic fixtures
+    app.dependency_overrides.pop(get_current_user, None)
+
+    engine: AsyncEngine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:", future=True
+    )
+    async with engine.begin() as conn:
+        # Create minimal subset of tables to satisfy auth & mealplans tests.
+        # Avoid Recipe model (Postgres ARRAY) which SQLite can't compile.
+        await conn.exec_driver_sql(
+            "CREATE TABLE IF NOT EXISTS recipe_names (id BLOB PRIMARY KEY)"
+        )
+        # Create user_preferences table with SQLite-compatible schema
+        await conn.exec_driver_sql("""
+            CREATE TABLE IF NOT EXISTS user_preferences (
+                id BLOB PRIMARY KEY,
+                user_id BLOB NOT NULL UNIQUE,
+                family_size INTEGER NOT NULL DEFAULT 2,
+                default_servings INTEGER NOT NULL DEFAULT 4,
+                allergies TEXT NOT NULL DEFAULT '[]',
+                dietary_restrictions TEXT NOT NULL DEFAULT '[]',
+                theme VARCHAR(20) NOT NULL DEFAULT 'light',
+                units VARCHAR(20) NOT NULL DEFAULT 'imperial',
+                meal_planning_days INTEGER NOT NULL DEFAULT 7,
+                preferred_cuisines TEXT NOT NULL DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.create_all(
+                sync_conn, tables=[User.__table__, Meal.__table__]
+            )
+        )
+
+    SessionLocal = async_sessionmaker(
+        engine, expire_on_commit=False, class_=AsyncSession
+    )
+
+    async def _override_get_db():
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as c:
+        async with SessionLocal() as session:
+            yield c, session
+    app.dependency_overrides.pop(get_db, None)
+    await engine.dispose()

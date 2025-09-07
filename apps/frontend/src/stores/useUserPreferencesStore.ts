@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { 
+import type { 
   UserPreferences, 
   UserPreferencesStore, 
+  UserPreferencesResponse
+} from '../types/UserPreferences';
+import { 
   defaultUserPreferences,
   toFrontendPreferences,
-  UserPreferencesResponse
 } from '../types/UserPreferences';
 
 export const useUserPreferencesStore = create<UserPreferencesStore>()(
