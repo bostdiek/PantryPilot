@@ -85,7 +85,9 @@ describe('ProtectedRoute', () => {
     );
 
     // Should preserve both pathname and search params in the redirect
-    expect(mockNavigate).toHaveBeenCalledWith('/login?next=%2Frecipes%2F123%3Fedit%3Dtrue');
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/login?next=%2Frecipes%2F123%3Fedit%3Dtrue'
+    );
   });
 
   test('renders outlet when authenticated', () => {

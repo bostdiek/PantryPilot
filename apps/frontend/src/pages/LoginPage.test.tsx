@@ -134,7 +134,9 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(mockSetToken).toHaveBeenCalledWith('test-token');
-      expect(mockNavigate).toHaveBeenCalledWith('/recipes/123?edit=true', { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith('/recipes/123?edit=true', {
+        replace: true,
+      });
     });
   });
 
@@ -167,7 +169,9 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/invalid username or password/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(/invalid username or password/i)
+      ).toBeInTheDocument();
       expect(mockSetToken).not.toHaveBeenCalled();
       expect(mockNavigate).not.toHaveBeenCalled();
     });
