@@ -16,6 +16,7 @@ from schemas.user_preferences import (
     UserProfileUpdate,
 )
 
+
 router = APIRouter(prefix="/users", tags=["users"])
 
 

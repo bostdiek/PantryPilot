@@ -18,6 +18,46 @@ export interface UserPreferences {
   preferredCuisines: string[];
 }
 
+// Backend API types (snake_case to match backend)
+export interface UserPreferencesResponse {
+  id: string;
+  user_id: string;
+  family_size: number;
+  default_servings: number;
+  allergies: string[];
+  dietary_restrictions: string[];
+  theme: 'light' | 'dark' | 'system';
+  units: 'metric' | 'imperial';
+  meal_planning_days: number;
+  preferred_cuisines: string[];
+}
+
+export interface UserPreferencesUpdate {
+  family_size?: number;
+  default_servings?: number;
+  allergies?: string[];
+  dietary_restrictions?: string[];
+  theme?: 'light' | 'dark' | 'system';
+  units?: 'metric' | 'imperial';
+  meal_planning_days?: number;
+  preferred_cuisines?: string[];
+}
+
+export interface UserProfileResponse {
+  id: string;
+  username: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+  preferences?: UserPreferencesResponse;
+}
+
+export interface UserProfileUpdate {
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+}
+
 export interface UserProfile {
   id: string;
   username: string;
@@ -28,12 +68,6 @@ export interface UserProfile {
   isEmailManaged: boolean; // Whether email is managed by external provider
 }
 
-export interface UserProfileUpdate {
-  firstName?: string;
-  lastName?: string;
-  username?: string;
-}
-
 export interface UserPreferencesStore {
   preferences: UserPreferences;
   isLoaded: boolean;
@@ -42,6 +76,52 @@ export interface UserPreferencesStore {
   updatePreferences: (preferences: Partial<UserPreferences>) => void;
   resetPreferences: () => void;
   loadPreferences: () => void;
+  syncWithBackend: (backendPrefs: UserPreferencesResponse) => void;
+}
+
+// Conversion helpers
+export function toFrontendPreferences(backendPrefs: UserPreferencesResponse): UserPreferences {
+  return {
+    familySize: backendPrefs.family_size,
+    defaultServings: backendPrefs.default_servings,
+    allergies: backendPrefs.allergies,
+    dietaryRestrictions: backendPrefs.dietary_restrictions,
+    theme: backendPrefs.theme,
+    units: backendPrefs.units,
+    mealPlanningDays: backendPrefs.meal_planning_days,
+    preferredCuisines: backendPrefs.preferred_cuisines,
+  };
+}
+
+export function toBackendPreferences(frontendPrefs: Partial<UserPreferences>): UserPreferencesUpdate {
+  const update: UserPreferencesUpdate = {};
+  
+  if (frontendPrefs.familySize !== undefined) {
+    update.family_size = frontendPrefs.familySize;
+  }
+  if (frontendPrefs.defaultServings !== undefined) {
+    update.default_servings = frontendPrefs.defaultServings;
+  }
+  if (frontendPrefs.allergies !== undefined) {
+    update.allergies = frontendPrefs.allergies;
+  }
+  if (frontendPrefs.dietaryRestrictions !== undefined) {
+    update.dietary_restrictions = frontendPrefs.dietaryRestrictions;
+  }
+  if (frontendPrefs.theme !== undefined) {
+    update.theme = frontendPrefs.theme;
+  }
+  if (frontendPrefs.units !== undefined) {
+    update.units = frontendPrefs.units;
+  }
+  if (frontendPrefs.mealPlanningDays !== undefined) {
+    update.meal_planning_days = frontendPrefs.mealPlanningDays;
+  }
+  if (frontendPrefs.preferredCuisines !== undefined) {
+    update.preferred_cuisines = frontendPrefs.preferredCuisines;
+  }
+  
+  return update;
 }
 
 // Default preferences

@@ -4,12 +4,13 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import UUID, DateTime, Integer, String, Text, func
+from sqlalchemy import UUID, DateTime, Integer, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
+
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
-    from .users import User
+    pass
 
 from .base import Base
 

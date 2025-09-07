@@ -4,7 +4,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.security import create_access_token
-from crud.user import get_user_by_username, create_user
+from crud.user import create_user, get_user_by_username
 from models.users import User
 
 

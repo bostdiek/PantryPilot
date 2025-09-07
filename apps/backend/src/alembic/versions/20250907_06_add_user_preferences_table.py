@@ -32,7 +32,9 @@ def upgrade() -> None:
         sa.Column("default_servings", sa.Integer(), nullable=False, default=4),
         # Dietary restrictions and allergies
         sa.Column("allergies", ARRAY(sa.String()), nullable=False, default=[]),
-        sa.Column("dietary_restrictions", ARRAY(sa.String()), nullable=False, default=[]),
+        sa.Column(
+            "dietary_restrictions", ARRAY(sa.String()), nullable=False, default=[]
+        ),
         # App preferences
         sa.Column("theme", sa.String(20), nullable=False, default="light"),
         sa.Column("units", sa.String(20), nullable=False, default="imperial"),
@@ -72,7 +74,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop foreign key constraint first (if it exists)
-    # op.drop_constraint("fk_user_preferences_user_id", "user_preferences", type_="foreignkey")
+    # op.drop_constraint(
+    #     "fk_user_preferences_user_id", "user_preferences", type_="foreignkey"
+    # )
     
     # Drop indexes
     op.drop_index("ix_user_preferences_user_id")

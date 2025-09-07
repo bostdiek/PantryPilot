@@ -3,7 +3,9 @@ import { persist } from 'zustand/middleware';
 import { 
   UserPreferences, 
   UserPreferencesStore, 
-  defaultUserPreferences 
+  defaultUserPreferences,
+  toFrontendPreferences,
+  UserPreferencesResponse
 } from '../types/UserPreferences';
 
 export const useUserPreferencesStore = create<UserPreferencesStore>()(
@@ -30,6 +32,14 @@ export const useUserPreferencesStore = create<UserPreferencesStore>()(
       loadPreferences: () => {
         // Mark as loaded after hydration
         set({ isLoaded: true });
+      },
+
+      syncWithBackend: (backendPrefs: UserPreferencesResponse) => {
+        const frontendPrefs = toFrontendPreferences(backendPrefs);
+        set({
+          preferences: frontendPrefs,
+          isLoaded: true,
+        });
       },
     }),
     {

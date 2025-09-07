@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Container, 
   Card, 
@@ -10,16 +10,19 @@ import {
 } from '../components/ui';
 import { useAuthStore, useDisplayName } from '../stores/useAuthStore';
 import { useUserPreferencesStore } from '../stores/useUserPreferencesStore';
+import { userProfileApi } from '../api/endpoints/userProfile';
 import { 
   commonAllergies, 
   commonDietaryRestrictions, 
   commonCuisines,
-  type UserPreferences 
+  toBackendPreferences,
+  type UserPreferences,
+  type UserProfileUpdate 
 } from '../types/UserPreferences';
 
 function UserProfilePage() {
   const { user, setUser } = useAuthStore();
-  const { preferences, updatePreferences } = useUserPreferencesStore();
+  const { preferences, updatePreferences, syncWithBackend } = useUserPreferencesStore();
   const displayName = useDisplayName();
   
   const [isEditing, setIsEditing] = useState(false);
@@ -30,7 +33,54 @@ function UserProfilePage() {
   });
   const [preferencesData, setPreferencesData] = useState<UserPreferences>(preferences);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Load user profile and preferences from backend on mount
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user) return;
+      
+      setLoading(true);
+      try {
+        const profile = await userProfileApi.getProfile();
+        
+        // Update user info if needed
+        if (profile.first_name !== user.first_name || 
+            profile.last_name !== user.last_name) {
+          setUser({
+            ...user,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+          });
+        }
+        
+        // Sync preferences with backend
+        if (profile.preferences) {
+          syncWithBackend(profile.preferences);
+        }
+        
+        // Update form data
+        setFormData({
+          firstName: profile.first_name || '',
+          lastName: profile.last_name || '',
+          username: profile.username,
+        });
+      } catch (error) {
+        console.error('Failed to load profile:', error);
+        // Don't show error to user, just use local data
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadProfile();
+  }, [user, setUser, syncWithBackend]);
+
+  // Sync local preferences data with store
+  useEffect(() => {
+    setPreferencesData(preferences);
+  }, [preferences]);
 
   // Form validation
   const validateForm = useCallback(() => {
@@ -87,37 +137,45 @@ function UserProfilePage() {
 
     setSaving(true);
     try {
-      // Update local preferences immediately
-      updatePreferences(preferencesData);
-      
-      // Update user info if changed
+      // Update user profile if needed
       if (user && (
         formData.firstName !== user.first_name ||
         formData.lastName !== user.last_name ||
         formData.username !== user.username
       )) {
-        const updatedUser = {
-          ...user,
+        const profileUpdate: UserProfileUpdate = {
           first_name: formData.firstName || undefined,
           last_name: formData.lastName || undefined,
           username: formData.username,
         };
-        setUser(updatedUser);
+        
+        const updatedProfile = await userProfileApi.updateProfile(profileUpdate);
+        setUser({
+          ...user,
+          first_name: updatedProfile.first_name,
+          last_name: updatedProfile.last_name,
+          username: updatedProfile.username,
+        });
       }
+
+      // Update preferences
+      const backendPrefsUpdate = toBackendPreferences(preferencesData);
+      const updatedPrefs = await userProfileApi.updatePreferences(backendPrefsUpdate);
+      
+      // Update local state
+      updatePreferences(preferencesData);
+      syncWithBackend(updatedPrefs);
 
       setIsEditing(false);
       
-      // TODO: When backend preferences endpoint exists, sync preferences here
-      // await userApi.updateProfile(formData);
-      // await userApi.updatePreferences(preferencesData);
-      
     } catch (error) {
       console.error('Failed to save profile:', error);
-      // TODO: Show error toast
+      setErrors({ general: 'Failed to save changes. Please try again.' });
+      // TODO: Show error toast when toast system is available
     } finally {
       setSaving(false);
     }
-  }, [formData, preferencesData, user, updatePreferences, setUser, validateForm]);
+  }, [formData, preferencesData, user, setUser, updatePreferences, syncWithBackend, validateForm]);
 
   const handleCancel = useCallback(() => {
     setFormData({
@@ -143,41 +201,53 @@ function UserProfilePage() {
 
   return (
     <Container size="lg">
-      <div className="space-y-6">
-        {/* Page Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Manage your account information and preferences
-            </p>
-          </div>
-          {!isEditing ? (
-            <Button
-              variant="primary"
-              onClick={() => setIsEditing(true)}
-            >
-              Edit Profile
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                onClick={handleCancel}
-                disabled={saving}
-              >
-                Cancel
-              </Button>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-[400px]">
+          <LoadingSpinner />
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Page Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Profile</h1>
+              <p className="mt-1 text-sm text-gray-500">
+                Manage your account information and preferences
+              </p>
+            </div>
+            {!isEditing ? (
               <Button
                 variant="primary"
-                onClick={handleSave}
-                disabled={saving}
+                onClick={() => setIsEditing(true)}
               >
-                {saving ? <LoadingSpinner /> : 'Save Changes'}
+                Edit Profile
               </Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={handleCancel}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSave}
+                  disabled={saving}
+                >
+                  {saving ? <LoadingSpinner /> : 'Save Changes'}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Error Messages */}
+          {errors.general && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-sm text-red-600">{errors.general}</p>
             </div>
           )}
-        </div>
 
         {/* Basic Information */}
         <Card variant="default" className="p-6">
@@ -394,6 +464,7 @@ function UserProfilePage() {
           </div>
         </Card>
       </div>
+      )}
     </Container>
   );
 }
