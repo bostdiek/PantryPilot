@@ -16,6 +16,7 @@ const RecipesDetail = React.lazy(() => import('./pages/RecipesDetail'));
 const RecipesEditPage = React.lazy(() => import('./pages/RecipesEditPage'));
 const NewRecipePage = React.lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = React.lazy(() => import('./pages/RecipesPage'));
+const UserProfilePage = React.lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = React.lazy(
   () => import('./pages/dev/ComponentShowcase')
 );
@@ -193,6 +194,14 @@ export const router = createBrowserRouter([
               </Suspense>
             ),
             loader: mealPlanLoader,
+          },
+          {
+            path: 'user',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <UserProfilePage />
+              </Suspense>
+            ),
           },
         ],
       },

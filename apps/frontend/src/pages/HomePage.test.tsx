@@ -41,6 +41,10 @@ vi.mock('../stores/useMealPlanStore', () => ({
   }),
 }));
 
+vi.mock('../stores/useAuthStore', () => ({
+  useDisplayName: () => 'Test User',
+}));
+
 describe('HomePage', () => {
   test('renders the welcome message', () => {
     render(
@@ -49,7 +53,7 @@ describe('HomePage', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText('Hi, demo!')).toBeInTheDocument();
+    expect(screen.getByText('Hi, Test User!')).toBeInTheDocument();
     expect(screen.getByText('Ready to plan some meals?')).toBeInTheDocument();
   });
 
