@@ -28,19 +28,51 @@ def upgrade() -> None:
         sa.Column("id", UUID(as_uuid=True), primary_key=True, nullable=False),
         sa.Column("user_id", UUID(as_uuid=True), nullable=False, unique=True),
         # Family and serving preferences
-        sa.Column("family_size", sa.Integer(), nullable=False, default=2),
-        sa.Column("default_servings", sa.Integer(), nullable=False, default=4),
-        # Dietary restrictions and allergies
-        sa.Column("allergies", ARRAY(sa.String()), nullable=False, default=[]),
         sa.Column(
-            "dietary_restrictions", ARRAY(sa.String()), nullable=False, default=[]
+            "family_size",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("2"),
+        ),
+        sa.Column(
+            "default_servings",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("4"),
+        ),
+        # Dietary restrictions and allergies
+        sa.Column(
+            "allergies",
+            ARRAY(sa.String()),
+            nullable=False,
+            server_default=sa.text("'{}'"),  # empty text[]
+        ),
+        sa.Column(
+            "dietary_restrictions",
+            ARRAY(sa.String()),
+            nullable=False,
+            server_default=sa.text("'{}'"),
         ),
         # App preferences
-        sa.Column("theme", sa.String(20), nullable=False, default="light"),
-        sa.Column("units", sa.String(20), nullable=False, default="imperial"),
+        sa.Column(
+            "theme", sa.String(20), nullable=False, server_default=sa.text("'light'")
+        ),
+        sa.Column(
+            "units", sa.String(20), nullable=False, server_default=sa.text("'imperial'")
+        ),
         # Meal planning preferences
-        sa.Column("meal_planning_days", sa.Integer(), nullable=False, default=7),
-        sa.Column("preferred_cuisines", ARRAY(sa.String()), nullable=False, default=[]),
+        sa.Column(
+            "meal_planning_days",
+            sa.Integer(),
+            nullable=False,
+            server_default=sa.text("7"),
+        ),
+        sa.Column(
+            "preferred_cuisines",
+            ARRAY(sa.String()),
+            nullable=False,
+            server_default=sa.text("'{}'"),
+        ),
         # Timestamps
         sa.Column(
             "created_at",

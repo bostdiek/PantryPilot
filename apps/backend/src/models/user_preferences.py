@@ -34,7 +34,8 @@ class UserPreferences(Base):
     family_size: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     default_servings: Mapped[int] = mapped_column(Integer, nullable=False, default=4)
 
-    # Dietary restrictions and allergies (stored as JSON arrays)
+    # Dietary restrictions and allergies (stored as PostgreSQL text arrays)
+    # Use callable default=list (SQLAlchemy invokes per row; avoids shared mutable)
     allergies: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list
     )

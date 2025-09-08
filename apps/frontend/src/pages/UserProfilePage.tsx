@@ -20,6 +20,9 @@ import {
   type UserProfileUpdate,
 } from '../types/UserPreferences';
 
+// Re-usable no-op handler to avoid recreating inline functions for disabled inputs
+const noop = () => {};
+
 function UserProfilePage() {
   const { user, setUser } = useAuthStore();
   const { preferences, updatePreferences, syncWithBackend } =
@@ -305,7 +308,7 @@ function UserProfilePage() {
                 label="Email"
                 type="email"
                 value={user.email}
-                onChange={() => {}} // No-op since field is disabled
+                onChange={noop} // No-op since field is disabled
                 disabled={true}
                 helperText="Email cannot be changed"
               />

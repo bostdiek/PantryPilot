@@ -5,10 +5,19 @@ import ProtectedRoute from './ProtectedRoute';
 
 // Mock the auth store
 vi.mock('../stores/useAuthStore', () => {
+  const baseFns = {
+    login: vi.fn(),
+    logout: vi.fn(),
+    setToken: vi.fn(),
+    setUser: vi.fn(),
+    getDisplayName: vi.fn(() => 'User'),
+  };
   return {
     useAuthStore: vi.fn(() => ({
       hasHydrated: true,
       token: null,
+      user: null,
+      ...baseFns,
     })),
     useIsAuthenticated: vi.fn(() => false),
   };
@@ -39,6 +48,12 @@ describe('ProtectedRoute', () => {
     vi.mocked(useAuthStore).mockReturnValue({
       hasHydrated: false,
       token: null,
+      user: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+      setUser: vi.fn(),
+      getDisplayName: vi.fn(() => 'User'),
     } as any);
     vi.mocked(useIsAuthenticated).mockReturnValue(false);
 
@@ -55,6 +70,12 @@ describe('ProtectedRoute', () => {
     vi.mocked(useAuthStore).mockReturnValue({
       hasHydrated: true,
       token: null,
+      user: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+      setUser: vi.fn(),
+      getDisplayName: vi.fn(() => 'User'),
     } as any);
     vi.mocked(useIsAuthenticated).mockReturnValue(false);
 
@@ -75,6 +96,12 @@ describe('ProtectedRoute', () => {
     vi.mocked(useAuthStore).mockReturnValue({
       hasHydrated: true,
       token: null,
+      user: null,
+      login: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+      setUser: vi.fn(),
+      getDisplayName: vi.fn(() => 'User'),
     } as any);
     vi.mocked(useIsAuthenticated).mockReturnValue(false);
 
@@ -94,6 +121,19 @@ describe('ProtectedRoute', () => {
     vi.mocked(useAuthStore).mockReturnValue({
       hasHydrated: true,
       token: 'valid-token',
+      // Provide a user so the effect doesn't attempt a network call + logout
+      user: {
+        id: '1',
+        username: 'tester',
+        email: 'tester@example.com',
+        first_name: 'Test',
+        last_name: 'User',
+      },
+      login: vi.fn(),
+      logout: vi.fn(),
+      setToken: vi.fn(),
+      setUser: vi.fn(),
+      getDisplayName: vi.fn(() => 'Test User'),
     } as any);
     vi.mocked(useIsAuthenticated).mockReturnValue(true);
 

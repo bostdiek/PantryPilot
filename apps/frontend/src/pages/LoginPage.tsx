@@ -43,14 +43,14 @@ const LoginPage: FC = () => {
 
     try {
       const response = await login(formData);
-      
+
       // Store token using auth store
       authStore.setToken(response.access_token);
-      
+
       // Fetch user profile after successful authentication
       try {
         const profile = await userProfileApi.getProfile();
-        
+
         // Convert UserProfileResponse to AuthUser format
         const user: AuthUser = {
           id: profile.id,
@@ -59,7 +59,7 @@ const LoginPage: FC = () => {
           first_name: profile.first_name,
           last_name: profile.last_name,
         };
-        
+
         // Store user in auth store
         authStore.setUser(user);
       } catch (profileErr) {
@@ -67,7 +67,7 @@ const LoginPage: FC = () => {
         // Continue with navigation even if profile fetch fails
         // The profile will be fetched later by the UserProfilePage
       }
-      
+
       // Navigate to intended page or home
       navigate(from, { replace: true });
     } catch (err: any) {

@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuthStore, useIsAuthenticated, useDisplayName } from '../stores/useAuthStore';
+import {
+  useAuthStore,
+  useIsAuthenticated,
+  useDisplayName,
+} from '../stores/useAuthStore';
 import { Button } from './ui/Button';
 
 const Navigation: React.FC = () => {
@@ -14,7 +18,10 @@ const Navigation: React.FC = () => {
   // Close user menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
         setUserMenuOpen(false);
       }
     };
@@ -104,7 +111,7 @@ const Navigation: React.FC = () => {
                 {/* User Menu Button */}
                 <button
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
-                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
                     {displayName.charAt(0).toUpperCase()}
@@ -129,7 +136,7 @@ const Navigation: React.FC = () => {
 
                 {/* Dropdown Menu */}
                 {userMenuOpen && (
-                  <div className="absolute right-0 z-50 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5">
+                  <div className="ring-opacity-5 absolute right-0 z-50 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black">
                     <button
                       onClick={handleProfileClick}
                       className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"

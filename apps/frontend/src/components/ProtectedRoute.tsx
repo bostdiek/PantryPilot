@@ -15,7 +15,7 @@ const ProtectedRoute: React.FC = () => {
       if (hasHydrated && token && !user) {
         try {
           const profile = await userProfileApi.getProfile();
-          
+
           // Convert UserProfileResponse to AuthUser format
           const authUser: AuthUser = {
             id: profile.id,
@@ -24,7 +24,7 @@ const ProtectedRoute: React.FC = () => {
             first_name: profile.first_name,
             last_name: profile.last_name,
           };
-          
+
           setUser(authUser);
         } catch (error) {
           console.error('Failed to fetch user profile:', error);
