@@ -23,7 +23,7 @@ class UserPreferencesCRUD:
         self, db: AsyncSession, user_id: UUID, preferences_data: UserPreferencesCreate
     ) -> UserPreferences:
         """Create new user preferences."""
-        preferences = UserPreferences(user_id=user_id, **preferences_data.model_dump())
+        preferences = UserPreferences(user_id=user_id, **preferences_data.model_dump(exclude_unset=True))
         db.add(preferences)
         await db.commit()
         await db.refresh(preferences)
