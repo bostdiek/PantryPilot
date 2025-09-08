@@ -1,20 +1,20 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { userProfileApi } from '../api/endpoints/userProfile';
 import {
-  Container,
-  Card,
   Button,
-  Input,
-  Select,
-  LoadingSpinner,
+  Card,
+  Container,
   EmptyState,
+  Input,
+  LoadingSpinner,
+  Select,
 } from '../components/ui';
 import { useAuthStore, useDisplayName } from '../stores/useAuthStore';
 import { useUserPreferencesStore } from '../stores/useUserPreferencesStore';
-import { userProfileApi } from '../api/endpoints/userProfile';
 import {
   commonAllergies,
-  commonDietaryRestrictions,
   commonCuisines,
+  commonDietaryRestrictions,
   toBackendPreferences,
   type UserPreferences,
   type UserProfileUpdate,
