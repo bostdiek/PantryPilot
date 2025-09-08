@@ -1,16 +1,39 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
+import { useAuthStore, useIsAuthenticated, useDisplayName } from '../stores/useAuthStore';
 import { Button } from './ui/Button';
 
 const Navigation: React.FC = () => {
   const { hasHydrated, logout } = useAuthStore();
   const isAuthenticated = useIsAuthenticated();
+  const displayName = useDisplayName();
   const navigate = useNavigate();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
+    setUserMenuOpen(false);
     navigate('/login');
+  };
+
+  const handleProfileClick = () => {
+    setUserMenuOpen(false);
+    navigate('/user');
   };
 
   return (
@@ -72,14 +95,56 @@ const Navigation: React.FC = () => {
         )}
       </div>
 
-      {/* Authentication buttons */}
+      {/* Authentication and User Menu */}
       <div className="flex items-center gap-2">
         {hasHydrated && (
           <>
             {isAuthenticated ? (
-              <Button variant="secondary" onClick={handleLogout}>
-                Logout
-              </Button>
+              <div className="relative" ref={userMenuRef}>
+                {/* User Menu Button */}
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                    {displayName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="hidden sm:block">{displayName}</span>
+                  <svg
+                    className={`h-4 w-4 transition-transform ${
+                      userMenuOpen ? 'rotate-180' : ''
+                    }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M19 9l-7 7-7-7"
+                    />
+                  </svg>
+                </button>
+
+                {/* Dropdown Menu */}
+                {userMenuOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5">
+                    <button
+                      onClick={handleProfileClick}
+                      className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Profile Settings
+                    </button>
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <NavLink to="/login">
                 <Button variant="primary">Login</Button>
