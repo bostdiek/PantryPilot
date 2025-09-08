@@ -1,12 +1,13 @@
 import { useState, type FC, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { login } from '../api/endpoints/auth';
+import { userProfileApi } from '../api/endpoints/userProfile';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
 import { useAuthStore } from '../stores/useAuthStore';
-import type { LoginFormData } from '../types/auth';
+import type { LoginFormData, AuthUser } from '../types/auth';
 
 const LoginPage: FC = () => {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -42,8 +43,31 @@ const LoginPage: FC = () => {
 
     try {
       const response = await login(formData);
+      
       // Store token using auth store
       authStore.setToken(response.access_token);
+      
+      // Fetch user profile after successful authentication
+      try {
+        const profile = await userProfileApi.getProfile();
+        
+        // Convert UserProfileResponse to AuthUser format
+        const user: AuthUser = {
+          id: profile.id,
+          username: profile.username,
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+        };
+        
+        // Store user in auth store
+        authStore.setUser(user);
+      } catch (profileErr) {
+        console.error('Failed to fetch user profile after login:', profileErr);
+        // Continue with navigation even if profile fetch fails
+        // The profile will be fetched later by the UserProfilePage
+      }
+      
       // Navigate to intended page or home
       navigate(from, { replace: true });
     } catch (err: any) {
