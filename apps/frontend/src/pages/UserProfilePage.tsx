@@ -133,7 +133,7 @@ function UserProfilePage() {
   }, [formData, preferencesData]);
 
   const handleInputChange = useCallback(
-    (field: string) => (value: string) => {
+    (field: keyof typeof formData) => (value: string) => {
       setFormData((prev) => ({ ...prev, [field]: value }));
     },
     []
