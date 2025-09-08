@@ -12,6 +12,7 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const MealPlanPage = lazy(() => import('./pages/MealPlanPage'));
+const GroceryListPage = lazy(() => import('./pages/GroceryListPage'));
 const RecipesDetail = lazy(() => import('./pages/RecipesDetail'));
 const RecipesEditPage = lazy(() => import('./pages/RecipesEditPage'));
 const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
@@ -192,6 +193,14 @@ export const router = createBrowserRouter([
               </Suspense>
             ),
             loader: mealPlanLoader,
+          },
+          {
+            path: 'grocery-list',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <GroceryListPage />
+              </Suspense>
+            ),
           },
           {
             path: 'user',
