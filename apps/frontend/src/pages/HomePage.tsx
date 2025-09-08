@@ -12,11 +12,13 @@ import KitchenIcon from '../components/ui/icons/kitchen.svg?react';
 import RestaurantIcon from '../components/ui/icons/restaurant.svg?react';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
+import { useDisplayName } from '../stores/useAuthStore';
 
 const HomePage: React.FC = () => {
   // Get data from stores (already loaded by the route loader)
   const { recipes, isLoading: recipesLoading } = useRecipeStore();
   const { currentWeek, isLoading: mealPlanLoading } = useMealPlanStore();
+  const displayName = useDisplayName();
 
   // Get today's meal plan
   const todayDate = new Date();
@@ -45,12 +47,12 @@ const HomePage: React.FC = () => {
     <Container>
       <div className="flex items-center justify-between pt-6 pb-4">
         <div>
-          <h1 className="text-2xl font-bold">Hi, demo!</h1>
+          <h1 className="text-2xl font-bold">Hi, {displayName}!</h1>
           <p className="text-gray-600">Ready to plan some meals?</p>
         </div>
-        <Link to="/profile" className="ml-auto">
+        <Link to="/user" className="ml-auto">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-lg font-bold text-gray-700">
-            D
+            {displayName.charAt(0).toUpperCase()}
           </div>
         </Link>
       </div>

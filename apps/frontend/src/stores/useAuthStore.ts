@@ -4,7 +4,7 @@ import type { AuthState } from '../types/auth';
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       user: null,
       hasHydrated: false, // hydration guard flag
@@ -12,6 +12,20 @@ export const useAuthStore = create<AuthState>()(
       logout: () => set({ token: null, user: null }),
       setToken: (token) => set({ token }),
       setUser: (user) => set({ user }),
+      getDisplayName: () => {
+        const state = get();
+        if (!state.user) return 'Guest';
+
+        const { first_name, last_name, username } = state.user;
+
+        // If we have first_name or last_name, construct display name
+        if (first_name || last_name) {
+          return [first_name, last_name].filter(Boolean).join(' ').trim();
+        }
+
+        // Fall back to username
+        return username;
+      },
     }),
     {
       name: 'auth', // persist middleware name for localStorage
@@ -28,3 +42,6 @@ export const useAuthStore = create<AuthState>()(
 
 // Convenience selector hook for derived authentication boolean
 export const useIsAuthenticated = () => useAuthStore((s) => s.token !== null);
+
+// Convenience hook for display name
+export const useDisplayName = () => useAuthStore((s) => s.getDisplayName());

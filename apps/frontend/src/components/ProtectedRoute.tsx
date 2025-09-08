@@ -1,11 +1,42 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
+import { userProfileApi } from '../api/endpoints/userProfile';
+import type { AuthUser } from '../types/auth';
 
 const ProtectedRoute: React.FC = () => {
-  const { hasHydrated } = useAuthStore();
+  const { hasHydrated, token, user, setUser, logout } = useAuthStore();
   const isAuthenticated = useIsAuthenticated();
   const location = useLocation();
+
+  // If we have a token but no user, fetch user profile
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (hasHydrated && token && !user) {
+        try {
+          const profile = await userProfileApi.getProfile();
+
+          // Convert UserProfileResponse to AuthUser format
+          const authUser: AuthUser = {
+            id: profile.id,
+            username: profile.username,
+            email: profile.email,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+          };
+
+          setUser(authUser);
+        } catch (error) {
+          console.error('Failed to fetch user profile:', error);
+          // If profile fetch fails, the token might be invalid
+          // Clear the auth state to force re-login
+          logout();
+        }
+      }
+    };
+
+    fetchUserProfile();
+  }, [hasHydrated, token, user, setUser, logout]);
 
   // If not hydrated yet, render nothing or a skeleton
   if (!hasHydrated) {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Navigation from './Navigation';
 
@@ -11,13 +11,19 @@ vi.mock('../stores/useAuthStore', () => {
       hasHydrated: true,
       logout: vi.fn(),
       token: null,
+      user: null,
     })),
     useIsAuthenticated: vi.fn(() => false),
+    useDisplayName: vi.fn(() => 'Guest'),
   };
 });
 
 // Import after mocking
-import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
+import {
+  useAuthStore,
+  useDisplayName,
+  useIsAuthenticated,
+} from '../stores/useAuthStore';
 
 describe('Navigation', () => {
   beforeEach(() => {
@@ -29,7 +35,9 @@ describe('Navigation', () => {
       hasHydrated: true,
       logout: vi.fn(),
       token: null,
+      user: null,
     } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Guest');
     vi.mocked(useIsAuthenticated).mockReturnValue(false);
 
     render(
@@ -55,7 +63,9 @@ describe('Navigation', () => {
       hasHydrated: true,
       logout: vi.fn(),
       token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
     } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
     vi.mocked(useIsAuthenticated).mockReturnValue(true);
 
     render(
@@ -76,7 +86,19 @@ describe('Navigation', () => {
       screen.getByRole('link', { name: /meal plan/i })
     ).toBeInTheDocument();
 
-    // Should show Logout button when authenticated
+    // User menu button should be present
+    const userMenuButton = screen.getByRole('button', { name: /tester/i });
+    expect(userMenuButton).toBeInTheDocument();
+
+    // Logout not visible before opening menu
+    expect(
+      screen.queryByRole('button', { name: /logout/i })
+    ).not.toBeInTheDocument();
+
+    // Open the user menu
+    fireEvent.click(userMenuButton);
+
+    // Should show Logout button when authenticated after opening menu
     expect(screen.getByRole('button', { name: /logout/i })).toBeInTheDocument();
   });
 
@@ -85,7 +107,9 @@ describe('Navigation', () => {
       hasHydrated: false,
       logout: vi.fn(),
       token: null,
+      user: null,
     } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Guest');
     vi.mocked(useIsAuthenticated).mockReturnValue(false);
 
     render(

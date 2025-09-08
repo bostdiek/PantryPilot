@@ -26,16 +26,21 @@ export interface DecodedToken {
   iat: number;
 }
 
+export interface AuthUser {
+  id: string;
+  username: string;
+  email: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 export interface AuthState {
   token: string | null;
-  user: {
-    id: string;
-    username: string;
-    email: string;
-  } | null;
+  user: AuthUser | null;
   hasHydrated: boolean; // hydration guard flag
-  login: (token: string, user: AuthState['user']) => void;
+  login: (token: string, user: AuthUser) => void;
   logout: () => void;
   setToken: (token: string | null) => void;
-  setUser: (user: AuthState['user']) => void;
+  setUser: (user: AuthUser | null) => void;
+  getDisplayName: () => string;
 }

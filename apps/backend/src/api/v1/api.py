@@ -6,6 +6,7 @@ from .auth import router as auth_router
 from .health import router as health_router
 from .mealplans import meals_router, router as mealplans_router
 from .recipes import router as recipes_router
+from .user_profile import router as user_profile_router
 
 
 # Public API router (health, auth)
@@ -23,3 +24,4 @@ protected_deps = [Depends(get_current_user)]
 api_router.include_router(recipes_router, dependencies=protected_deps)
 api_router.include_router(mealplans_router, dependencies=protected_deps)
 api_router.include_router(meals_router, dependencies=protected_deps)
+api_router.include_router(user_profile_router, dependencies=protected_deps)

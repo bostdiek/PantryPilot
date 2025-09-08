@@ -16,6 +16,7 @@ const RecipesDetail = lazy(() => import('./pages/RecipesDetail'));
 const RecipesEditPage = lazy(() => import('./pages/RecipesEditPage'));
 const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = lazy(() => import('./pages/RecipesPage'));
+const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 
 // Loader functions with auth checks
@@ -191,6 +192,14 @@ export const router = createBrowserRouter([
               </Suspense>
             ),
             loader: mealPlanLoader,
+          },
+          {
+            path: 'user',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <UserProfilePage />
+              </Suspense>
+            ),
           },
         ],
       },
