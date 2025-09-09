@@ -20,83 +20,77 @@ const RecipesPage = lazy(() => import('./pages/RecipesPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 
-// Loader functions with auth checks
+// Loader functions for protected routes
 const homeLoader = async () => {
   console.log('Home loader executing...');
-  const { hasHydrated, token } = useAuthStore.getState();
-  const isAuthenticated = token !== null;
-
-  // Wait for hydration and check authentication
-  if (!hasHydrated || !isAuthenticated) {
-    console.log('Home loader: not authenticated, skipping data fetch');
-    return null;
-  }
-
+  
   const { fetchRecipes } = useRecipeStore.getState();
   const { loadWeek } = useMealPlanStore.getState();
 
-  // Start both fetches in parallel
-  console.log('Starting parallel data fetching for home page');
-  await Promise.all([fetchRecipes(), loadWeek()]);
-
-  console.log('Home loader completed');
+  try {
+    // Start both fetches in parallel
+    console.log('Starting parallel data fetching for home page');
+    await Promise.all([fetchRecipes(), loadWeek()]);
+    console.log('Home loader completed');
+  } catch (error) {
+    console.error('Home loader: failed to load data', error);
+    // Don't throw here - let the component handle the error state
+  }
+  
   // Data is already stored in our Zustand stores
   return null;
 };
 
 const recipesLoader = async () => {
-  const { hasHydrated, token } = useAuthStore.getState();
-  const isAuthenticated = token !== null;
-
-  // Wait for hydration and check authentication
-  if (!hasHydrated || !isAuthenticated) {
-    console.log('Recipes loader: not authenticated, skipping data fetch');
-    return null;
-  }
-
   const { recipes, fetchRecipes } = useRecipeStore.getState();
 
-  // Only fetch if we don't already have recipes
-  if (recipes.length === 0) {
-    await fetchRecipes();
+  try {
+    // Only fetch if we don't already have recipes
+    if (recipes.length === 0) {
+      await fetchRecipes();
+    }
+  } catch (error) {
+    console.error('Recipes loader: failed to load data', error);
+    // Don't throw here - let the component handle the error state
   }
 
   return null;
 };
 
 const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
-  const { hasHydrated, token } = useAuthStore.getState();
-  const isAuthenticated = token !== null;
-
-  // Wait for hydration and check authentication
-  if (!hasHydrated || !isAuthenticated) {
-    console.log('Recipe detail loader: not authenticated, skipping data fetch');
-    return null;
-  }
-
   const { fetchRecipeById } = useRecipeStore.getState();
-  if (params.id) {
-    return fetchRecipeById(params.id);
+  
+  try {
+    if (params.id) {
+      return await fetchRecipeById(params.id);
+    }
+  } catch (error) {
+    console.error('Recipe detail loader: failed to load data', error);
+    // Don't throw here - let the component handle the error state
   }
+  
   return null;
 };
 
 const mealPlanLoader = async () => {
-  const { hasHydrated, token } = useAuthStore.getState();
-  const isAuthenticated = token !== null;
-
-  // Wait for hydration and check authentication
-  if (!hasHydrated || !isAuthenticated) {
-    console.log('Meal plan loader: not authenticated, skipping data fetch');
-    return null;
-  }
-
+  // The ProtectedRoute component already handles authentication checks,
+  // so we can safely assume the user is authenticated when this loader runs
+  console.log('Meal plan loader: loading data for authenticated user');
+  
   const { loadWeek } = useMealPlanStore.getState();
   const { recipes, fetchRecipes } = useRecipeStore.getState();
-  await Promise.all([
-    loadWeek(),
-    recipes.length === 0 ? fetchRecipes() : Promise.resolve(),
-  ]);
+  
+  try {
+    await Promise.all([
+      loadWeek(),
+      recipes.length === 0 ? fetchRecipes() : Promise.resolve(),
+    ]);
+    console.log('Meal plan loader: data loaded successfully');
+  } catch (error) {
+    console.error('Meal plan loader: failed to load data', error);
+    // Don't throw here - let the component handle the error state
+  }
+  
   return null;
 };
 
