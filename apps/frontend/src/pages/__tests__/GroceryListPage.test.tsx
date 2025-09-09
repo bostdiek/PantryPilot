@@ -22,19 +22,45 @@ describe('GroceryListPage', () => {
     vi.clearAllMocks();
   });
 
-  it('renders grocery list page with date inputs', () => {
+  it('renders grocery list page with date inputs', async () => {
+    const mockApiResponse = {
+      start_date: '2024-01-01',
+      end_date: '2024-01-07',
+      ingredients: [],
+      total_meals: 0,
+    };
+
+    vi.mocked(groceryListsApi.generateGroceryList).mockResolvedValue(
+      mockApiResponse
+    );
+
     render(<GroceryListPage />, { wrapper: Wrapper });
 
     expect(screen.getByText('Grocery List')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Generate Grocery List' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Date Range' })).toBeInTheDocument();
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
     expect(screen.getByLabelText('End Date')).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Generate Grocery List' })
-    ).toBeInTheDocument();
+    
+    // Wait for initial API call to complete so button shows proper text
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Update Grocery List' })
+      ).toBeInTheDocument();
+    });
   });
 
-  it('has default date values set to current week', () => {
+  it('has default date values set to current week', async () => {
+    const mockApiResponse = {
+      start_date: '2024-01-01',
+      end_date: '2024-01-07',
+      ingredients: [],
+      total_meals: 0,
+    };
+
+    vi.mocked(groceryListsApi.generateGroceryList).mockResolvedValue(
+      mockApiResponse
+    );
+
     render(<GroceryListPage />, { wrapper: Wrapper });
 
     const startDateInput = screen.getByLabelText(
@@ -45,9 +71,14 @@ describe('GroceryListPage', () => {
     // Should have some date values (we won't test exact dates as they change)
     expect(startDateInput.value).toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(endDateInput.value).toMatch(/\d{4}-\d{2}-\d{2}/);
+
+    // Wait for initial API call to complete
+    await waitFor(() => {
+      expect(groceryListsApi.generateGroceryList).toHaveBeenCalledTimes(1);
+    });
   });
 
-  it('calls API when generate button is clicked', async () => {
+  it('calls API when update button is clicked', async () => {
     const mockApiResponse = {
       start_date: '2024-01-01',
       end_date: '2024-01-07',
@@ -69,12 +100,18 @@ describe('GroceryListPage', () => {
 
     render(<GroceryListPage />, { wrapper: Wrapper });
 
-    const generateButton = screen.getByRole('button', {
-      name: 'Generate Grocery List',
+    // Wait for initial API call to complete
+    await waitFor(() => {
+      expect(groceryListsApi.generateGroceryList).toHaveBeenCalledTimes(1);
     });
-    fireEvent.click(generateButton);
+
+    const updateButton = screen.getByRole('button', {
+      name: 'Update Grocery List',
+    });
+    fireEvent.click(updateButton);
 
     await waitFor(() => {
+      expect(groceryListsApi.generateGroceryList).toHaveBeenCalledTimes(2);
       expect(groceryListsApi.generateGroceryList).toHaveBeenCalledWith({
         start_date: expect.stringMatching(/\d{4}-\d{2}-\d{2}/),
         end_date: expect.stringMatching(/\d{4}-\d{2}-\d{2}/),
@@ -111,11 +148,7 @@ describe('GroceryListPage', () => {
 
     render(<GroceryListPage />, { wrapper: Wrapper });
 
-    const generateButton = screen.getByRole('button', {
-      name: 'Generate Grocery List',
-    });
-    fireEvent.click(generateButton);
-
+    // Wait for initial API call to complete and results to display
     await waitFor(() => {
       expect(screen.getByText('Your Grocery List')).toBeInTheDocument();
     });
@@ -146,11 +179,7 @@ describe('GroceryListPage', () => {
 
     render(<GroceryListPage />, { wrapper: Wrapper });
 
-    const generateButton = screen.getByRole('button', {
-      name: 'Generate Grocery List',
-    });
-    fireEvent.click(generateButton);
-
+    // Wait for initial API call to complete
     await waitFor(() => {
       expect(screen.getByText('No ingredients found')).toBeInTheDocument();
     });
@@ -170,11 +199,7 @@ describe('GroceryListPage', () => {
 
     render(<GroceryListPage />, { wrapper: Wrapper });
 
-    const generateButton = screen.getByRole('button', {
-      name: 'Generate Grocery List',
-    });
-    fireEvent.click(generateButton);
-
+    // Wait for initial API call to fail
     await waitFor(() => {
       expect(
         screen.getByText(/Failed to generate grocery list/)
@@ -186,7 +211,51 @@ describe('GroceryListPage', () => {
     ).toBeInTheDocument();
   });
 
+  it('automatically loads grocery list on component mount', async () => {
+    const mockApiResponse = {
+      start_date: '2024-01-01',
+      end_date: '2024-01-07',
+      ingredients: [
+        {
+          id: '1',
+          name: 'Auto-loaded ingredient',
+          quantity_value: 1,
+          quantity_unit: 'cup',
+          recipes: ['Auto Recipe'],
+        },
+      ],
+      total_meals: 1,
+    };
+
+    vi.mocked(groceryListsApi.generateGroceryList).mockResolvedValue(
+      mockApiResponse
+    );
+
+    render(<GroceryListPage />, { wrapper: Wrapper });
+
+    // Verify API is called automatically on mount
+    await waitFor(() => {
+      expect(groceryListsApi.generateGroceryList).toHaveBeenCalledTimes(1);
+    });
+
+    // Verify results are displayed
+    await waitFor(() => {
+      expect(screen.getByText('Auto-loaded ingredient')).toBeInTheDocument();
+    });
+  });
+
   it('allows changing date range', async () => {
+    const mockApiResponse = {
+      start_date: '2024-01-01',
+      end_date: '2024-01-07',
+      ingredients: [],
+      total_meals: 0,
+    };
+
+    vi.mocked(groceryListsApi.generateGroceryList).mockResolvedValue(
+      mockApiResponse
+    );
+
     render(<GroceryListPage />, { wrapper: Wrapper });
 
     const startDateInput = screen.getByLabelText('Start Date') as HTMLInputElement;
@@ -201,5 +270,10 @@ describe('GroceryListPage', () => {
     // Test that they have initial values
     expect(startDateInput.value).toBeTruthy();
     expect(endDateInput.value).toBeTruthy();
+
+    // Wait for initial API call to complete
+    await waitFor(() => {
+      expect(groceryListsApi.generateGroceryList).toHaveBeenCalledTimes(1);
+    });
   });
 });

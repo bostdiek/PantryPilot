@@ -4,7 +4,6 @@ import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
-import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
 // Lazy loaded pages for code-splitting (use top-level `lazy` import)

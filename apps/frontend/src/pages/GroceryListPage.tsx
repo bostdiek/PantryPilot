@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Container, Card, Button, LoadingSpinner } from '../components/ui';
 import { Stack } from '../components/layout';
 import { useApi } from '../hooks/useApi';
@@ -89,6 +89,18 @@ function GroceryListPage() {
     execute: generateGroceryList,
   } = useApi(groceryListsApi.generateGroceryList);
 
+  // Automatically load grocery list when component mounts
+  useEffect(() => {
+    const request: GroceryListRequest = {
+      start_date: startDate,
+      end_date: endDate,
+    };
+
+    generateGroceryList(request).catch((err) => {
+      console.error('Failed to generate initial grocery list:', err);
+    });
+  }, []); // Empty dependency array - only run on mount
+
   const handleGenerateList = async () => {
     const request: GroceryListRequest = {
       start_date: startDate,
@@ -128,7 +140,7 @@ function GroceryListPage() {
 
   return (
     <Container size="lg">
-      <Stack spacing="lg">
+      <Stack gap={6}>
         {/* Page header */}
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900">Grocery List</h1>
@@ -137,7 +149,7 @@ function GroceryListPage() {
         {/* Date selection and generation */}
         <Card variant="default">
           <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Generate Grocery List</h2>
+            <h2 className="text-lg font-semibold mb-4">Date Range</h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div className="flex flex-col">
@@ -178,7 +190,7 @@ function GroceryListPage() {
                 onClick={handleGenerateList}
                 disabled={loading || !startDate || !endDate}
               >
-                {loading ? 'Generating...' : 'Generate Grocery List'}
+                {loading ? 'Updating...' : 'Update Grocery List'}
               </Button>
             </div>
           </div>
