@@ -24,7 +24,11 @@ function generateCSV(ingredients: GroceryListIngredient[]): string {
     .map((row) =>
       row.map((field) => {
         // Escape quotes and wrap in quotes if field contains comma, quote, or newline
-        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+        if (
+          field.includes(',') ||
+          field.includes('"') ||
+          field.includes('\n')
+        ) {
           return `"${field.replace(/"/g, '""')}"`;
         }
         return field;
@@ -43,15 +47,15 @@ function downloadCSV(csvContent: string, filename: string): void {
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
   const url = URL.createObjectURL(blob);
-  
+
   link.setAttribute('href', url);
   link.setAttribute('download', filename);
   link.style.visibility = 'hidden';
-  
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  
+
   URL.revokeObjectURL(url);
 }
 
@@ -61,15 +65,15 @@ function downloadCSV(csvContent: string, filename: string): void {
 function getCurrentWeekDates(): { startDate: string; endDate: string } {
   const today = new Date();
   const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
-  
+
   // Calculate Sunday of current week
   const startDate = new Date(today);
   startDate.setDate(today.getDate() - dayOfWeek);
-  
+
   // Calculate Saturday of current week
   const endDate = new Date(startDate);
   endDate.setDate(startDate.getDate() + 6);
-  
+
   return {
     startDate: startDate.toISOString().split('T')[0],
     endDate: endDate.toISOString().split('T')[0],
@@ -77,8 +81,9 @@ function getCurrentWeekDates(): { startDate: string; endDate: string } {
 }
 
 function GroceryListPage() {
-  const { startDate: defaultStartDate, endDate: defaultEndDate } = getCurrentWeekDates();
-  
+  const { startDate: defaultStartDate, endDate: defaultEndDate } =
+    getCurrentWeekDates();
+
   const [startDate, setStartDate] = useState(defaultStartDate);
   const [endDate, setEndDate] = useState(defaultEndDate);
 
@@ -89,17 +94,7 @@ function GroceryListPage() {
     execute: generateGroceryList,
   } = useApi(groceryListsApi.generateGroceryList);
 
-  // Automatically load grocery list when component mounts
-  useEffect(() => {
-    const request: GroceryListRequest = {
-      start_date: startDate,
-      end_date: endDate,
-    };
-
-    generateGroceryList(request).catch((err) => {
-      console.error('Failed to generate initial grocery list:', err);
-    });
-  }, []); // Empty dependency array - only run on mount
+  // (initial load handled below when startDate/endDate change)
 
   const handleGenerateList = async () => {
     const request: GroceryListRequest = {
@@ -135,26 +130,40 @@ function GroceryListPage() {
 
   const formatQuantity = (value: number): string => {
     // Format to remove unnecessary decimal places
-    return value % 1 === 0 ? value.toString() : value.toFixed(2).replace(/\.?0+$/, '');
+    return value % 1 === 0
+      ? value.toString()
+      : value.toFixed(2).replace(/\.?0+$/, '');
   };
+
+  // Auto-generate grocery list when component mounts and when date range changes
+  useEffect(() => {
+    const request: GroceryListRequest = {
+      start_date: startDate,
+      end_date: endDate,
+    };
+
+    generateGroceryList(request).catch((err) => {
+      console.error('Failed to generate initial grocery list:', err);
+    });
+  }, [startDate, endDate, generateGroceryList]);
 
   return (
     <Container size="lg">
       <Stack gap={6}>
         {/* Page header */}
-        <div className="flex justify-between items-center">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-gray-900">Grocery List</h1>
         </div>
 
         {/* Date selection and generation */}
         <Card variant="default">
           <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Date Range</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <h2 className="mb-4 text-lg font-semibold">Generate Grocery List</h2>
+
+            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="flex flex-col">
-                <label 
-                  htmlFor="start-date" 
+                <label
+                  htmlFor="start-date"
                   className="mb-1 text-sm font-medium text-gray-700"
                 >
                   Start Date
@@ -164,12 +173,12 @@ function GroceryListPage() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full rounded-md transition-colors outline-none text-base py-2 px-3 bg-white border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base transition-colors outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex flex-col">
-                <label 
-                  htmlFor="end-date" 
+                <label
+                  htmlFor="end-date"
                   className="mb-1 text-sm font-medium text-gray-700"
                 >
                   End Date
@@ -179,13 +188,14 @@ function GroceryListPage() {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full rounded-md transition-colors outline-none text-base py-2 px-3 bg-white border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-base transition-colors outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
 
             <div className="flex justify-end">
               <Button
+                aria-label="Generate Grocery List"
                 variant="primary"
                 onClick={handleGenerateList}
                 disabled={loading || !startDate || !endDate}
@@ -199,7 +209,7 @@ function GroceryListPage() {
         {/* Loading state */}
         {loading && (
           <Card variant="default">
-            <div className="py-12 flex justify-center">
+            <div className="flex justify-center py-12">
               <LoadingSpinner />
             </div>
           </Card>
@@ -209,7 +219,7 @@ function GroceryListPage() {
         {error && (
           <Card variant="default">
             <div className="p-6 text-center">
-              <p className="text-red-500 mb-4">
+              <p className="mb-4 text-red-500">
                 Failed to generate grocery list: {error.message}
               </p>
               <Button variant="secondary" onClick={handleGenerateList}>
@@ -223,17 +233,19 @@ function GroceryListPage() {
         {groceryList && !loading && (
           <Card variant="default">
             <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
+              <div className="mb-6 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">Your Grocery List</h2>
                   <p className="text-sm text-gray-600">
-                    {formatDate(groceryList.start_date)} - {formatDate(groceryList.end_date)}
+                    {formatDate(groceryList.start_date)} -{' '}
+                    {formatDate(groceryList.end_date)}
                   </p>
                   <p className="text-sm text-gray-600">
-                    Based on {groceryList.total_meals} planned meal{groceryList.total_meals !== 1 ? 's' : ''}
+                    Based on {groceryList.total_meals} planned meal
+                    {groceryList.total_meals !== 1 ? 's' : ''}
                   </p>
                 </div>
-                
+
                 {groceryList.ingredients.length > 0 && (
                   <Button variant="secondary" onClick={handleExportCSV}>
                     Export CSV
@@ -242,10 +254,11 @@ function GroceryListPage() {
               </div>
 
               {groceryList.ingredients.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-gray-500 text-lg">No ingredients found</p>
-                  <p className="text-gray-400 text-sm mt-2">
-                    Try selecting a different date range or adding recipes to your meal plan.
+                <div className="py-8 text-center">
+                  <p className="text-lg text-gray-500">No ingredients found</p>
+                  <p className="mt-2 text-sm text-gray-400">
+                    Try selecting a different date range or adding recipes to
+                    your meal plan.
                   </p>
                 </div>
               ) : (
@@ -253,18 +266,18 @@ function GroceryListPage() {
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                           Ingredient
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                           Quantity
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase">
                           Used In
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y divide-gray-200 bg-white">
                       {groceryList.ingredients.map((ingredient) => (
                         <tr key={ingredient.id} className="hover:bg-gray-50">
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -274,7 +287,8 @@ function GroceryListPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {formatQuantity(ingredient.quantity_value)} {ingredient.quantity_unit}
+                              {formatQuantity(ingredient.quantity_value)}{' '}
+                              {ingredient.quantity_unit}
                             </div>
                           </td>
                           <td className="px-6 py-4">

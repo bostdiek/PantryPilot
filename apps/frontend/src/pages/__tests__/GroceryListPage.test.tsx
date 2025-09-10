@@ -37,7 +37,9 @@ describe('GroceryListPage', () => {
     render(<GroceryListPage />, { wrapper: Wrapper });
 
     expect(screen.getByText('Grocery List')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Date Range' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: 'Generate Grocery List' })
+    ).toBeInTheDocument();
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
     expect(screen.getByLabelText('End Date')).toBeInTheDocument();
     
@@ -193,9 +195,7 @@ describe('GroceryListPage', () => {
 
   it('displays error message when API call fails', async () => {
     const mockError = { message: 'Failed to generate grocery list' };
-    vi.mocked(groceryListsApi.generateGroceryList).mockRejectedValue(
-      mockError
-    );
+    vi.mocked(groceryListsApi.generateGroceryList).mockRejectedValue(mockError);
 
     render(<GroceryListPage />, { wrapper: Wrapper });
 
@@ -258,7 +258,9 @@ describe('GroceryListPage', () => {
 
     render(<GroceryListPage />, { wrapper: Wrapper });
 
-    const startDateInput = screen.getByLabelText('Start Date') as HTMLInputElement;
+    const startDateInput = screen.getByLabelText(
+      'Start Date'
+    ) as HTMLInputElement;
     const endDateInput = screen.getByLabelText('End Date') as HTMLInputElement;
 
     // Test that the inputs exist and can receive new values
@@ -266,7 +268,7 @@ describe('GroceryListPage', () => {
     expect(endDateInput).toBeInTheDocument();
     expect(startDateInput.type).toBe('date');
     expect(endDateInput.type).toBe('date');
-    
+
     // Test that they have initial values
     expect(startDateInput.value).toBeTruthy();
     expect(endDateInput.value).toBeTruthy();

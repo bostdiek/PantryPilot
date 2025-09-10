@@ -51,10 +51,10 @@ class GroceryListCRUD:
             )
             .options(joinedload(Meal.recipe))
         )
-        
+
         meals_result = await db.execute(meals_stmt)
         meals = list(meals_result.scalars().unique().all())
-        
+
         if not meals:
             # Return empty grocery list if no meals found
             return GroceryListResponse(
@@ -66,7 +66,7 @@ class GroceryListCRUD:
 
         # Get recipe IDs from the meals
         recipe_ids = [meal.recipe_id for meal in meals if meal.recipe_id]
-        
+
         # Get all ingredients for the recipes with their details
         ingredients_stmt = (
             select(
@@ -90,10 +90,10 @@ class GroceryListCRUD:
                 )
             )
         )
-        
+
         ingredients_result = await db.execute(ingredients_stmt)
         ingredient_rows = ingredients_result.fetchall()
-        
+
         # Aggregate ingredients by (ingredient_id, unit) combination
         aggregated: dict[tuple[UUID, str], dict[str, Any]] = defaultdict(
             lambda: {
@@ -103,11 +103,11 @@ class GroceryListCRUD:
                 "ingredient_id": None,
             }
         )
-        
+
         for row in ingredient_rows:
             key = (row.ingredient_id, row.quantity_unit)
             agg = aggregated[key]
-            
+
             # Add to quantity (convert to float for aggregation)
             agg["quantity_value"] += float(row.quantity_value or 0)
             agg["recipes"].add(row.recipe_name)

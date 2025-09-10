@@ -15,6 +15,9 @@ export function useApi<T, TArgs extends any[]>(
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Destructure callbacks so hook dependencies can be explicit without forcing recreation
+  const { onSuccess, onError } = options;
+
   const execute = useCallback(
     async (...args: TArgs) => {
       try {
@@ -22,18 +25,18 @@ export function useApi<T, TArgs extends any[]>(
         setError(null);
         const result = await apiFunction(...args);
         setData(result);
-        options.onSuccess?.(result);
+        onSuccess?.(result);
         return result;
       } catch (err) {
         const apiError = err as ApiError;
         setError(apiError);
-        options.onError?.(apiError);
+        onError?.(apiError);
         throw apiError;
       } finally {
         setLoading(false);
       }
     },
-    [apiFunction, options]
+    [apiFunction, onSuccess, onError]
   );
 
   return {

@@ -61,7 +61,7 @@ async def grocery_client() -> AsyncIterator[tuple[AsyncClient, AsyncSession]]:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # Create recipe_ingredients table without PostgreSQL JSONB type
         await conn.exec_driver_sql("""
             CREATE TABLE IF NOT EXISTS recipe_ingredients (
@@ -77,16 +77,11 @@ async def grocery_client() -> AsyncIterator[tuple[AsyncClient, AsyncSession]]:
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
+
         # Create other tables normally
         await conn.run_sync(
             lambda sync_conn: Base.metadata.create_all(
-                sync_conn, 
-                tables=[
-                    User.__table__, 
-                    Ingredient.__table__,
-                    Meal.__table__
-                ]
+                sync_conn, tables=[User.__table__, Ingredient.__table__, Meal.__table__]
             )
         )
 
@@ -139,7 +134,7 @@ class TestGroceryListAPI:
     async def test_generate_grocery_list_success(self, grocery_client):
         """Test successful grocery list generation with valid data."""
         client, session = grocery_client
-        
+
         # Create demo user
         demo_user = User(
             id=uuid4(),
@@ -149,7 +144,7 @@ class TestGroceryListAPI:
         )
         session.add(demo_user)
         await session.commit()
-        
+
         # Create test data: recipe, ingredients, meal history
         recipe = Recipe(
             id=uuid4(),
@@ -217,10 +212,10 @@ class TestGroceryListAPI:
 
         assert response.status_code == 200
         data = response.json()
-        
+
         assert "data" in data
         grocery_list = data["data"]
-        
+
         assert grocery_list["start_date"] == today.isoformat()
         assert grocery_list["end_date"] == today.isoformat()
         assert grocery_list["total_meals"] == 1
@@ -245,7 +240,7 @@ class TestGroceryListAPI:
         """Test grocery list generation with no meals in date range."""
         client, session = grocery_client
         future_date = date.today() + timedelta(days=30)
-        
+
         response = await client.post(
             "/api/v1/grocery-lists",
             json={
@@ -267,7 +262,7 @@ class TestGroceryListAPI:
         client, _ = grocery_client
         today = date.today()
         yesterday = today - timedelta(days=1)
-        
+
         response = await client.post(
             "/api/v1/grocery-lists",
             json={
@@ -284,7 +279,7 @@ class TestGroceryListAPI:
     async def test_generate_grocery_list_unauthorized(self):
         """Test that grocery list generation requires authentication."""
         today = date.today()
-        
+
         # Create client without auth override
         transport = ASGITransport(app=app)
         async with AsyncClient(

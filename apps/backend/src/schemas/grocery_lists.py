@@ -15,9 +15,7 @@ class GroceryListRequest(BaseModel):
     start_date: Annotated[
         date, Field(description="Start date for grocery list generation")
     ]
-    end_date: Annotated[
-        date, Field(description="End date for grocery list generation")
-    ]
+    end_date: Annotated[date, Field(description="End date for grocery list generation")]
 
     model_config = ConfigDict(extra="forbid")
 

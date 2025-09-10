@@ -22,7 +22,7 @@ const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 // Loader functions for protected routes
 const homeLoader = async () => {
   console.log('Home loader executing...');
-  
+
   const { fetchRecipes } = useRecipeStore.getState();
   const { loadWeek } = useMealPlanStore.getState();
 
@@ -35,7 +35,7 @@ const homeLoader = async () => {
     console.error('Home loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
-  
+
   // Data is already stored in our Zustand stores
   return null;
 };
@@ -58,7 +58,7 @@ const recipesLoader = async () => {
 
 const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
   const { fetchRecipeById } = useRecipeStore.getState();
-  
+
   try {
     if (params.id) {
       return await fetchRecipeById(params.id);
@@ -67,7 +67,7 @@ const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
     console.error('Recipe detail loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
-  
+
   return null;
 };
 
@@ -75,10 +75,10 @@ const mealPlanLoader = async () => {
   // The ProtectedRoute component already handles authentication checks,
   // so we can safely assume the user is authenticated when this loader runs
   console.log('Meal plan loader: loading data for authenticated user');
-  
+
   const { loadWeek } = useMealPlanStore.getState();
   const { recipes, fetchRecipes } = useRecipeStore.getState();
-  
+
   try {
     await Promise.all([
       loadWeek(),
@@ -89,7 +89,7 @@ const mealPlanLoader = async () => {
     console.error('Meal plan loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
-  
+
   return null;
 };
 

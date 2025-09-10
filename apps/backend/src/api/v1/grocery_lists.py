@@ -1,5 +1,6 @@
 """API endpoints for grocery list functionality."""
 
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -38,15 +39,15 @@ async def generate_grocery_list(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[GroceryListResponse]:
     """Generate a grocery list for the authenticated user.
-    
+
     Args:
         request: Date range for grocery list generation
         db: Database session
         current_user: Authenticated user
-        
+
     Returns:
         ApiResponse containing the grocery list with aggregated ingredients
-        
+
     Raises:
         HTTPException: If the date range is invalid (end_date before start_date)
     """
@@ -54,9 +55,9 @@ async def generate_grocery_list(
     if request.end_date < request.start_date:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="End date must be on or after start date"
+            detail="End date must be on or after start date",
         )
-    
+
     try:
         # Generate the grocery list using CRUD layer
         grocery_list = await grocery_list_crud.generate_grocery_list(
@@ -65,16 +66,15 @@ async def generate_grocery_list(
             start_date=request.start_date,
             end_date=request.end_date,
         )
-        
+
         return ApiResponse(
-            data=grocery_list,
-            message="Grocery list generated successfully"
+            data=grocery_list, message="Grocery list generated successfully"
         )
-        
+
     except Exception as e:
-        # Log the error for debugging
-        print(f"Error generating grocery list: {e}")
+        logger = logging.getLogger(__name__)
+        logger.exception("Error generating grocery list")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred while generating the grocery list"
+            detail="An error occurred while generating the grocery list",
         ) from e
