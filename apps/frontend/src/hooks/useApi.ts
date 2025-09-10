@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import type { ApiError } from '../types/api';
 
 interface UseApiOptions<T> {
@@ -11,12 +11,13 @@ export function useApi<T, TArgs extends any[]>(
   apiFunction: (...args: TArgs) => Promise<T>,
   options: UseApiOptions<T> = {}
 ) {
-  const [data, setData] = useState<T | null>(options.initialData || null);
+  // Destructure option callbacks so we don't capture a new `options` object
+  // on every render (which would invalidate the execute callback).
+  const { initialData, onSuccess, onError } = options;
+
+  const [data, setData] = useState<T | null>(initialData || null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(false);
-
-  // Destructure callbacks so hook dependencies can be explicit without forcing recreation
-  const { onSuccess, onError } = options;
 
   const execute = useCallback(
     async (...args: TArgs) => {

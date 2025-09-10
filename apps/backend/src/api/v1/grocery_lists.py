@@ -16,6 +16,9 @@ from schemas.grocery_lists import GroceryListRequest, GroceryListResponse
 
 router = APIRouter(prefix="/grocery-lists", tags=["grocery-lists"])
 
+# Module logger
+logger = logging.getLogger(__name__)
+
 
 @router.post(
     "",
@@ -72,7 +75,7 @@ async def generate_grocery_list(
         )
 
     except Exception as e:
-        logger = logging.getLogger(__name__)
+        # Use structured logging for exceptions so stack traces are captured
         logger.exception("Error generating grocery list")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

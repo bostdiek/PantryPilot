@@ -1,9 +1,9 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import GroceryListPage from '../GroceryListPage';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { groceryListsApi } from '../../api/endpoints/groceryLists';
+import GroceryListPage from '../GroceryListPage';
 
 // Mock the API
 vi.mock('../../api/endpoints/groceryLists', () => ({
@@ -42,7 +42,7 @@ describe('GroceryListPage', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Start Date')).toBeInTheDocument();
     expect(screen.getByLabelText('End Date')).toBeInTheDocument();
-    
+
     // Wait for initial API call to complete so button shows proper text
     await waitFor(() => {
       expect(

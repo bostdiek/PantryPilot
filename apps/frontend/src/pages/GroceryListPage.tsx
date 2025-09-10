@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
-import { Container, Card, Button, LoadingSpinner } from '../components/ui';
-import { Stack } from '../components/layout';
-import { useApi } from '../hooks/useApi';
+import { useEffect, useState } from 'react';
 import {
   groceryListsApi,
-  type GroceryListRequest,
   type GroceryListIngredient,
+  type GroceryListRequest,
 } from '../api/endpoints/groceryLists';
+import { Stack } from '../components/layout';
+import { Button, Card, Container, LoadingSpinner } from '../components/ui';
+import { useApi } from '../hooks/useApi';
 
 /**
  * Generates CSV content from grocery list ingredients
@@ -94,7 +94,23 @@ function GroceryListPage() {
     execute: generateGroceryList,
   } = useApi(groceryListsApi.generateGroceryList);
 
-  // (initial load handled below when startDate/endDate change)
+  // Auto-load grocery list when the selected date range changes.
+  // include generateGroceryList in deps to satisfy exhaustive-deps
+  useEffect(() => {
+    // Avoid running on mount if dates are invalid
+    if (!startDate || !endDate) return;
+
+    const request: GroceryListRequest = {
+      start_date: startDate,
+      end_date: endDate,
+    };
+
+    // Fire-and-forget; errors are handled by the hook and UI
+    generateGroceryList(request).catch((err) => {
+      // Keep console.error for local debugging; UI shows error state via `error` from the hook
+      console.error('Failed to generate initial grocery list:', err);
+    });
+  }, [startDate, endDate, generateGroceryList]);
 
   const handleGenerateList = async () => {
     const request: GroceryListRequest = {
@@ -135,18 +151,6 @@ function GroceryListPage() {
       : value.toFixed(2).replace(/\.?0+$/, '');
   };
 
-  // Auto-generate grocery list when component mounts and when date range changes
-  useEffect(() => {
-    const request: GroceryListRequest = {
-      start_date: startDate,
-      end_date: endDate,
-    };
-
-    generateGroceryList(request).catch((err) => {
-      console.error('Failed to generate initial grocery list:', err);
-    });
-  }, [startDate, endDate, generateGroceryList]);
-
   return (
     <Container size="lg">
       <Stack gap={6}>
@@ -158,7 +162,9 @@ function GroceryListPage() {
         {/* Date selection and generation */}
         <Card variant="default">
           <div className="p-6">
-            <h2 className="mb-4 text-lg font-semibold">Generate Grocery List</h2>
+            <h2 className="mb-4 text-lg font-semibold">
+              Generate Grocery List
+            </h2>
 
             <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
               <div className="flex flex-col">
@@ -195,7 +201,6 @@ function GroceryListPage() {
 
             <div className="flex justify-end">
               <Button
-                aria-label="Generate Grocery List"
                 variant="primary"
                 onClick={handleGenerateList}
                 disabled={loading || !startDate || !endDate}
