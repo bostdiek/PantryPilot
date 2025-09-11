@@ -1,7 +1,7 @@
 # Context
 
 ## Current work focus
-Update the Memory Bank using the authoritative Makefile to accurately document development workflows, Docker Compose environment selection, database lifecycle operations, and cleanup commands.
+Design and document AI deep links for drafts and intents via ADR for secure, intent-driven UI prefill without side effects.
 
 ## Recent changes
 - Updated tech documentation with precise Make targets and behaviors based on the Makefile:
@@ -13,6 +13,7 @@ Update the Memory Bank using the authoritative Makefile to accurately document d
   - Startup flow: docker compose up -d; DB readiness via pg_isready; Alembic migrations via uv run
   - DB lifecycle and preservation strategy, DB scripts, CI/quality flows, developer setup
   - File: [.kilocode/rules/memory-bank/architecture.md](.kilocode/rules/memory-bank/architecture.md)
+- Created ADR for signed deep links in AI drafts and intents, defining schemas, endpoints, flows, and patterns: [docs/adr/2025-09-11-deep-links-for-ai-drafts.md](docs/adr/2025-09-11-deep-links-for-ai-drafts.md)
 
 ## Next steps
 - Keep README, Makefile, and Memory Bank aligned; consider cross-linking key tasks in README to Memory Bank sections
@@ -20,6 +21,7 @@ Update the Memory Bank using the authoritative Makefile to accurately document d
   - [db/backup.sh](db/backup.sh), [db/restore.sh](db/restore.sh), [db/maintenance.sh](db/maintenance.sh), [scripts/check_migrations.sh](scripts/check_migrations.sh)
 - Optionally document repeatable maintenance workflows in tasks:
   - Examples: reset-db-volume, clean-deps, clean-keep-db as task entries in [.kilocode/rules/memory-bank/tasks.md](.kilocode/rules/memory-bank/tasks.md)
+- Implement AI drafts feature per ADR: new model/endpoints, frontend param handling (suggest switch to Code mode)
 
 ## Timestamp
-Updated: 2025-09-06
+Updated: 2025-09-11
