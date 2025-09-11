@@ -104,6 +104,50 @@ Environment variables
   SECRET_KEY=<paste_generated_value>
   ```
 
+## Security Features
+
+PantryPilot includes baseline security configurations for small private deployments:
+
+### CORS Configuration
+- Restricts origins to configured frontend URLs
+- Prevents wildcard origins when credentials are enabled
+- Properly handles preflight requests
+- Configurable via `CORS_ORIGINS` environment variable
+
+### Security Headers (Nginx)
+- **Content Security Policy**: Prevents XSS attacks and restricts resource loading
+- **HSTS**: Forces HTTPS connections when enabled  
+- **X-Content-Type-Options**: Prevents MIME sniffing attacks
+- **Referrer-Policy**: Controls referrer information disclosure
+- **Frame-ancestors**: Prevents clickjacking attacks
+
+### HTTPS Support
+PantryPilot supports multiple HTTPS termination options:
+
+```bash
+# Check current HTTPS status
+./scripts/https-setup.sh status
+
+# Enable HTTPS (requires certificates)
+./scripts/https-setup.sh enable
+
+# Disable HTTPS
+./scripts/https-setup.sh disable
+```
+
+For detailed HTTPS setup instructions, see `docs/HTTPS_SETUP.md`.
+
+### Additional Security Measures
+- Gzip disabled for sensitive API endpoints (BREACH attack mitigation)
+- Proper credential handling in CORS
+- Secure session management
+- Input validation via Pydantic schemas
+
+### Architecture Decisions
+Security architecture and release planning are documented in Architecture Decision Records (ADRs):
+- [ADR-001: Security Headers and CORS Configuration Baseline](docs/adr/ADR-001-security-headers-and-cors-baseline.md) - Complete security implementation with release plan
+- [ADR Directory](docs/adr/README.md) - All architectural decisions
+
 See `docs/API_DESIGN.md` and `docs/DEPLOYMENT.md` for more details. Contribution guidelines in `docs/CONTRIBUTING.md`.
 
 ## Proposed structure
