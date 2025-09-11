@@ -143,6 +143,11 @@ For detailed HTTPS setup instructions, see `docs/HTTPS_SETUP.md`.
 - Secure session management
 - Input validation via Pydantic schemas
 
+### Architecture Decisions
+Security architecture and release planning are documented in Architecture Decision Records (ADRs):
+- [ADR-001: Security Headers and CORS Configuration Baseline](docs/adr/ADR-001-security-headers-and-cors-baseline.md) - Complete security implementation with release plan
+- [ADR Directory](docs/adr/README.md) - All architectural decisions
+
 See `docs/API_DESIGN.md` and `docs/DEPLOYMENT.md` for more details. Contribution guidelines in `docs/CONTRIBUTING.md`.
 
 ## Proposed structure
