@@ -7,7 +7,7 @@ interface UseApiOptions<T> {
   onError?: (error: ApiError) => void;
 }
 
-export function useApi<T, TArgs extends any[]>(
+export function useApi<T, TArgs extends unknown[]>(
   apiFunction: (...args: TArgs) => Promise<T>,
   options: UseApiOptions<T> = {}
 ) {

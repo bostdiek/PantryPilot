@@ -105,10 +105,10 @@ function GroceryListPage() {
       end_date: endDate,
     };
 
-    // Fire-and-forget; errors are handled by the hook and UI
-    generateGroceryList(request).catch((err) => {
-      // Keep console.error for local debugging; UI shows error state via `error` from the hook
-      console.error('Failed to generate initial grocery list:', err);
+    // Fire-and-forget; ensure we swallow unhandled rejections to avoid
+    // test runner warnings. The hook still surfaces errors via `error`.
+    void generateGroceryList(request).catch(() => {
+      // intentionally noop - hook exposes error via `error` for the UI
     });
   }, [startDate, endDate, generateGroceryList]);
 
@@ -118,10 +118,13 @@ function GroceryListPage() {
       end_date: endDate,
     };
 
+    // Delegate error handling to the hook which exposes `error` for the UI,
+    // but catch here to avoid unhandled rejections in tests/runtime.
     try {
       await generateGroceryList(request);
-    } catch (err) {
-      console.error('Failed to generate grocery list:', err);
+    } catch {
+      // No-op: errors are reflected through the hook's `error` state and
+      // shown to users. Swallow here to avoid test runner unhandled rejection.
     }
   };
 
