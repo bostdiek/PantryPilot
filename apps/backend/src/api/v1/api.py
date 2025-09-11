@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from dependencies.auth import get_current_user
 
 from .auth import router as auth_router
+from .grocery_lists import router as grocery_lists_router
 from .health import router as health_router
 from .mealplans import meals_router, router as mealplans_router
 from .recipes import router as recipes_router
@@ -25,3 +26,4 @@ api_router.include_router(recipes_router, dependencies=protected_deps)
 api_router.include_router(mealplans_router, dependencies=protected_deps)
 api_router.include_router(meals_router, dependencies=protected_deps)
 api_router.include_router(user_profile_router, dependencies=protected_deps)
+api_router.include_router(grocery_lists_router, dependencies=protected_deps)

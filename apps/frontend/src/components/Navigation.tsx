@@ -98,6 +98,18 @@ const Navigation: React.FC = () => {
             >
               Meal Plan
             </NavLink>
+            <NavLink
+              to="/grocery-list"
+              className={(meta: { isActive: boolean }) =>
+                `text-lg font-bold ${
+                  meta.isActive
+                    ? 'text-primary-700 border-primary-500 border-b-2'
+                    : 'hover:text-primary-600 text-gray-700 transition-colors'
+                }`
+              }
+            >
+              Grocery List
+            </NavLink>
           </>
         )}
       </div>
