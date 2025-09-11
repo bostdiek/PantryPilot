@@ -1,7 +1,29 @@
-server {
-    listen 80;
-    server_name localhost;
+# HTTPS-enabled configuration for nginx
+# Copy this file to conf.d/default.conf and update default.conf when ready for HTTPS
+# This provides a template for HTTPS deployment with security headers
 
+server {
+    # HTTPS configuration
+    listen 443 ssl http2;
+    server_name localhost;  # Change to your domain name
+    
+    # SSL certificate configuration
+    # Update these paths to point to your SSL certificates
+    ssl_certificate /etc/ssl/certs/pantrypilot.crt;
+    ssl_certificate_key /etc/ssl/private/pantrypilot.key;
+    
+    # SSL security configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES128-SHA:DHE-RSA-AES256-SHA:DHE-RSA-AES128-SHA;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+    
+    # HSTS (uncomment when HTTPS is properly configured)
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    
     # Health check endpoint
     location /health {
         access_log off;
@@ -67,5 +89,28 @@ server {
     error_page 500 502 503 504 /50x.html;
     location = /50x.html {
         root /usr/share/nginx/html;
+    }
+}
+
+# HTTP to HTTPS redirect
+server {
+    listen 80;
+    server_name localhost;  # Change to your domain name
+    
+    # Allow health checks over HTTP
+    location /health {
+        access_log off;
+        return 200 "healthy\n";
+        add_header Content-Type text/plain;
+    }
+    
+    # Allow Let's Encrypt challenges over HTTP
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://$server_name$request_uri;
     }
 }
