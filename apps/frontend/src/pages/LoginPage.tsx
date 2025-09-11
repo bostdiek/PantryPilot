@@ -8,6 +8,7 @@ import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
 import { useAuthStore } from '../stores/useAuthStore';
 import type { LoginFormData, AuthUser } from '../types/auth';
+import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
 const LoginPage: FC = () => {
   const [formData, setFormData] = useState<LoginFormData>({
@@ -71,11 +72,12 @@ const LoginPage: FC = () => {
       // Navigate to intended page or home
       navigate(from, { replace: true });
     } catch (err: any) {
-      if (err.status === 401) {
-        setError('Invalid username or password');
-      } else {
-        setError(err.message || 'Login failed. Please try again.');
-      }
+      // Use centralized error message handling
+      const friendlyMessage = getUserFriendlyErrorMessage(err, { 
+        action: 'login',
+        resource: 'user' 
+      });
+      setError(friendlyMessage);
     } finally {
       setIsLoading(false);
     }

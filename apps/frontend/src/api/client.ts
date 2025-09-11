@@ -1,6 +1,7 @@
 import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
+import { getUserFriendlyErrorMessage, shouldLogoutOnError } from '../utils/errorMessages';
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
 
@@ -63,10 +64,15 @@ class ApiClient {
       }
 
       if (!resp.ok) {
-        throw new ApiErrorImpl(
-          body.detail ?? body.message ?? `Request failed (${resp.status})`,
-          resp.status
-        );
+        // Create error with sanitized, user-friendly message
+        const friendlyMessage = getUserFriendlyErrorMessage(body);
+        
+        // Check if this error should trigger logout
+        if (shouldLogoutOnError(body)) {
+          useAuthStore.getState().logout();
+        }
+        
+        throw new ApiErrorImpl(friendlyMessage, resp.status);
       }
 
       // Handle wrapped API responses
@@ -75,10 +81,15 @@ class ApiClient {
         const apiResponse = body as ApiResponse<T>;
 
         if (!apiResponse.success) {
-          throw new ApiErrorImpl(
-            apiResponse.message ?? 'Request failed',
-            resp.status
-          );
+          // Create error with sanitized, user-friendly message
+          const friendlyMessage = getUserFriendlyErrorMessage(apiResponse);
+          
+          // Check if this error should trigger logout
+          if (shouldLogoutOnError(apiResponse)) {
+            useAuthStore.getState().logout();
+          }
+          
+          throw new ApiErrorImpl(friendlyMessage, resp.status);
         }
 
         return apiResponse.data as T;
@@ -90,10 +101,11 @@ class ApiClient {
       if (err instanceof ApiErrorImpl) {
         throw err;
       }
-      const apiError =
-        err instanceof Error
-          ? new ApiErrorImpl(err.message)
-          : new ApiErrorImpl('Unknown error');
+      
+      // Create user-friendly error message for network/unexpected errors
+      const friendlyMessage = getUserFriendlyErrorMessage(err);
+      const apiError = new ApiErrorImpl(friendlyMessage);
+      
       console.error(`API request failed: ${url}`, apiError);
       throw apiError;
     }
