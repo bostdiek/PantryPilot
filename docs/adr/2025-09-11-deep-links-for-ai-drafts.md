@@ -51,9 +51,10 @@ New schemas in `src/schemas/ai_drafts.py`:
 
 - DB Model: New `AIDraft` in `src/models/ai_drafts.py`:
   ```python
-  from sqlalchemy import Column, UUID, String, JSON, DateTime, ForeignKey
+  from sqlalchemy import Column, String, JSON, DateTime, ForeignKey
   from sqlalchemy.dialects.postgresql import UUID as PG_UUID
   from .base import Base
+  import uuid
 
   class AIDraft(Base):
       __tablename__ = "ai_drafts"

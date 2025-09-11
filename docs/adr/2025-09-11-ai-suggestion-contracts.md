@@ -1,14 +1,17 @@
 # ADR 001: Defining Contracts for AI-Generated Meal Plan and Recipe Suggestions
 
 ## Status
+
 Proposed
 
 ## Context
+
 PantryPilot is an AI-assisted meal planning service where users can import or create recipes, set preferences and dietary constraints, and generate personalized weekly meal plans with grocery guidance. The backend uses FastAPI with Pydantic schemas for data validation and serialization, primarily in `apps/backend/src/schemas/` (e.g., `mealplans.py`, `recipes.py`, `user_preferences.py`). Existing models include `Recipe`, `MealHistory`, and `UserPreferences`, with API endpoints under `/api/v1/` for meal plans and recipes.
 
 The introduction of AI-driven suggestions requires well-defined contracts to ensure seamless integration between the AI service (backend or external), the database, and the frontend (React). These contracts must handle inputs like user preferences, meal history, and constraints, and produce outputs such as suggested meal plans or generated recipes that can be persisted or displayed.
 
 Key considerations:
+
 - **Existing Structures**:
   - Meal plans use `WeeklyMealPlanOut` with `days` containing `DayPlanOut` (day of week, date, list of `MealEntryOut` including `recipe_id`, `meal_type` (currently only "dinner"), cooked status).
   - Recipes use `RecipeOut` with fields like `title`, `ingredients` (list of `IngredientOut`), `instructions`, `difficulty`, `category`, timings, and servings.
@@ -18,19 +21,23 @@ Key considerations:
 - **Non-Goals**: This ADR focuses on data contracts (schemas, API formats); implementation details like AI model selection are out of scope.
 
 ## Decision
+
 We will define Pydantic-based contracts for AI requests and responses, introducing new schemas in `apps/backend/src/schemas/ai.py`. These will extend existing ones where possible for compatibility. New API endpoints will be added under `/api/v1/ai/` (e.g., `POST /api/v1/ai/suggest-meal-plan`, `POST /api/v1/ai/suggest-recipe`).
 
 ### Proposed Schemas
+
 All schemas will use `ConfigDict(extra="forbid")` for strict validation and include documentation via `Field(description=...)`.
 
 #### Input Schemas
+
 1. **AISuggestionRequest** (Base for both meal plan and recipe suggestions):
+
    ```python
    from datetime import date
    from typing import List, Dict, Any, Optional
    from uuid import UUID
 
-   from pydantic import BaseModel, Field
+   from pydantic import BaseModel, Field, ConfigDict
 
    class AISuggestionRequest(BaseModel):
        user_id: UUID = Field(..., description="Identifier of the user requesting suggestions")
@@ -44,6 +51,7 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 2. **AIMealPlanRequest** (Extends `AISuggestionRequest`):
+
    ```python
    class AIMealPlanRequest(AISuggestionRequest):
        num_days: int = Field(default=7, ge=1, le=30, description="Number of days to plan")
@@ -59,7 +67,9 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 #### Output Schemas
+
 1. **AIMealSuggestion** (For individual meal entries):
+
    ```python
    from enum import Enum
    from typing import Literal
@@ -82,6 +92,7 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 2. **AIDaySuggestion**:
+
    ```python
    class AIDaySuggestion(BaseModel):
        date: date = Field(..., description="Date for the day")
@@ -92,6 +103,7 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 3. **AIMealPlanSuggestion**:
+
    ```python
    class AIMealPlanSuggestion(BaseModel):
        week_start_date: date = Field(..., description="Start date of the plan")
@@ -104,6 +116,7 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 4. **AIGeneratedRecipe** (Extends `RecipeCreate` for new recipes):
+
    ```python
    class AIGeneratedRecipe(RecipeCreate):
        is_ai_generated: bool = Field(default=True, description="Flag indicating AI origin")
@@ -112,6 +125,7 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 5. **AIRecipeSuggestion** (For alternatives or standalone suggestions):
+
    ```python
    class AIRecipeSuggestion(BaseModel):
        title: str = Field(..., min_length=1, description="Suggested recipe title")
@@ -136,25 +150,30 @@ All schemas will use `ConfigDict(extra="forbid")` for strict validation and incl
    ```
 
 #### API Contracts
+
 - **POST /api/v1/ai/suggest-meal-plan**: Input `AIMealPlanRequest`, Output `AIMealPlanSuggestion` (wrapped in `ApiResponse`). Auth required (user_id from token).
 - **POST /api/v1/ai/suggest-recipe**: Input `AIRecipeSuggestionRequest`, Output `AIRecipeSuggestionResponse`.
 - Responses include confidence and rationale for transparency.
 - Error Handling: Use standard FastAPI exceptions (e.g., `HTTPException(422)` for validation, `HTTPException(500)` for AI errors with `detail="AI generation failed"`).
 
 #### Integration Points
+
 - **Persistence**: Frontend/DB can map `AIMealPlanSuggestion` to `WeeklyMealPlanOut` by creating/saving recipes first (POST /recipes), then linking via `recipe_id`. Add `is_ai_generated: bool` to `Recipe` model/schema for flagging.
 - **Versioning**: Schemas under v1; future changes via v2 endpoints.
 - **Privacy**: All operations scoped to `user_id`; AI prompts anonymized (no PII beyond preferences/recipes).
 - **Frontend Compatibility**: Outputs align with existing `RecipeOut` and `MealEntryOut` for easy rendering (e.g., `RecipeCard` component).
 
 ## Consequences
+
 - **Positive**:
+
   - Enables robust AI integration without breaking existing APIs.
   - Ensures type safety and validation via Pydantic.
   - Supports personalization while maintaining user data ownership.
   - Provides extensibility (e.g., add nutrition estimates later).
 
 - **Negative/Neutral**:
+
   - Requires schema updates and new models; minimal migration impact (add fields to existing tables via Alembic).
   - AI outputs may need post-processing (e.g., validate generated ingredients against standards).
   - Increases API surface; document in OpenAPI spec.
