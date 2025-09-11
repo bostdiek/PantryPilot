@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # PantryPilot HTTPS Setup Helper Script
 # This script helps manage HTTPS configuration for PantryPilot
@@ -27,13 +27,13 @@ usage() {
 check_certificates() {
     local cert_dir="$PROJECT_ROOT/ssl/certs"
     local key_dir="$PROJECT_ROOT/ssl/private"
-    
+
     if [[ ! -d "$cert_dir" ]] || [[ ! -d "$key_dir" ]]; then
         echo "Error: SSL directories not found"
         echo "Create directories: mkdir -p ssl/certs ssl/private"
         return 1
     fi
-    
+
     if [[ ! -f "$cert_dir/pantrypilot.crt" ]] || [[ ! -f "$key_dir/pantrypilot.key" ]]; then
         echo "Warning: Default certificate files not found"
         echo "Expected files:"
@@ -43,13 +43,13 @@ check_certificates() {
         echo "You can use different filenames by updating the nginx configuration."
         return 1
     fi
-    
+
     return 0
 }
 
 enable_https() {
     echo "Enabling HTTPS configuration..."
-    
+
     # Check if certificates exist
     if ! check_certificates; then
         echo ""
@@ -60,18 +60,18 @@ enable_https() {
             exit 1
         fi
     fi
-    
+
     # Backup current configuration
     if [[ -f "$NGINX_CONF_DIR/default.conf" ]]; then
         cp "$NGINX_CONF_DIR/default.conf" "$NGINX_CONF_DIR/default.conf.http.backup"
         echo "Backed up HTTP configuration to default.conf.http.backup"
     fi
-    
+
     # Copy HTTPS template
     if [[ -f "$NGINX_CONF_DIR/https.conf.template" ]]; then
         cp "$NGINX_CONF_DIR/https.conf.template" "$NGINX_CONF_DIR/default.conf"
         echo "Enabled HTTPS configuration"
-        
+
         echo ""
         echo "IMPORTANT: Update the following in nginx/conf.d/default.conf:"
         echo "1. Change 'server_name localhost;' to your domain name"
@@ -87,7 +87,7 @@ enable_https() {
 
 disable_https() {
     echo "Disabling HTTPS configuration..."
-    
+
     # Restore HTTP backup if it exists
     if [[ -f "$NGINX_CONF_DIR/default.conf.http.backup" ]]; then
         cp "$NGINX_CONF_DIR/default.conf.http.backup" "$NGINX_CONF_DIR/default.conf"
@@ -95,7 +95,7 @@ disable_https() {
     else
         echo "Warning: No HTTP backup found. You may need to manually reconfigure."
     fi
-    
+
     echo "Disabled HTTPS configuration"
     echo "Restart containers: make down && make up"
 }
@@ -103,16 +103,16 @@ disable_https() {
 show_status() {
     echo "HTTPS Configuration Status:"
     echo ""
-    
+
     if [[ -f "$NGINX_CONF_DIR/default.conf" ]]; then
         if grep -q "listen 443 ssl" "$NGINX_CONF_DIR/default.conf"; then
             echo "Status: HTTPS ENABLED"
-            
+
             # Check server name
             local server_name
             server_name=$(grep "server_name" "$NGINX_CONF_DIR/default.conf" | head -1 | awk '{print $2}' | sed 's/;//')
             echo "Server name: $server_name"
-            
+
             # Check certificate paths
             local cert_path
             local key_path
@@ -120,7 +120,7 @@ show_status() {
             key_path=$(grep "ssl_certificate_key" "$NGINX_CONF_DIR/default.conf" | head -1 | awk '{print $2}' | sed 's/;//')
             echo "Certificate: $cert_path"
             echo "Private key: $key_path"
-            
+
             # Check if certificate files exist (in container context, we can't check actual files)
             echo ""
             echo "Certificate check:"
@@ -129,20 +129,20 @@ show_status() {
             else
                 echo "✗ Certificate file not found"
             fi
-            
+
             if [[ -f "$PROJECT_ROOT/ssl/private/pantrypilot.key" ]]; then
                 echo "✓ Private key file found"
             else
                 echo "✗ Private key file not found"
             fi
-            
+
         else
             echo "Status: HTTP ONLY"
         fi
     else
         echo "Status: NO CONFIGURATION FOUND"
     fi
-    
+
     echo ""
     echo "Backup files:"
     if [[ -f "$NGINX_CONF_DIR/default.conf.http.backup" ]]; then

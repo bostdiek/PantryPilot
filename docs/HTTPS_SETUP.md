@@ -45,20 +45,20 @@ nginx:
 server {
     listen 443 ssl http2;
     server_name your-domain.com;
-    
+
     ssl_certificate /etc/ssl/certs/your-domain.crt;
     ssl_certificate_key /etc/ssl/private/your-domain.key;
-    
+
     # SSL configuration
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_ciphers ECDHE-RSA-AES256-GCM-SHA512:DHE-RSA-AES256-GCM-SHA512:ECDHE-RSA-AES256-GCM-SHA384:DHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
     ssl_session_cache shared:SSL:10m;
     ssl_session_timeout 10m;
-    
+
     # Enable HSTS
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
-    
+
     # Your existing location blocks here...
 }
 
@@ -115,8 +115,11 @@ nginx:
 # Test renewal
 sudo certbot renew --dry-run
 
-# Add to crontab for auto-renewal
-echo "0 12 * * * /usr/bin/certbot renew --quiet && docker compose restart nginx" | sudo crontab -
+# Add to crontab for auto-renewal (safe method)
+sudo crontab -l > current_cron
+echo "0 12 * * * /usr/bin/certbot renew --quiet && docker compose restart nginx" >> current_cron
+sudo crontab current_cron
+rm current_cron
 ```
 
 ### For Cloud Deployment (with Certbot)
@@ -202,10 +205,10 @@ upstream pantrypilot {
 server {
     listen 443 ssl http2;
     server_name your-domain.com;
-    
+
     ssl_certificate /path/to/certificate.crt;
     ssl_certificate_key /path/to/private.key;
-    
+
     location / {
         proxy_pass http://pantrypilot;
         proxy_set_header Host $host;
