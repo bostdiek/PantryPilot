@@ -169,8 +169,10 @@ async def test_register_password_too_short(
     resp = await client.post("/api/v1/auth/register", json=registration_data)
 
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    # Pydantic validation error for min_length constraint
-    assert "detail" in resp.json()
+    # Our centralized error handler now returns standardized format
+    response_data = resp.json()
+    assert response_data["success"] is False
+    assert "correlation_id" in response_data["error"]
 
 
 @pytest.mark.asyncio
@@ -196,8 +198,10 @@ async def test_register_password_various_short_lengths(
     resp = await client.post("/api/v1/auth/register", json=registration_data)
 
     assert resp.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
-    # Pydantic validation error for min_length constraint
-    assert "detail" in resp.json()
+    # Our centralized error handler now returns standardized format
+    response_data = resp.json()
+    assert response_data["success"] is False
+    assert "correlation_id" in response_data["error"]
 
 
 @pytest.mark.asyncio
