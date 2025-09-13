@@ -42,6 +42,43 @@ describe('getUserFriendlyErrorMessage', () => {
     expect(result).toBe('Please log in to continue.');
   });
 
+  it('prioritizes canonical error types over message patterns', () => {
+    const error = {
+      message: 'Some generic message',
+      error: {
+        type: 'validation_error',
+        correlation_id: 'abc-123'
+      },
+      status: 422,
+    };
+    const result = getUserFriendlyErrorMessage(error);
+    expect(result).toBe('Please check your input and try again.');
+  });
+
+  it('uses canonical error type for unauthorized errors', () => {
+    const error = {
+      message: 'Access denied',
+      error: {
+        type: 'unauthorized',
+        correlation_id: 'def-456'
+      },
+      status: 401,
+    };
+    const result = getUserFriendlyErrorMessage(error);
+    expect(result).toBe('Please log in to continue.');
+  });
+
+  it('falls back to message patterns when no canonical type', () => {
+    const error = {
+      message: 'Username or email already exists',
+      status: 409,
+    };
+    const result = getUserFriendlyErrorMessage(error);
+    expect(result).toBe(
+      'An account with this email or username already exists.'
+    );
+  });
+
   it('handles backend error format with details', () => {
     const error = {
       success: false,
@@ -101,6 +138,22 @@ describe('getUserFriendlyErrorMessage', () => {
 });
 
 describe('shouldLogoutOnError', () => {
+  it('returns true for canonical unauthorized error type', () => {
+    const error = { 
+      error: { type: 'unauthorized' },
+      status: 401 
+    };
+    expect(shouldLogoutOnError(error)).toBe(true);
+  });
+
+  it('returns true for canonical token_expired error type', () => {
+    const error = { 
+      error: { type: 'token_expired' },
+      status: 401 
+    };
+    expect(shouldLogoutOnError(error)).toBe(true);
+  });
+
   it('returns true for 401 errors', () => {
     const error = { status: 401 };
     expect(shouldLogoutOnError(error)).toBe(true);

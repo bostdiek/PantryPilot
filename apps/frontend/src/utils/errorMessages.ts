@@ -8,7 +8,32 @@
  * - Context-aware error messaging based on user actions
  */
 
-// User-friendly error messages for common scenarios
+// Canonical error type mappings from backend
+const ERROR_TYPE_MESSAGES = {
+  // Backend error types (canonical)
+  http_error: 'Request failed. Please try again.',
+  validation_error: 'Please check your input and try again.',
+  domain_error: 'A business logic error occurred.',
+  integrity_error: 'This item already exists.',
+  internal_error: 'Something went wrong on our end. Please try again in a few moments.',
+  
+  // Authentication error types
+  unauthorized: 'Please log in to continue.',
+  forbidden: "You don't have permission to perform this action.",
+  token_expired: 'Your session has expired. Please log in again.',
+  invalid_credentials: 'Invalid username or password.',
+  
+  // User management error types
+  user_exists: 'An account with this email or username already exists.',
+  user_not_found: 'User not found.',
+  
+  // Network error types
+  network_error: 'Unable to connect. Please check your internet connection and try again.',
+  service_unavailable: 'The service is temporarily unavailable. Please try again later.',
+  too_many_requests: 'Too many requests. Please wait a moment and try again.',
+} as const;
+
+// User-friendly error messages for common scenarios (fallbacks)
 const ERROR_MESSAGES = {
   // Authentication & Authorization
   UNAUTHORIZED: 'Please log in to continue.',
@@ -104,8 +129,9 @@ export function getUserFriendlyErrorMessage(
 ): string {
   let rawMessage = '';
   let statusCode: number | undefined;
+  let errorType: string | undefined;
 
-  // Extract message from different error formats
+  // Extract message and error type from different error formats
   if (typeof error === 'string') {
     rawMessage = error;
   } else if (error && typeof error === 'object') {
@@ -114,9 +140,18 @@ export function getUserFriendlyErrorMessage(
     // Try to get status code
     statusCode = errorObj.status || errorObj.statusCode;
 
+    // Try to get canonical error type first (preferred approach)
+    errorType = errorObj.error?.type;
+
     // Try different message fields
     rawMessage =
       errorObj.message || errorObj.detail || errorObj.error?.message || '';
+  }
+
+  // Prioritize canonical error type mapping (machine-friendly)
+  if (errorType && errorType in ERROR_TYPE_MESSAGES) {
+    const canonicalMessage = ERROR_TYPE_MESSAGES[errorType as keyof typeof ERROR_TYPE_MESSAGES];
+    return addContextToErrorMessage(canonicalMessage, context);
   }
 
   // Coerce non-string raw messages into safe strings for sanitization.
@@ -142,7 +177,7 @@ export function getUserFriendlyErrorMessage(
   // Sanitize the raw message (remove technical details)
   const sanitizedMessage = sanitizeErrorMessage(rawMessage);
 
-  // Try to map to user-friendly message using patterns
+  // Try to map to user-friendly message using patterns (fallback)
   const userFriendlyMessage = mapErrorMessage(sanitizedMessage, statusCode);
 
   // Add context-specific messaging if available
@@ -307,12 +342,28 @@ export function shouldLogoutOnError(error: unknown): boolean {
     return false;
   }
 
-  const message = getUserFriendlyErrorMessage(error);
+  // First check for canonical error type
+  if (error && typeof error === 'object') {
+    const errorObj = error as any;
+    const errorType = errorObj.error?.type;
+    
+    // Use canonical error types when available
+    if (errorType === 'unauthorized' || errorType === 'token_expired') {
+      return true;
+    }
+    
+    // Check HTTP status code
+    const status = errorObj.status || errorObj.statusCode;
+    if (status === 401) {
+      return true;
+    }
+  }
 
+  // Fallback to message content analysis
+  const message = getUserFriendlyErrorMessage(error);
   return (
     message.includes('session has expired') ||
-    message.includes('log in to continue') ||
-    (error && typeof error === 'object' && (error as any).status === 401)
+    message.includes('log in to continue')
   );
 }
 

@@ -63,13 +63,12 @@ class ApiClient {
         body = responseText ? JSON.parse(responseText) : {};
       } catch (e) {
         console.error('Failed to parse JSON response:', e);
+        // Network/parsing errors - throw as native Error for network issues
         throw new Error(`Invalid JSON response from API: ${responseText}`);
       }
 
       if (!resp.ok) {
-        // Prefer to throw the raw backend message when available so callers/tests
-        // can inspect the original error. Fallback to a status-based message if
-        // backend provided no details.
+        // Always throw ApiErrorImpl for HTTP/API-level errors to ensure consistent error handling
         let rawMessage: string = '';
         if (body && typeof body === 'object') {
           const candidate =
@@ -87,12 +86,13 @@ class ApiClient {
           thrownMessage = `Request failed (${resp.status})`;
         }
 
-        // Check if this error should trigger logout
+        // Check if this error should trigger logout before throwing
         if (shouldLogoutOnError(body)) {
           useAuthStore.getState().logout();
         }
 
-        throw new ApiErrorImpl(thrownMessage, resp.status);
+        // Always throw ApiErrorImpl for API errors - consistent error contract
+        throw new ApiErrorImpl(thrownMessage, resp.status, body);
       }
 
       // Handle wrapped API responses
@@ -113,7 +113,8 @@ class ApiClient {
             useAuthStore.getState().logout();
           }
 
-          throw new ApiErrorImpl(thrownMessage, resp.status);
+          // Consistent error type for wrapped API responses
+          throw new ApiErrorImpl(thrownMessage, resp.status, apiResponse);
         }
 
         return apiResponse.data as T;
@@ -122,19 +123,26 @@ class ApiClient {
       // Fallback for non-wrapped responses (e.g., health check)
       return body as T;
     } catch (err: unknown) {
+      // Re-throw ApiErrorImpl as-is to maintain consistent error contract
       if (err instanceof ApiErrorImpl) {
         throw err;
       }
 
-      // If the underlying error is a native Error (e.g., network failure), rethrow it
-      // so tests that expect the original error message can assert against it.
+      // For native errors (network failures, JSON parsing), wrap them in ApiErrorImpl
+      // to ensure callers always receive the same error type
       if (err instanceof Error) {
-        throw err;
+        console.error(`Network/parsing error for ${url}:`, err.message);
+        throw new ApiErrorImpl(
+          `Network error: ${err.message}`,
+          undefined,
+          undefined,
+          err
+        );
       }
 
       // Fallback: wrap unknown error shapes into ApiErrorImpl with a user-friendly message
       const friendlyMessage = getUserFriendlyErrorMessage(err);
-      const apiError = new ApiErrorImpl(friendlyMessage);
+      const apiError = new ApiErrorImpl(friendlyMessage, undefined, undefined, err);
 
       console.error(`API request failed: ${url}`, apiError);
       throw apiError;

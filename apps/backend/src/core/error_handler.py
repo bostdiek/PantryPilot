@@ -7,6 +7,7 @@ This module provides:
 - Prevention of sensitive data leakage
 """
 
+import json
 import logging
 import sys
 import traceback
@@ -23,8 +24,95 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from core.config import get_settings
 from core.exceptions import DomainError, DuplicateUserError, UserNotFoundError
+from core.security_config import get_allowed_error_fields, is_sensitive_key
 from schemas.api import ErrorResponse
 
+
+# Comprehensive list of sensitive keys for sanitization
+SENSITIVE_KEYS = {
+    # Authentication & Authorization
+    "password",
+    "hashed_password", 
+    "secret",
+    "token",
+    "access_token",
+    "refresh_token",
+    "authorization",
+    "auth_token",
+    "api_key",
+    "key",
+    "jwt",
+    "session_id",
+    "csrf_token",
+    "otp",
+    "pin",
+    "security_code",
+    
+    # Personal Identifiable Information
+    "email",
+    "phone",
+    "phone_number",
+    "ssn",
+    "social_security_number",
+    "address",
+    "street_address",
+    "credit_card",
+    "credit_card_number",
+    "card_number",
+    "cvv",
+    "card_cvv",
+    "bank_account",
+    "routing_number",
+    
+    # Additional sensitive headers and fields
+    "set-cookie",
+    "cookie",
+    "x-auth-token",
+    "x-api-key",
+}
+
+# Comprehensive list of sensitive keys for sanitization
+SENSITIVE_KEYS = {
+    # Authentication & Authorization
+    "password",
+    "hashed_password", 
+    "secret",
+    "token",
+    "access_token",
+    "refresh_token",
+    "authorization",
+    "auth_token",
+    "api_key",
+    "key",
+    "jwt",
+    "session_id",
+    "csrf_token",
+    "otp",
+    "pin",
+    "security_code",
+    
+    # Personal Identifiable Information
+    "email",
+    "phone",
+    "phone_number",
+    "ssn",
+    "social_security_number",
+    "address",
+    "street_address",
+    "credit_card",
+    "credit_card_number",
+    "card_number",
+    "cvv",
+    "card_cvv",
+    "bank_account",
+    "routing_number",
+    
+    # Additional sensitive headers and fields
+    "set-cookie",
+    "cookie",
+    "x-auth-token",
+    "x-api-key",
+}
 
 # Context variable for correlation ID tracking across async calls
 _correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -83,35 +171,40 @@ class StructuredLogger:
             **sanitized_data,
         }
 
-        self.logger.log(
-            level,
-            f"[{correlation_id}] {message}",
-            extra={"structured_data": log_data},
-            exc_info=exc_info,
-        )
+        # Use proper JSON encoding for structured logs
+        settings = get_settings()
+        if settings.ENVIRONMENT == "production":
+            # In production, log the full structured data as valid JSON
+            try:
+                structured_message = json.dumps(log_data)
+                self.logger.log(level, structured_message, exc_info=exc_info)
+            except (TypeError, ValueError) as e:
+                # Fallback if JSON serialization fails
+                fallback_message = f"[{correlation_id}] {message} (JSON serialization failed: {e})"
+                self.logger.log(level, fallback_message, exc_info=exc_info)
+        else:
+            # In development, use human-readable format
+            self.logger.log(
+                level,
+                f"[{correlation_id}] {message}",
+                extra={"structured_data": log_data},
+                exc_info=exc_info,
+            )
 
     def _sanitize_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """Remove or mask sensitive data from log entries."""
         sanitized: dict[str, Any] = {}
-        sensitive_keys = {
-            "password",
-            "hashed_password",
-            "secret",
-            "token",
-            "key",
-            "email",
-            "phone",
-            "ssn",
-            "address",
-            "credit_card",
-        }
 
         for key, value in data.items():
-            key_lower = key.lower()
-            if any(sensitive in key_lower for sensitive in sensitive_keys):
+            if is_sensitive_key(key):
                 sanitized[key] = "[REDACTED]"
             elif isinstance(value, dict):
                 sanitized[key] = self._sanitize_data(value)
+            elif isinstance(value, list):
+                sanitized[key] = [
+                    self._sanitize_data(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
             else:
                 sanitized[key] = value
 
@@ -226,20 +319,21 @@ async def handle_validation_error(
         **request_info,
     )
 
-    # Prepare error details dict
-    error_details: dict[str, Any]
+    # Prepare error details dict with environment-aware field filtering
+    allowed_fields = get_allowed_error_fields(settings.ENVIRONMENT)
+    error_details: dict[str, Any] = {"correlation_id": correlation_id, "type": "validation_error"}
+
     if settings.ENVIRONMENT == "production":
         # Production: generic message, no details
         message = "Invalid request data provided"
-        error_details = {"correlation_id": correlation_id, "type": "validation_error"}
+        # Only include allowed production fields
+        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
     else:
         # Development: include validation details for debugging
         message = "Validation failed"
-        error_details = {
-            "correlation_id": correlation_id,
-            "type": "validation_error",
-            "details": exc.errors(),
-        }
+        error_details["details"] = exc.errors()
+        # Filter to allowed development fields
+        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
 
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -316,21 +410,24 @@ async def handle_generic_exception(
         **request_info,
     )
 
-    # Prepare error details dict
-    error_details: dict[str, Any]
+    # Prepare error details dict with environment-aware field filtering
+    allowed_fields = get_allowed_error_fields(settings.ENVIRONMENT)
+    error_details: dict[str, Any] = {"correlation_id": correlation_id, "type": "internal_error"}
+
     if settings.ENVIRONMENT == "production":
         # Production: generic message without details
         message = "An internal server error occurred"
-        error_details = {"correlation_id": correlation_id, "type": "internal_error"}
+        # Only include allowed production fields
+        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
     else:
         # Development: include exception details for debugging
         message = f"Internal server error: {str(exc)}"
-        error_details = {
-            "correlation_id": correlation_id,
-            "type": "internal_error",
+        error_details.update({
             "exception_type": exc.__class__.__name__,
             "traceback": traceback.format_exc().splitlines(),
-        }
+        })
+        # Filter to allowed development fields
+        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
 
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -343,19 +440,40 @@ async def handle_generic_exception(
 
 
 def setup_logging() -> None:
-    """Configure application logging."""
+    """Configure application logging with proper JSON structure and idempotent setup."""
     settings = get_settings()
 
     # Configure root logger
     log_level = logging.DEBUG if settings.ENVIRONMENT == "development" else logging.INFO
+    root_logger = logging.getLogger()
+    
+    # Make setup idempotent - avoid duplicate handlers
+    if root_logger.handlers:
+        return
 
     # Configure format based on environment
     if settings.ENVIRONMENT == "production":
-        # Structured JSON logging for production
-        formatter = logging.Formatter(
-            '{"timestamp": "%(asctime)s", "level": "%(levelname)s", '
-            '"logger": "%(name)s", "message": "%(message)s"}'
-        )
+        # Use proper JSON formatter for production
+        class JSONFormatter(logging.Formatter):
+            def format(self, record):
+                log_entry = {
+                    "timestamp": self.formatTime(record),
+                    "level": record.levelname,
+                    "logger": record.name,
+                    "message": record.getMessage(),
+                }
+                
+                # Include structured data if available
+                if hasattr(record, 'structured_data'):
+                    log_entry.update(record.structured_data)
+                
+                # Include exception info if present
+                if record.exc_info:
+                    log_entry["exception"] = self.formatException(record.exc_info)
+                
+                return json.dumps(log_entry)
+        
+        formatter = JSONFormatter()
     else:
         # Human-readable logging for development
         formatter = logging.Formatter(
@@ -368,7 +486,6 @@ def setup_logging() -> None:
     handler.setLevel(log_level)
 
     # Configure root logger
-    root_logger = logging.getLogger()
     root_logger.setLevel(log_level)
     root_logger.addHandler(handler)
 
