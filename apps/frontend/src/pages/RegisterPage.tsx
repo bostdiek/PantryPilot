@@ -191,9 +191,9 @@ const RegisterPage: React.FC = () => {
       navigate(from, { replace: true });
     } catch (err: any) {
       // Use centralized error message handling
-      const friendlyMessage = getUserFriendlyErrorMessage(err, { 
+      const friendlyMessage = getUserFriendlyErrorMessage(err, {
         action: 'register',
-        resource: 'user' 
+        resource: 'user',
       });
       setError(friendlyMessage);
     } finally {

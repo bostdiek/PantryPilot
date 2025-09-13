@@ -73,9 +73,9 @@ const LoginPage: FC = () => {
       navigate(from, { replace: true });
     } catch (err: any) {
       // Use centralized error message handling
-      const friendlyMessage = getUserFriendlyErrorMessage(err, { 
+      const friendlyMessage = getUserFriendlyErrorMessage(err, {
         action: 'login',
-        resource: 'user' 
+        resource: 'user',
       });
       setError(friendlyMessage);
     } finally {

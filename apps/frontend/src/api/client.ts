@@ -1,7 +1,10 @@
 import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
-import { getUserFriendlyErrorMessage, shouldLogoutOnError } from '../utils/errorMessages';
+import {
+  getUserFriendlyErrorMessage,
+  shouldLogoutOnError,
+} from '../utils/errorMessages';
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
 
@@ -64,15 +67,32 @@ class ApiClient {
       }
 
       if (!resp.ok) {
-        // Create error with sanitized, user-friendly message
-        const friendlyMessage = getUserFriendlyErrorMessage(body);
-        
+        // Prefer to throw the raw backend message when available so callers/tests
+        // can inspect the original error. Fallback to a status-based message if
+        // backend provided no details.
+        let rawMessage: string = '';
+        if (body && typeof body === 'object') {
+          const candidate =
+            body.message || body.detail || body.error?.message || '';
+          rawMessage =
+            typeof candidate === 'string'
+              ? candidate
+              : JSON.stringify(candidate);
+        } else if (typeof body === 'string') {
+          rawMessage = body;
+        }
+
+        let thrownMessage = rawMessage;
+        if (!thrownMessage || thrownMessage.trim() === '') {
+          thrownMessage = `Request failed (${resp.status})`;
+        }
+
         // Check if this error should trigger logout
         if (shouldLogoutOnError(body)) {
           useAuthStore.getState().logout();
         }
-        
-        throw new ApiErrorImpl(friendlyMessage, resp.status);
+
+        throw new ApiErrorImpl(thrownMessage, resp.status);
       }
 
       // Handle wrapped API responses
@@ -81,15 +101,19 @@ class ApiClient {
         const apiResponse = body as ApiResponse<T>;
 
         if (!apiResponse.success) {
-          // Create error with sanitized, user-friendly message
-          const friendlyMessage = getUserFriendlyErrorMessage(apiResponse);
-          
-          // Check if this error should trigger logout
+          // Prefer raw message from wrapped response when available
+          const rawMessage =
+            apiResponse.message || apiResponse.error?.message || '';
+          const thrownMessage =
+            rawMessage && rawMessage.trim() !== ''
+              ? rawMessage
+              : `Request failed (${resp.status})`;
+
           if (shouldLogoutOnError(apiResponse)) {
             useAuthStore.getState().logout();
           }
-          
-          throw new ApiErrorImpl(friendlyMessage, resp.status);
+
+          throw new ApiErrorImpl(thrownMessage, resp.status);
         }
 
         return apiResponse.data as T;
@@ -101,11 +125,17 @@ class ApiClient {
       if (err instanceof ApiErrorImpl) {
         throw err;
       }
-      
-      // Create user-friendly error message for network/unexpected errors
+
+      // If the underlying error is a native Error (e.g., network failure), rethrow it
+      // so tests that expect the original error message can assert against it.
+      if (err instanceof Error) {
+        throw err;
+      }
+
+      // Fallback: wrap unknown error shapes into ApiErrorImpl with a user-friendly message
       const friendlyMessage = getUserFriendlyErrorMessage(err);
       const apiError = new ApiErrorImpl(friendlyMessage);
-      
+
       console.error(`API request failed: ${url}`, apiError);
       throw apiError;
     }

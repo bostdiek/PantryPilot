@@ -17,7 +17,7 @@ interface ErrorBoundaryProps {
 
 /**
  * React Error Boundary component that catches JavaScript errors in component trees.
- * 
+ *
  * Features:
  * - Catches unhandled React component errors
  * - Shows user-friendly error message (no technical details)
@@ -25,7 +25,10 @@ interface ErrorBoundaryProps {
  * - Optional error reporting callback
  * - Prevents app crashes from propagating to users
  */
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false };
@@ -74,10 +77,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   Oops! Something went wrong
                 </h1>
               </div>
-              
+
               <div className="mb-6">
                 <p className="text-gray-600">
-                  We're sorry, but something unexpected happened. The page has been reset and you can try again.
+                  We're sorry, but something unexpected happened. The page has
+                  been reset and you can try again.
                 </p>
               </div>
 
@@ -89,7 +93,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 >
                   Try Again
                 </Button>
-                
+
                 <Button
                   variant="secondary"
                   onClick={() => {
@@ -107,18 +111,22 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                   <summary className="cursor-pointer text-sm text-gray-500 hover:text-gray-700">
                     Technical Details (Development Only)
                   </summary>
-                  <div className="mt-2 p-3 bg-gray-50 rounded text-xs font-mono text-gray-700 overflow-auto">
+                  <div className="mt-2 overflow-auto rounded bg-gray-50 p-3 font-mono text-xs text-gray-700">
                     <div className="mb-2">
                       <strong>Error:</strong> {this.state.error.message}
                     </div>
                     <div className="mb-2">
                       <strong>Stack:</strong>
-                      <pre className="whitespace-pre-wrap">{this.state.error.stack}</pre>
+                      <pre className="whitespace-pre-wrap">
+                        {this.state.error.stack}
+                      </pre>
                     </div>
                     {this.state.errorInfo && (
                       <div>
                         <strong>Component Stack:</strong>
-                        <pre className="whitespace-pre-wrap">{this.state.errorInfo.componentStack}</pre>
+                        <pre className="whitespace-pre-wrap">
+                          {this.state.errorInfo.componentStack}
+                        </pre>
                       </div>
                     )}
                   </div>
@@ -148,6 +156,6 @@ export function withErrorBoundary<P extends object>(
   );
 
   WrappedComponent.displayName = `withErrorBoundary(${Component.displayName || Component.name})`;
-  
+
   return WrappedComponent;
 }

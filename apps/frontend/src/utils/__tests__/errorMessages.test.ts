@@ -8,7 +8,9 @@ import {
 describe('getUserFriendlyErrorMessage', () => {
   it('handles string error messages', () => {
     const result = getUserFriendlyErrorMessage('Network error occurred');
-    expect(result).toBe('Unable to connect. Please check your internet connection and try again.');
+    expect(result).toBe(
+      'Unable to connect. Please check your internet connection and try again.'
+    );
   });
 
   it('handles error objects with message field', () => {
@@ -17,7 +19,9 @@ describe('getUserFriendlyErrorMessage', () => {
       status: 409,
     };
     const result = getUserFriendlyErrorMessage(error);
-    expect(result).toBe('An account with this email or username already exists.');
+    expect(result).toBe(
+      'An account with this email or username already exists.'
+    );
   });
 
   it('handles validation errors with context', () => {
@@ -48,7 +52,9 @@ describe('getUserFriendlyErrorMessage', () => {
       },
     };
     const result = getUserFriendlyErrorMessage(error, { action: 'register' });
-    expect(result).toBe('An account with this email or username already exists. Please try logging in instead.');
+    expect(result).toBe(
+      'An account with this email or username already exists. Please try logging in instead.'
+    );
   });
 
   it('sanitizes technical error messages', () => {
@@ -57,13 +63,17 @@ describe('getUserFriendlyErrorMessage', () => {
       status: 500,
     };
     const result = getUserFriendlyErrorMessage(error);
-    expect(result).toBe('Something went wrong on our end. Please try again in a few moments.');
+    expect(result).toBe(
+      'Something went wrong on our end. Please try again in a few moments.'
+    );
   });
 
   it('handles network errors', () => {
     const error = new Error('Failed to fetch');
     const result = getUserFriendlyErrorMessage(error);
-    expect(result).toBe('Unable to connect. Please check your internet connection and try again.');
+    expect(result).toBe(
+      'Unable to connect. Please check your internet connection and try again.'
+    );
   });
 
   it('provides fallback for unknown errors', () => {

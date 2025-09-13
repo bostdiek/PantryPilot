@@ -5,7 +5,9 @@ import userEvent from '@testing-library/user-event';
 import { ErrorBoundary, withErrorBoundary } from '../ErrorBoundary';
 
 // Test component that throws an error
-const ThrowingComponent: React.FC<{ shouldThrow?: boolean }> = ({ shouldThrow = true }) => {
+const ThrowingComponent: React.FC<{ shouldThrow?: boolean }> = ({
+  shouldThrow = true,
+}) => {
   if (shouldThrow) {
     throw new Error('Test error message');
   }
@@ -46,14 +48,20 @@ describe('ErrorBoundary', () => {
     );
 
     expect(screen.getByText('Oops! Something went wrong')).toBeInTheDocument();
-    expect(screen.getByText(/We're sorry, but something unexpected happened/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Try Again' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Go to Home Page' })).toBeInTheDocument();
+    expect(
+      screen.getByText(/We're sorry, but something unexpected happened/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Try Again' })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Go to Home Page' })
+    ).toBeInTheDocument();
   });
 
   it('renders custom fallback when provided', () => {
     const customFallback = <div>Custom error message</div>;
-    
+
     render(
       <ErrorBoundary fallback={customFallback}>
         <ThrowingComponent />
@@ -61,12 +69,14 @@ describe('ErrorBoundary', () => {
     );
 
     expect(screen.getByText('Custom error message')).toBeInTheDocument();
-    expect(screen.queryByText('Oops! Something went wrong')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Oops! Something went wrong')
+    ).not.toBeInTheDocument();
   });
 
   it('calls onError callback when error occurs', () => {
     const onError = vi.fn();
-    
+
     render(
       <ErrorBoundary onError={onError}>
         <ThrowingComponent />
@@ -84,7 +94,7 @@ describe('ErrorBoundary', () => {
 
   it('resets error state when Try Again is clicked', async () => {
     const user = userEvent.setup();
-    
+
     // Simple component that throws initially then recovers
     let shouldThrow = true;
     const ToggleComponent: React.FC = () => {
@@ -131,7 +141,9 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    expect(screen.getByText('Technical Details (Development Only)')).toBeInTheDocument();
+    expect(
+      screen.getByText('Technical Details (Development Only)')
+    ).toBeInTheDocument();
 
     // Restore original mode
     import.meta.env.MODE = originalMode;
@@ -148,7 +160,9 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    expect(screen.queryByText('Technical Details (Development Only)')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Technical Details (Development Only)')
+    ).not.toBeInTheDocument();
 
     // Restore original mode
     import.meta.env.MODE = originalMode;
@@ -156,7 +170,7 @@ describe('ErrorBoundary', () => {
 
   it('navigates to home when Go to Home Page is clicked', async () => {
     const user = userEvent.setup();
-    
+
     // Mock window.location.href
     const originalLocation = window.location;
     delete (window as any).location;
@@ -180,7 +194,7 @@ describe('ErrorBoundary', () => {
 describe('withErrorBoundary HOC', () => {
   it('wraps component with error boundary', () => {
     const WrappedComponent = withErrorBoundary(NormalComponent);
-    
+
     render(<WrappedComponent />);
 
     expect(screen.getByText('This component works fine')).toBeInTheDocument();
@@ -188,9 +202,9 @@ describe('withErrorBoundary HOC', () => {
 
   it('passes error boundary props to wrapper', () => {
     const onError = vi.fn();
-    
+
     const WrappedComponent = withErrorBoundary(ThrowingComponent, { onError });
-    
+
     render(<WrappedComponent />);
 
     expect(onError).toHaveBeenCalledTimes(1);
@@ -199,9 +213,11 @@ describe('withErrorBoundary HOC', () => {
   it('sets correct display name', () => {
     const TestComponent: React.FC = () => <div>test</div>;
     TestComponent.displayName = 'TestComponent';
-    
+
     const WrappedComponent = withErrorBoundary(TestComponent);
-    
-    expect(WrappedComponent.displayName).toBe('withErrorBoundary(TestComponent)');
+
+    expect(WrappedComponent.displayName).toBe(
+      'withErrorBoundary(TestComponent)'
+    );
   });
 });
