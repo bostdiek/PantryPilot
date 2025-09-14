@@ -1,5 +1,5 @@
+import type { ComponentType, ErrorInfo, ReactNode } from 'react';
 import { Component } from 'react';
-import type { ErrorInfo, ReactNode, ComponentType } from 'react';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Container } from './ui/Container';
