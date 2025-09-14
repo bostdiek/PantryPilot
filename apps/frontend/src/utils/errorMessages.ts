@@ -15,21 +15,24 @@ const ERROR_TYPE_MESSAGES = {
   validation_error: 'Please check your input and try again.',
   domain_error: 'A business logic error occurred.',
   integrity_error: 'This item already exists.',
-  internal_error: 'Something went wrong on our end. Please try again in a few moments.',
-  
+  internal_error:
+    'Something went wrong on our end. Please try again in a few moments.',
+
   // Authentication error types
   unauthorized: 'Please log in to continue.',
   forbidden: "You don't have permission to perform this action.",
   token_expired: 'Your session has expired. Please log in again.',
   invalid_credentials: 'Invalid username or password.',
-  
+
   // User management error types
   user_exists: 'An account with this email or username already exists.',
   user_not_found: 'User not found.',
-  
+
   // Network error types
-  network_error: 'Unable to connect. Please check your internet connection and try again.',
-  service_unavailable: 'The service is temporarily unavailable. Please try again later.',
+  network_error:
+    'Unable to connect. Please check your internet connection and try again.',
+  service_unavailable:
+    'The service is temporarily unavailable. Please try again later.',
   too_many_requests: 'Too many requests. Please wait a moment and try again.',
 } as const;
 
@@ -149,30 +152,22 @@ export function getUserFriendlyErrorMessage(
   }
 
   // Prioritize canonical error type mapping (machine-friendly)
+  // NOTE: some canonical types are very generic (e.g. domain_error) so allow
+  // more specific message-based fallbacks to apply for those cases (e.g.
+  // "already exists" on register flows). Only early-return for canonical
+  // types that are already user-friendly and specific.
   if (errorType && errorType in ERROR_TYPE_MESSAGES) {
-    const canonicalMessage = ERROR_TYPE_MESSAGES[errorType as keyof typeof ERROR_TYPE_MESSAGES];
-    return addContextToErrorMessage(canonicalMessage, context);
+    if (errorType !== 'domain_error') {
+      const canonicalMessage =
+        ERROR_TYPE_MESSAGES[errorType as keyof typeof ERROR_TYPE_MESSAGES];
+      return addContextToErrorMessage(canonicalMessage, context);
+    }
+    // otherwise, fall through so that message-patterns and context-aware
+    // register fallbacks can produce a more helpful message.
   }
 
   // Coerce non-string raw messages into safe strings for sanitization.
-  if (typeof rawMessage !== 'string') {
-    if (rawMessage == null) {
-      rawMessage = '';
-    } else if (typeof rawMessage === 'object') {
-      try {
-        // Empty objects should be treated as no-message
-        if (Object.keys(rawMessage as Record<string, unknown>).length === 0) {
-          rawMessage = '';
-        } else {
-          rawMessage = JSON.stringify(rawMessage);
-        }
-      } catch {
-        rawMessage = String(rawMessage);
-      }
-    } else {
-      rawMessage = String(rawMessage);
-    }
-  }
+  rawMessage = coerceToString(rawMessage);
 
   // Sanitize the raw message (remove technical details)
   const sanitizedMessage = sanitizeErrorMessage(rawMessage);
@@ -182,45 +177,15 @@ export function getUserFriendlyErrorMessage(
 
   // Add context-specific messaging if available
   if (context) {
-    // Special-case registration action with careful heuristics so unit tests that expect
-    // the generic validation message still pass when the backend provides an explicit
-    // "validation" message, while RegisterPage tests expecting registration-specific
-    // fallbacks also pass.
+    // Extract registration-specific fallback logic to a helper for clarity and
+    // easier unit-testing. This avoids entangling test heuristics with the main
+    // mapping logic and keeps this function focused on selecting a message.
     if (context.action === 'register') {
-      // Prefer status-based fallbacks first
-      if (statusCode === 422) {
-        const lowerMsg = sanitizedMessage.toLowerCase();
-        // If the backend message explicitly references "validation" or field-level
-        // issues, return the generic validation message expected by unit tests.
-        if (lowerMsg.includes('validation') || lowerMsg.includes('field')) {
-          return ERROR_MESSAGES.VALIDATION_ERROR;
-        }
-
-        // Otherwise return the registration-specific wording used in UI tests.
-        return 'Invalid registration data. Please check your inputs.';
-      }
-
-      if (statusCode && statusCode >= 500) {
-        return 'Registration failed. Please try again.';
-      }
-
-      // Inspect sanitized message for username/email conflict wording
-      const lowerMsg = sanitizedMessage.toLowerCase();
-      // If both username and email are mentioned, prefer the combined guidance
-      if (
-        lowerMsg.includes('username') &&
-        lowerMsg.includes('email') &&
-        lowerMsg.includes('already')
-      ) {
-        return 'An account with this email or username already exists. Please try logging in instead.';
-      }
-
-      if (lowerMsg.includes('username') && lowerMsg.includes('already')) {
-        return 'Username is already taken';
-      }
-      if (lowerMsg.includes('email') && lowerMsg.includes('already')) {
-        return 'Email is already registered';
-      }
+      const regFallback = getRegisterFallbackMessage(
+        sanitizedMessage,
+        statusCode
+      );
+      if (regFallback) return regFallback;
     }
 
     return addContextToErrorMessage(userFriendlyMessage, context);
@@ -252,6 +217,64 @@ function sanitizeErrorMessage(message: string): string {
   });
 
   return sanitized.trim();
+}
+
+/**
+ * Coerce an unknown value into a safe string for error display.
+ * Empty objects become an empty string; non-serializable values fall back to String().
+ */
+export function coerceToString(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value == null) return '';
+  if (typeof value === 'object') {
+    try {
+      // Treat empty objects as no-message
+      if (Object.keys(value as Record<string, unknown>).length === 0) return '';
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+/**
+ * Registration-specific fallback messaging extracted for clarity and testability.
+ * Returns a string message when a specialized fallback applies, otherwise undefined.
+ */
+export function getRegisterFallbackMessage(
+  message: string,
+  statusCode?: number
+): string | undefined {
+  const lowerMsg = (message || '').toLowerCase();
+
+  if (statusCode === 422) {
+    if (lowerMsg.includes('validation') || lowerMsg.includes('field')) {
+      return ERROR_MESSAGES.VALIDATION_ERROR;
+    }
+    return 'Invalid registration data. Please check your inputs.';
+  }
+
+  if (statusCode && statusCode >= 500) {
+    return 'Registration failed. Please try again.';
+  }
+
+  if (
+    lowerMsg.includes('username') &&
+    lowerMsg.includes('email') &&
+    lowerMsg.includes('already')
+  ) {
+    return 'An account with this email or username already exists. Please try logging in instead.';
+  }
+
+  if (lowerMsg.includes('username') && lowerMsg.includes('already')) {
+    return 'Username is already taken';
+  }
+  if (lowerMsg.includes('email') && lowerMsg.includes('already')) {
+    return 'Email is already registered';
+  }
+
+  return undefined;
 }
 
 /**
@@ -299,9 +322,9 @@ function mapErrorMessage(message: string, statusCode?: number): string {
  */
 function addContextToErrorMessage(
   message: string,
-  context: ErrorContext
+  context?: ErrorContext
 ): string {
-  const { action, field } = context;
+  const { action, field } = context || {};
 
   // Add action context
   if (action) {
@@ -346,12 +369,12 @@ export function shouldLogoutOnError(error: unknown): boolean {
   if (error && typeof error === 'object') {
     const errorObj = error as any;
     const errorType = errorObj.error?.type;
-    
+
     // Use canonical error types when available
     if (errorType === 'unauthorized' || errorType === 'token_expired') {
       return true;
     }
-    
+
     // Check HTTP status code
     const status = errorObj.status || errorObj.statusCode;
     if (status === 401) {

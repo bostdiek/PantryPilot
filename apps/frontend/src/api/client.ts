@@ -72,7 +72,10 @@ class ApiClient {
         let rawMessage: string = '';
         if (body && typeof body === 'object') {
           const candidate =
-            body.message || body.detail || body.error?.message || '';
+            (body as any).message ||
+            (body as any).detail ||
+            (body as any).error?.message ||
+            '';
           rawMessage =
             typeof candidate === 'string'
               ? candidate
@@ -92,7 +95,16 @@ class ApiClient {
         }
 
         // Always throw ApiErrorImpl for API errors - consistent error contract
-        throw new ApiErrorImpl(thrownMessage, resp.status, body);
+        // Extract canonical error code if present in the body and coerce types safely
+        const rawCanonical = (body as any)?.error?.type ?? (body as any)?.code;
+        const canonicalCodeSafe: string | undefined =
+          typeof rawCanonical === 'string' ? rawCanonical : undefined;
+        throw new ApiErrorImpl(
+          thrownMessage,
+          resp.status,
+          canonicalCodeSafe,
+          body as unknown
+        );
       }
 
       // Handle wrapped API responses
@@ -104,9 +116,13 @@ class ApiClient {
           // Prefer raw message from wrapped response when available
           const rawMessage =
             apiResponse.message || apiResponse.error?.message || '';
-          const thrownMessage =
-            rawMessage && rawMessage.trim() !== ''
+          const rawMessageStr =
+            typeof rawMessage === 'string'
               ? rawMessage
+              : JSON.stringify(rawMessage);
+          const thrownMessage =
+            rawMessageStr && rawMessageStr.trim() !== ''
+              ? rawMessageStr
               : `Request failed (${resp.status})`;
 
           if (shouldLogoutOnError(apiResponse)) {
@@ -114,7 +130,16 @@ class ApiClient {
           }
 
           // Consistent error type for wrapped API responses
-          throw new ApiErrorImpl(thrownMessage, resp.status, apiResponse);
+          const rawCanonical =
+            (apiResponse as any)?.error?.type ?? (apiResponse as any)?.code;
+          const canonicalCodeSafe: string | undefined =
+            typeof rawCanonical === 'string' ? rawCanonical : undefined;
+          throw new ApiErrorImpl(
+            thrownMessage,
+            resp.status,
+            canonicalCodeSafe,
+            apiResponse as unknown
+          );
         }
 
         return apiResponse.data as T;
@@ -136,13 +161,20 @@ class ApiClient {
           `Network error: ${err.message}`,
           undefined,
           undefined,
+          undefined,
           err
         );
       }
 
       // Fallback: wrap unknown error shapes into ApiErrorImpl with a user-friendly message
       const friendlyMessage = getUserFriendlyErrorMessage(err);
-      const apiError = new ApiErrorImpl(friendlyMessage, undefined, undefined, err);
+      const apiError = new ApiErrorImpl(
+        friendlyMessage,
+        undefined,
+        undefined,
+        undefined,
+        err instanceof Error ? err : undefined
+      );
 
       console.error(`API request failed: ${url}`, apiError);
       throw apiError;

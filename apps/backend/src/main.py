@@ -8,7 +8,11 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 
 from api.v1.api import api_router
 from core.config import get_settings
-from core.error_handler import global_exception_handler, setup_logging
+from core.error_handler import (
+    ExceptionNormalizationMiddleware,
+    global_exception_handler,
+    setup_logging,
+)
 from core.middleware import CorrelationIdMiddleware
 
 
@@ -47,8 +51,9 @@ app = FastAPI(
     redoc_url=None,
 )
 
-# Add correlation ID middleware
+# Add correlation ID middleware and final exception normalization safety net
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(ExceptionNormalizationMiddleware)
 
 # Add global exception handler
 app.add_exception_handler(Exception, global_exception_handler)

@@ -6,14 +6,14 @@ This module centralizes security-related configuration including:
 - Other security-related constants
 """
 
-from typing import Set
+# No external typing imports needed; use built-in generics (PEP 585)
 
 # Comprehensive list of sensitive keys for sanitization
 # These keys will be automatically redacted from logs to prevent PII leakage
-SENSITIVE_KEYS: Set[str] = {
+SENSITIVE_KEYS: set[str] = {
     # Authentication & Authorization
     "password",
-    "hashed_password", 
+    "hashed_password",
     "secret",
     "token",
     "access_token",
@@ -29,7 +29,6 @@ SENSITIVE_KEYS: Set[str] = {
     "pin",
     "security_code",
     "bearer",
-    
     # Personal Identifiable Information
     "email",
     "phone",
@@ -49,7 +48,6 @@ SENSITIVE_KEYS: Set[str] = {
     "bank_account",
     "routing_number",
     "account_number",
-    
     # Additional sensitive headers and fields
     "set-cookie",
     "cookie",
@@ -63,26 +61,28 @@ SENSITIVE_KEYS: Set[str] = {
 }
 
 # Production-only error response fields
-# In production, error responses should only contain these fields to prevent information leakage
-PRODUCTION_ERROR_FIELDS: Set[str] = {
+# In production, error responses should only contain these fields to
+# prevent information leakage
+PRODUCTION_ERROR_FIELDS: set[str] = {
     "correlation_id",
     "type",
 }
 
 # Development error response fields (additional fields allowed in development)
-DEVELOPMENT_ERROR_FIELDS: Set[str] = PRODUCTION_ERROR_FIELDS | {
+DEVELOPMENT_ERROR_FIELDS: set[str] = PRODUCTION_ERROR_FIELDS | {
     "details",
-    "traceback", 
+    "traceback",
     "exception_type",
     "validation_errors",
 }
 
-def get_allowed_error_fields(environment: str) -> Set[str]:
+
+def get_allowed_error_fields(environment: str) -> set[str]:
     """Get allowed error response fields based on environment.
-    
+
     Args:
         environment: The application environment (production, development, etc.)
-        
+
     Returns:
         Set of allowed field names for error responses
     """
@@ -91,12 +91,13 @@ def get_allowed_error_fields(environment: str) -> Set[str]:
     else:
         return DEVELOPMENT_ERROR_FIELDS.copy()
 
+
 def is_sensitive_key(key: str) -> bool:
     """Check if a key should be considered sensitive and redacted.
-    
+
     Args:
         key: The key name to check
-        
+
     Returns:
         True if the key should be redacted, False otherwise
     """

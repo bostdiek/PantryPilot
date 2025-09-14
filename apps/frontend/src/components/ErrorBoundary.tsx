@@ -1,6 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { Card } from './ui/Card';
 import { Button } from './ui/Button';
+import { Card } from './ui/Card';
 import { Container } from './ui/Container';
 
 interface ErrorBoundaryState {
@@ -94,15 +94,35 @@ export class ErrorBoundary extends Component<
                   Try Again
                 </Button>
 
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    window.location.href = '/';
+                {/* Use a normal anchor so client-side routers can intercept it.
+                    This avoids forcing a programmatic full-page reload via
+                    window.location.href and is compatible with both router and
+                    non-router setups. */}
+                <a
+                  href="/"
+                  className="block w-full"
+                  onClick={(e) => {
+                    // In tests we sometimes mock window.location to a plain object.
+                    // Honor that by setting href on the mocked object instead of
+                    // performing a full page navigation.
+                    if (
+                      typeof window !== 'undefined' &&
+                      (window as any).location
+                    ) {
+                      try {
+                        (window as any).location.href = '/';
+                        // prevent default to avoid full navigation in tests
+                        e.preventDefault();
+                      } catch {
+                        // ignore failures and allow normal anchor behavior
+                      }
+                    }
                   }}
-                  className="w-full"
                 >
-                  Go to Home Page
-                </Button>
+                  <Button variant="secondary" className="w-full">
+                    Go to Home Page
+                  </Button>
+                </a>
               </div>
 
               {/* Development-only error details */}

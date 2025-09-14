@@ -47,7 +47,7 @@ describe('getUserFriendlyErrorMessage', () => {
       message: 'Some generic message',
       error: {
         type: 'validation_error',
-        correlation_id: 'abc-123'
+        correlation_id: 'abc-123',
       },
       status: 422,
     };
@@ -60,7 +60,7 @@ describe('getUserFriendlyErrorMessage', () => {
       message: 'Access denied',
       error: {
         type: 'unauthorized',
-        correlation_id: 'def-456'
+        correlation_id: 'def-456',
       },
       status: 401,
     };
@@ -139,17 +139,17 @@ describe('getUserFriendlyErrorMessage', () => {
 
 describe('shouldLogoutOnError', () => {
   it('returns true for canonical unauthorized error type', () => {
-    const error = { 
+    const error = {
       error: { type: 'unauthorized' },
-      status: 401 
+      status: 401,
     };
     expect(shouldLogoutOnError(error)).toBe(true);
   });
 
   it('returns true for canonical token_expired error type', () => {
-    const error = { 
+    const error = {
       error: { type: 'token_expired' },
-      status: 401 
+      status: 401,
     };
     expect(shouldLogoutOnError(error)).toBe(true);
   });

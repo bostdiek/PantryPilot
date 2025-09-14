@@ -10,109 +10,28 @@ This module provides:
 import json
 import logging
 import sys
-import traceback
 import uuid
 from contextvars import ContextVar
 from typing import Any
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
 
 from core.config import get_settings
-from core.exceptions import DomainError, DuplicateUserError, UserNotFoundError
+from core.exceptions import DuplicateUserError, UserNotFoundError
 from core.security_config import get_allowed_error_fields, is_sensitive_key
 from schemas.api import ErrorResponse
 
 
-# Comprehensive list of sensitive keys for sanitization
-SENSITIVE_KEYS = {
-    # Authentication & Authorization
-    "password",
-    "hashed_password", 
-    "secret",
-    "token",
-    "access_token",
-    "refresh_token",
-    "authorization",
-    "auth_token",
-    "api_key",
-    "key",
-    "jwt",
-    "session_id",
-    "csrf_token",
-    "otp",
-    "pin",
-    "security_code",
-    
-    # Personal Identifiable Information
-    "email",
-    "phone",
-    "phone_number",
-    "ssn",
-    "social_security_number",
-    "address",
-    "street_address",
-    "credit_card",
-    "credit_card_number",
-    "card_number",
-    "cvv",
-    "card_cvv",
-    "bank_account",
-    "routing_number",
-    
-    # Additional sensitive headers and fields
-    "set-cookie",
-    "cookie",
-    "x-auth-token",
-    "x-api-key",
-}
-
-# Comprehensive list of sensitive keys for sanitization
-SENSITIVE_KEYS = {
-    # Authentication & Authorization
-    "password",
-    "hashed_password", 
-    "secret",
-    "token",
-    "access_token",
-    "refresh_token",
-    "authorization",
-    "auth_token",
-    "api_key",
-    "key",
-    "jwt",
-    "session_id",
-    "csrf_token",
-    "otp",
-    "pin",
-    "security_code",
-    
-    # Personal Identifiable Information
-    "email",
-    "phone",
-    "phone_number",
-    "ssn",
-    "social_security_number",
-    "address",
-    "street_address",
-    "credit_card",
-    "credit_card_number",
-    "card_number",
-    "cvv",
-    "card_cvv",
-    "bank_account",
-    "routing_number",
-    
-    # Additional sensitive headers and fields
-    "set-cookie",
-    "cookie",
-    "x-auth-token",
-    "x-api-key",
-}
+# Note: sensitive keys are centralized in `core.security_config.SENSITIVE_KEYS` and
+# exposed via `is_sensitive_key`. Avoid duplicating that list here to prevent
+# drift and keep a single source of truth for redaction rules.
 
 # Context variable for correlation ID tracking across async calls
 _correlation_id_var: ContextVar[str | None] = ContextVar("correlation_id", default=None)
@@ -174,13 +93,20 @@ class StructuredLogger:
         # Use proper JSON encoding for structured logs
         settings = get_settings()
         if settings.ENVIRONMENT == "production":
-            # In production, log the full structured data as valid JSON
+            # In production, pass the structured data via the `extra` argument so the
+            # JSONFormatter in `setup_logging()` can incorporate it without
+            # double-encoding. This keeps the final log a valid JSON object.
             try:
-                structured_message = json.dumps(log_data)
-                self.logger.log(level, structured_message, exc_info=exc_info)
-            except (TypeError, ValueError) as e:
-                # Fallback if JSON serialization fails
-                fallback_message = f"[{correlation_id}] {message} (JSON serialization failed: {e})"
+                self.logger.log(
+                    level,
+                    message,
+                    extra={"structured_data": log_data},
+                    exc_info=exc_info,
+                )
+            except Exception as e:
+                # Fallback if logging with extra fails for any reason
+                fallback_message = f"[{correlation_id}] {message} (logging failed: {e})"
+                # Ensure we still write something informative to logs
                 self.logger.log(level, fallback_message, exc_info=exc_info)
         else:
             # In development, use human-readable format
@@ -195,20 +121,61 @@ class StructuredLogger:
         """Remove or mask sensitive data from log entries."""
         sanitized: dict[str, Any] = {}
 
+        # Fast-paths reduce overall complexity: non-dict or empty dict
+        if not isinstance(data, dict) or not data:
+            return {} if not isinstance(data, dict) else {}
+
+        header_redaction = self._redact_header_like(data)
+        if header_redaction is not None:
+            return header_redaction
+
         for key, value in data.items():
             if is_sensitive_key(key):
                 sanitized[key] = "[REDACTED]"
-            elif isinstance(value, dict):
-                sanitized[key] = self._sanitize_data(value)
-            elif isinstance(value, list):
-                sanitized[key] = [
-                    self._sanitize_data(item) if isinstance(item, dict) else item
-                    for item in value
-                ]
             else:
-                sanitized[key] = value
+                sanitized[key] = self._sanitize_value(value)
 
         return sanitized
+
+    def _sanitize_value(self, value: Any) -> Any:
+        """Sanitize a single value which may be a dict, list, or primitive."""
+        if isinstance(value, dict):
+            # Recurse into dicts
+            return self._sanitize_data(value)
+        if isinstance(value, list):
+            return [self._sanitize_value(item) for item in value]
+        # Primitive value: return as-is
+        return value
+
+    def _redact_header_like(self, data: dict[str, Any]) -> dict[str, Any] | None:
+        """If `data` is a header-like dict, return a redacted version or None.
+
+        A header-like dict has keys like `name`/`key` and `value`. If the name/key
+        is considered sensitive, its value is redacted.
+        """
+        # `data` is annotated as a dict in the signature, so this runtime
+        # check is unreachable and confuses static type checkers (mypy).
+        # Remove the redundant check to keep mypy happy.
+
+        if not (
+            ("name" in data and "value" in data) or ("key" in data and "value" in data)
+        ):
+            return None
+
+        header_name = data.get("name") or data.get("key")
+        if not isinstance(header_name, str) or not is_sensitive_key(header_name):
+            return None
+
+        redacted: dict[str, Any] = {}
+        for sub_k, sub_v in data.items():
+            if sub_k.lower() in {"value", "val", "v"}:
+                redacted[sub_k] = "[REDACTED]"
+            elif isinstance(sub_v, dict):
+                redacted[sub_k] = self._sanitize_data(sub_v)
+            else:
+                redacted[sub_k] = "[REDACTED]" if is_sensitive_key(sub_k) else sub_v
+
+        return redacted
 
     def info(self, message: str, **kwargs: Any) -> None:
         """Log info level message."""
@@ -231,211 +198,153 @@ class StructuredLogger:
 structured_logger = StructuredLogger(__name__)
 
 
-async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Global exception handler for all unhandled exceptions.
+class ExceptionNormalizationMiddleware(BaseHTTPMiddleware):
+    """Catch any uncaught Exception and delegate to global_exception_handler.
 
-    This handler:
-    - Logs detailed error information with correlation IDs
-    - Returns generic error messages in production
-    - Includes debug info in development
-    - Prevents sensitive data leakage
+    This avoids touching private middleware_stack internals and guarantees
+    a final safety net consistent with centralized error handling.
     """
-    correlation_id = get_correlation_id()
 
-    # Extract request info for logging (sanitized)
-    request_info = {
-        "method": request.method,
-        "url": str(request.url),
-        "client_ip": request.client.host if request.client else "unknown",
-        "user_agent": request.headers.get("user-agent", "unknown"),
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        try:
+            return await call_next(request)
+        except Exception as exc:  # noqa: BLE001
+            return await global_exception_handler(request, exc)
+
+
+def _build_error_response(
+    *,
+    correlation_id: str,
+    error_type: str,
+    message: str,
+    environment: str,
+    details: dict[str, Any] | None = None,
+    traceback_str: str | None = None,
+    exception_type: str | None = None,
+    validation_errors: Any | None = None,
+    status_code: int = 500,
+) -> JSONResponse:
+    """Construct a sanitized JSON error response respecting environment rules."""
+    allowed_fields = get_allowed_error_fields(environment)
+
+    error_body: dict[str, Any] = {
+        "correlation_id": correlation_id,
+        "type": error_type,
     }
 
-    # Handle specific exception types
-    if isinstance(exc, HTTPException):
-        return await handle_http_exception(exc, correlation_id, request_info)
-    elif isinstance(exc, StarletteHTTPException):
-        return await handle_starlette_http_exception(exc, correlation_id, request_info)
-    elif isinstance(exc, ValidationError | RequestValidationError):
-        return await handle_validation_error(exc, correlation_id, request_info)
-    elif isinstance(exc, DomainError):
-        return await handle_domain_error(exc, correlation_id, request_info)
-    elif isinstance(exc, IntegrityError):
-        return await handle_integrity_error(exc, correlation_id, request_info)
-    else:
-        return await handle_generic_exception(exc, correlation_id, request_info)
-
-
-async def handle_http_exception(
-    exc: HTTPException, correlation_id: str, request_info: dict[str, Any]
-) -> JSONResponse:
-    """Handle FastAPI HTTPException."""
-    structured_logger.warning(
-        f"HTTP exception: {exc.detail}",
-        status_code=exc.status_code,
-        **request_info,
-    )
-
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=ErrorResponse(
-            success=False,
-            message=exc.detail,
-            error={"correlation_id": correlation_id, "type": "http_error"},
-        ).model_dump(),
-    )
-
-
-async def handle_starlette_http_exception(
-    exc: StarletteHTTPException, correlation_id: str, request_info: dict[str, Any]
-) -> JSONResponse:
-    """Handle Starlette HTTPException."""
-    structured_logger.warning(
-        f"Starlette HTTP exception: {exc.detail}",
-        status_code=exc.status_code,
-        **request_info,
-    )
-
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=ErrorResponse(
-            success=False,
-            message=str(exc.detail),
-            error={"correlation_id": correlation_id, "type": "http_error"},
-        ).model_dump(),
-    )
-
-
-async def handle_validation_error(
-    exc: ValidationError | RequestValidationError,
-    correlation_id: str,
-    request_info: dict[str, Any],
-) -> JSONResponse:
-    """Handle Pydantic validation errors."""
-    settings = get_settings()
-
-    structured_logger.warning(
-        "Validation error in request",
-        error_count=getattr(exc, "error_count", lambda: len(exc.errors()))(),
-        **request_info,
-    )
-
-    # Prepare error details dict with environment-aware field filtering
-    allowed_fields = get_allowed_error_fields(settings.ENVIRONMENT)
-    error_details: dict[str, Any] = {"correlation_id": correlation_id, "type": "validation_error"}
-
-    if settings.ENVIRONMENT == "production":
-        # Production: generic message, no details
-        message = "Invalid request data provided"
-        # Only include allowed production fields
-        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
-    else:
-        # Development: include validation details for debugging
-        message = "Validation failed"
-        error_details["details"] = exc.errors()
-        # Filter to allowed development fields
-        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
-
-    return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=ErrorResponse(
-            success=False,
-            message=message,
-            error=error_details,
-        ).model_dump(),
-    )
-
-
-async def handle_domain_error(
-    exc: DomainError, correlation_id: str, request_info: dict[str, Any]
-) -> JSONResponse:
-    """Handle domain-specific business logic errors."""
-    structured_logger.info(
-        f"Domain error: {exc.__class__.__name__}",
-        error_type=exc.__class__.__name__,
-        **request_info,
-    )
-
-    # Map domain errors to appropriate HTTP status and messages
-    if isinstance(exc, DuplicateUserError):
-        status_code = status.HTTP_409_CONFLICT
-        message = "Username or email already exists"
-    elif isinstance(exc, UserNotFoundError):
-        status_code = status.HTTP_404_NOT_FOUND
-        message = "User not found"
-    else:
-        # Generic domain error
-        status_code = status.HTTP_400_BAD_REQUEST
-        message = ERROR_TYPE_MESSAGES.get(type(exc), "A business logic error occurred")
+    # Only include optional fields if allowed in this environment
+    if "details" in allowed_fields and details:
+        error_body["details"] = details
+    if "traceback" in allowed_fields and traceback_str:
+        error_body["traceback"] = traceback_str
+    if "exception_type" in allowed_fields and exception_type:
+        error_body["exception_type"] = exception_type
+    if "validation_errors" in allowed_fields and validation_errors is not None:
+        error_body["validation_errors"] = validation_errors
 
     return JSONResponse(
         status_code=status_code,
         content=ErrorResponse(
-            success=False,
             message=message,
-            error={"correlation_id": correlation_id, "type": "domain_error"},
-        ).model_dump(),
-    )
-
-
-async def handle_integrity_error(
-    exc: IntegrityError, correlation_id: str, request_info: dict[str, Any]
-) -> JSONResponse:
-    """Handle database integrity constraint violations."""
-    structured_logger.error(
-        "Database integrity error",
-        error_class=exc.__class__.__name__,
-        **request_info,
-    )
-
-    return JSONResponse(
-        status_code=status.HTTP_409_CONFLICT,
-        content=ErrorResponse(
+            error=error_body,
             success=False,
-            message="A data integrity constraint was violated",
-            error={"correlation_id": correlation_id, "type": "integrity_error"},
         ).model_dump(),
     )
 
 
-async def handle_generic_exception(
-    exc: Exception, correlation_id: str, request_info: dict[str, Any]
-) -> JSONResponse:
-    """Handle all other unhandled exceptions."""
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Global exception handler providing structured, sanitized responses.
+
+    This function centralizes all error handling to ensure:
+    - Consistent JSON error envelope
+    - Correlation ID is always present
+    - Sensitive data is never leaked (production)
+    - Helpful diagnostics in development
+    """
     settings = get_settings()
+    environment = settings.ENVIRONMENT
+    correlation_id = get_correlation_id()
 
-    # Log the full exception details for debugging
+    # HTTP / Starlette HTTP exceptions: let FastAPI's default logic handle structure
+    if isinstance(exc, StarletteHTTPException):
+        # Wrap into our structure but preserve status code & detail
+        status_code = getattr(exc, "status_code", 500)
+        detail = getattr(exc, "detail", "An error occurred")
+        http_error_body: dict[str, Any] = {
+            "correlation_id": correlation_id,
+            "type": "http_error",
+        }
+        if environment != "production":
+            http_error_body["details"] = {"detail": detail}
+            http_error_body["exception_type"] = exc.__class__.__name__
+        return JSONResponse(
+            status_code=status_code,
+            content=ErrorResponse(
+                message="An HTTP error occurred", error=http_error_body, success=False
+            ).model_dump(),
+        )
+
+    # Pydantic / FastAPI validation errors
+    if isinstance(exc, ValidationError | RequestValidationError):
+        structured_logger.warning(
+            "Validation error",
+            validation_errors=getattr(exc, "errors", lambda: [])(),
+        )
+        validation_details = None
+        try:
+            validation_details = exc.errors() if hasattr(exc, "errors") else None
+        except Exception:  # pragma: no cover - defensive
+            validation_details = None
+
+        return _build_error_response(
+            correlation_id=correlation_id,
+            error_type="validation_error",
+            message="Invalid request data provided",
+            environment=environment,
+            validation_errors=validation_details,
+            status_code=422,
+        )
+
+    # Integrity / domain
+    if isinstance(exc, IntegrityError):
+        structured_logger.error("Integrity constraint violation", error=str(exc))
+        return _build_error_response(
+            correlation_id=correlation_id,
+            error_type="integrity_error",
+            message=ERROR_TYPE_MESSAGES.get(type(exc), "Integrity error"),
+            environment=environment,
+        )
+
+    if isinstance(exc, DuplicateUserError | UserNotFoundError):
+        structured_logger.warning(
+            "Domain error", error_type=exc.__class__.__name__, domain_message=str(exc)
+        )
+        return _build_error_response(
+            correlation_id=correlation_id,
+            error_type="domain_error",
+            message=ERROR_TYPE_MESSAGES.get(type(exc), "Domain error"),
+            environment=environment,
+        )
+
+    # Generic fallback
     structured_logger.exception(
-        f"Unhandled exception: {exc.__class__.__name__}",
-        error_class=exc.__class__.__name__,
-        **request_info,
+        "Unhandled exception", exception_type=exc.__class__.__name__, error=str(exc)
     )
+    traceback_str: str | None = None
+    if environment != "production":
+        import traceback as _tb  # local import to avoid unused in production
 
-    # Prepare error details dict with environment-aware field filtering
-    allowed_fields = get_allowed_error_fields(settings.ENVIRONMENT)
-    error_details: dict[str, Any] = {"correlation_id": correlation_id, "type": "internal_error"}
+        traceback_str = "".join(_tb.format_exception(exc)).strip()
 
-    if settings.ENVIRONMENT == "production":
-        # Production: generic message without details
-        message = "An internal server error occurred"
-        # Only include allowed production fields
-        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
-    else:
-        # Development: include exception details for debugging
-        message = f"Internal server error: {str(exc)}"
-        error_details.update({
-            "exception_type": exc.__class__.__name__,
-            "traceback": traceback.format_exc().splitlines(),
-        })
-        # Filter to allowed development fields
-        error_details = {k: v for k, v in error_details.items() if k in allowed_fields}
-
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            success=False,
-            message=message,
-            error=error_details,
-        ).model_dump(),
+    return _build_error_response(
+        correlation_id=correlation_id,
+        error_type="internal_server_error",
+        message="An internal error occurred",
+        environment=environment,
+        traceback_str=traceback_str,
+        exception_type=exc.__class__.__name__ if environment != "production" else None,
     )
 
 
@@ -446,34 +355,47 @@ def setup_logging() -> None:
     # Configure root logger
     log_level = logging.DEBUG if settings.ENVIRONMENT == "development" else logging.INFO
     root_logger = logging.getLogger()
-    
+
     # Make setup idempotent - avoid duplicate handlers
     if root_logger.handlers:
         return
 
     # Configure format based on environment
+    # Pre-declare formatter with the broader logging.Formatter type so mypy
+    # can validate assignments from either the third-party JsonFormatter or
+    # our fallback implementation.
+    formatter: logging.Formatter
+
     if settings.ENVIRONMENT == "production":
-        # Use proper JSON formatter for production
-        class JSONFormatter(logging.Formatter):
-            def format(self, record):
-                log_entry = {
-                    "timestamp": self.formatTime(record),
-                    "level": record.levelname,
-                    "logger": record.name,
-                    "message": record.getMessage(),
-                }
-                
-                # Include structured data if available
-                if hasattr(record, 'structured_data'):
-                    log_entry.update(record.structured_data)
-                
-                # Include exception info if present
-                if record.exc_info:
-                    log_entry["exception"] = self.formatException(record.exc_info)
-                
-                return json.dumps(log_entry)
-        
-        formatter = JSONFormatter()
+        # Use python-json-logger's JsonFormatter for robust JSON logging.
+        try:
+            # Import the JsonFormatter implementation directly. Some versions of
+            # the python-json-logger package expose the formatter in different
+            # modules; use a direct import and silence mypy's attr-defined check
+            # since the package provides a typed shim but static analysis can
+            # occasionally be stricter than runtime behavior.
+            from pythonjsonlogger.jsonlogger import JsonFormatter  # type: ignore
+
+            formatter = JsonFormatter(
+                fmt="%(timestamp)s %(level)s %(name)s %(message)s"
+            )
+        except Exception:
+            # Fallback to a simple JSON serializer if the package isn't available
+            class JSONFormatter(logging.Formatter):
+                def format(self, record: logging.LogRecord) -> str:
+                    log_entry = {
+                        "timestamp": self.formatTime(record),
+                        "level": record.levelname,
+                        "logger": record.name,
+                        "message": record.getMessage(),
+                    }
+                    if hasattr(record, "structured_data"):
+                        log_entry.update(record.structured_data)
+                    if record.exc_info:
+                        log_entry["exception"] = self.formatException(record.exc_info)
+                    return json.dumps(log_entry)
+
+            formatter = JSONFormatter()
     else:
         # Human-readable logging for development
         formatter = logging.Formatter(

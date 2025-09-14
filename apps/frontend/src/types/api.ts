@@ -28,21 +28,24 @@ export class ApiErrorImpl extends Error implements ApiError {
   originalError?: Error; // Store original error if wrapped
 
   constructor(
-    message: string, 
-    status?: number, 
-    response?: unknown, 
+    message: string,
+    status?: number,
+    code?: string,
+    response?: unknown,
     originalError?: Error
   ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
     this.response = response;
     this.originalError = originalError;
-    
-    // Extract code from response if available  
+
+    // Extract code from response if available
     if (response && typeof response === 'object' && response !== null) {
       const responseObj = response as any;
-      this.code = responseObj.error?.type || responseObj.code;
+      // Prefer explicit code param if provided; otherwise extract from response
+      this.code = this.code || responseObj.error?.type || responseObj.code;
     }
   }
 }
