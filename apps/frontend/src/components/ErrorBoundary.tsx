@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component } from 'react';
+import type { ErrorInfo, ReactNode, ComponentType } from 'react';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Container } from './ui/Container';
@@ -166,7 +167,7 @@ export class ErrorBoundary extends Component<
  * Higher-order component to wrap any component with error boundary
  */
 export function withErrorBoundary<P extends object>(
-  Component: React.ComponentType<P>,
+  Component: ComponentType<P>,
   errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>
 ) {
   const WrappedComponent = (props: P) => (
