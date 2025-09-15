@@ -7,6 +7,7 @@ import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
 import { useAuthStore } from '../stores/useAuthStore';
 import type { RegisterFormData } from '../types/auth';
+import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
 interface ValidationErrors {
   username?: string;
@@ -189,30 +190,12 @@ const RegisterPage: React.FC = () => {
       // Navigate to intended page or home
       navigate(from, { replace: true });
     } catch (err: any) {
-      const status = err?.status;
-      const message = String(err?.message || '');
-      const messageLower = message.toLowerCase();
-
-      if (status === 400 || status === 409) {
-        // Handle specific validation errors from backend (case-insensitive match)
-        if (
-          messageLower.includes('username') ||
-          (messageLower.includes('exist') && !messageLower.includes('email'))
-        ) {
-          setError('Username is already taken');
-        } else if (
-          messageLower.includes('email') ||
-          (messageLower.includes('exist') && messageLower.includes('email'))
-        ) {
-          setError('Email is already registered');
-        } else {
-          setError('Invalid registration data. Please check your inputs.');
-        }
-      } else if (status === 422) {
-        setError('Invalid registration data. Please check your inputs.');
-      } else {
-        setError(message || 'Registration failed. Please try again.');
-      }
+      // Use centralized error message handling
+      const friendlyMessage = getUserFriendlyErrorMessage(err, {
+        action: 'register',
+        resource: 'user',
+      });
+      setError(friendlyMessage);
     } finally {
       setIsLoading(false);
     }

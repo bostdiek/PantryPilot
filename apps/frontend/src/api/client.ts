@@ -1,6 +1,10 @@
 import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
+import {
+  getUserFriendlyErrorMessage,
+  shouldLogoutOnError,
+} from '../utils/errorMessages';
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
 
@@ -59,13 +63,44 @@ class ApiClient {
         body = responseText ? JSON.parse(responseText) : {};
       } catch (e) {
         console.error('Failed to parse JSON response:', e);
+        // Network/parsing errors - throw as native Error for network issues
         throw new Error(`Invalid JSON response from API: ${responseText}`);
       }
 
       if (!resp.ok) {
+        // Always throw ApiErrorImpl for HTTP/API-level errors to ensure consistent error handling
+        let rawMessage: string = '';
+        if (body && typeof body === 'object') {
+          const candidate =
+            (body as any).message ||
+            (body as any).detail ||
+            (body as any).error?.message ||
+            '';
+          rawMessage =
+            typeof candidate === 'string'
+              ? candidate
+              : JSON.stringify(candidate);
+        } else if (typeof body === 'string') {
+          rawMessage = body;
+        }
+
+        let thrownMessage = rawMessage;
+        if (!thrownMessage || thrownMessage.trim() === '') {
+          thrownMessage = `Request failed (${resp.status})`;
+        }
+
+        // Check if this error should trigger logout before throwing
+        if (shouldLogoutOnError(body)) {
+          useAuthStore.getState().logout();
+        }
+
+        // Always throw ApiErrorImpl for API errors - consistent error contract
+        const canonicalCodeSafe = extractCanonicalErrorCode(body);
         throw new ApiErrorImpl(
-          body.detail ?? body.message ?? `Request failed (${resp.status})`,
-          resp.status
+          thrownMessage,
+          resp.status,
+          canonicalCodeSafe,
+          body as unknown
         );
       }
 
@@ -75,9 +110,29 @@ class ApiClient {
         const apiResponse = body as ApiResponse<T>;
 
         if (!apiResponse.success) {
+          // Prefer raw message from wrapped response when available
+          const rawMessage =
+            apiResponse.message || apiResponse.error?.message || '';
+          const rawMessageStr =
+            typeof rawMessage === 'string'
+              ? rawMessage
+              : JSON.stringify(rawMessage);
+          const thrownMessage =
+            rawMessageStr && rawMessageStr.trim() !== ''
+              ? rawMessageStr
+              : `Request failed (${resp.status})`;
+
+          if (shouldLogoutOnError(apiResponse)) {
+            useAuthStore.getState().logout();
+          }
+
+          // Consistent error type for wrapped API responses
+          const canonicalCodeSafe = extractCanonicalErrorCode(apiResponse);
           throw new ApiErrorImpl(
-            apiResponse.message ?? 'Request failed',
-            resp.status
+            thrownMessage,
+            resp.status,
+            canonicalCodeSafe,
+            apiResponse as unknown
           );
         }
 
@@ -87,13 +142,34 @@ class ApiClient {
       // Fallback for non-wrapped responses (e.g., health check)
       return body as T;
     } catch (err: unknown) {
+      // Re-throw ApiErrorImpl as-is to maintain consistent error contract
       if (err instanceof ApiErrorImpl) {
         throw err;
       }
-      const apiError =
-        err instanceof Error
-          ? new ApiErrorImpl(err.message)
-          : new ApiErrorImpl('Unknown error');
+
+      // For native errors (network failures, JSON parsing), wrap them in ApiErrorImpl
+      // to ensure callers always receive the same error type
+      if (err instanceof Error) {
+        console.error(`Network/parsing error for ${url}:`, err.message);
+        throw new ApiErrorImpl(
+          `Network error: ${err.message}`,
+          undefined,
+          undefined,
+          undefined,
+          err
+        );
+      }
+
+      // Fallback: wrap unknown error shapes into ApiErrorImpl with a user-friendly message
+      const friendlyMessage = getUserFriendlyErrorMessage(err);
+      const apiError = new ApiErrorImpl(
+        friendlyMessage,
+        undefined,
+        undefined,
+        undefined,
+        err instanceof Error ? err : undefined
+      );
+
       console.error(`API request failed: ${url}`, apiError);
       throw apiError;
     }
@@ -107,3 +183,14 @@ class ApiClient {
 
 // Export singleton instance
 export const apiClient = new ApiClient(API_BASE_URL);
+
+/**
+ * Extract a canonical error code (backend canonical error type) from a variety
+ * of possible error envelope shapes in a type-safe way.
+ */
+function extractCanonicalErrorCode(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const container: any = body;
+  const rawCanonical = container?.error?.type ?? container?.code;
+  return typeof rawCanonical === 'string' ? rawCanonical : undefined;
+}

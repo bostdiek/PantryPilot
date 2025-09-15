@@ -2,14 +2,24 @@ import logging
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 
 from api.v1.api import api_router
 from core.config import get_settings
+from core.error_handler import (
+    ExceptionNormalizationMiddleware,
+    global_exception_handler,
+    setup_logging,
+)
+from core.middleware import CorrelationIdMiddleware
 
 
 settings = get_settings()
+
+# Setup logging
+setup_logging()
 
 
 def validate_cors_origins(origins: list[str]) -> list[str]:
@@ -40,6 +50,14 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
+
+# Add correlation ID middleware and final exception normalization safety net
+app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(ExceptionNormalizationMiddleware)
+
+# Add global exception handler
+app.add_exception_handler(Exception, global_exception_handler)
+app.add_exception_handler(RequestValidationError, global_exception_handler)
 
 # Configure CORS
 origins = validate_cors_origins(settings.CORS_ORIGINS)
