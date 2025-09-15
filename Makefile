@@ -2,6 +2,9 @@
 
 .PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db
 
+# Image / build targets (added)
+.PHONY: build-frontend build-backend build-all build-prod-frontend build-prod-backend build-prod-all buildx-setup buildx-push
+
 # Environment detection
 ENV ?= dev
 COMPOSE_FILES = -f docker-compose.yml
@@ -69,6 +72,16 @@ help:
 	@echo "  clean-all          - Remove ALL project Docker resources (safe - PantryPilot only)"
 	@echo "  clean-keep-db      - Remove containers and ALL project volumes except the Postgres data volume"
 	@echo ""
+	@echo "Image Build & Distribution:"
+	@echo "  build-frontend           - Build dev frontend image"
+	@echo "  build-backend            - Build dev backend image"
+	@echo "  build-all                - Build all dev images"
+	@echo "  build-prod-frontend      - Build prod frontend image (embeds VITE_API_URL)"
+	@echo "  build-prod-backend       - Build prod backend image"
+	@echo "  build-prod-all           - Build all prod images"
+	@echo "  buildx-setup             - Create/ensure Docker Buildx builder for multi-arch"
+	@echo "  buildx-push              - Multi-arch build & push (set REGISTRY, IMAGE_NAMESPACE, VERSION)"
+	@echo ""
 	@echo "Usage Examples:"
 	@echo "  make up              # Start in development mode"
 	@echo "  make ENV=prod up     # Start in production mode"
@@ -91,7 +104,8 @@ up: validate-env
 	@echo "✅ Services started! Check 'make logs' for output."
 	@echo "⏳ Waiting for database to become ready and running Alembic migrations..."
 	@/bin/sh -lc 'set -eu; \
-	  if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	  ENV_ABS="$(abspath $(ENV_FILE))"; \
+	  if [ -f "$$ENV_ABS" ]; then echo "Sourcing env: $$ENV_ABS"; set -a; . "$$ENV_ABS"; set +a; else echo "⚠️  Env file not found at $$ENV_ABS"; fi; \
 	  ATTEMPTS=30; \
 	  until docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T db pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB >/dev/null 2>&1; do \
 	    ATTEMPTS=$$((ATTEMPTS-1)); \
@@ -239,10 +253,78 @@ dev-setup: install
 	# Set up development environment
 	cd apps/backend && uv run pre-commit install
 
+# -----------------------------------------------------------------------------
+# Image build helpers (local single-arch)
+# -----------------------------------------------------------------------------
+build-frontend:
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build frontend
+
+build-backend:
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build backend
+
+build-all: build-frontend build-backend
+
+# Explicit production builds (ENV overridden to prod to pick prod overrides)
+build-prod-frontend:
+	$(MAKE) ENV=prod build-frontend
+
+build-prod-backend:
+	$(MAKE) ENV=prod build-backend
+
+build-prod-all:
+	$(MAKE) ENV=prod build-all
+
+# -----------------------------------------------------------------------------
+# Multi-arch builds & push via buildx
+# Usage example:
+#   make buildx-setup
+#   REGISTRY=ghcr.io IMAGE_NAMESPACE=youruser VERSION=1.0.0 make buildx-push
+# Requires: docker login to registry performed beforehand.
+# -----------------------------------------------------------------------------
+buildx-setup:
+	@docker buildx inspect pantrypilot-builder >/dev/null 2>&1 || docker buildx create --use --name pantrypilot-builder
+	@docker buildx use pantrypilot-builder
+	@echo "✅ Buildx builder ready"
+
+buildx-push: buildx-setup
+	@if [ -z "$(REGISTRY)" ] || [ -z "$(IMAGE_NAMESPACE)" ] || [ -z "$(VERSION)" ]; then \
+	  echo "❌ REGISTRY, IMAGE_NAMESPACE and VERSION must be set. Example:"; \
+	  echo "   REGISTRY=ghcr.io IMAGE_NAMESPACE=myorg VERSION=0.1.0 make buildx-push"; \
+	  exit 1; \
+	fi
+	@echo "🚀 Building & pushing multi-arch images: $(REGISTRY)/$(IMAGE_NAMESPACE)/pantrypilot-frontend:$(VERSION) and backend"
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  -f apps/frontend/Dockerfile \
+	  --build-arg VITE_API_URL=$${VITE_API_URL:-http://localhost:8000} \
+	  -t $(REGISTRY)/$(IMAGE_NAMESPACE)/pantrypilot-frontend:$(VERSION) \
+	  --push apps/frontend
+	docker buildx build \
+	  --platform linux/amd64,linux/arm64 \
+	  -f apps/backend/Dockerfile \
+	  -t $(REGISTRY)/$(IMAGE_NAMESPACE)/pantrypilot-backend:$(VERSION) \
+	  --push apps/backend
+	@echo "✅ Multi-arch images pushed"
+
 # Short aliases
 dev: up
 prod:
 	$(MAKE) ENV=prod up
+
+# Fix permissions on the nginx cache docker volume (one-time on host)
+# Usage: `make fix-nginx-cache-perms` — requires sudo to change host volume dir perms
+.PHONY: fix-nginx-cache-perms
+fix-nginx-cache-perms:
+	@echo "🔧 Fixing nginx cache volume permissions (requires sudo)..."
+	@/bin/sh -lc '\
+	  VOL=$$(docker volume ls --format "{{.Name}}" | grep -E "pantrypilot_nginx_cache|nginx_cache" | head -n1) || true; \
+	  if [ -z "$$VOL" ]; then echo "ℹ️  No nginx cache volume found (skipping)"; exit 0; fi; \
+	  MP=$$(docker volume inspect $$VOL -f "{{.Mountpoint}}" 2>/dev/null || true); \
+	  if [ -z "$$MP" ]; then echo "❌ Could not locate mountpoint for $$VOL"; exit 1; fi; \
+	  echo "Found volume $$VOL at $$MP; running sudo chmod -R 0777 $$MP"; \
+	  sudo chmod -R 0777 "$$MP"; \
+	  echo "✅ Permissions updated."'
+## fix-nginx-cache-perms removed: We now use tmpfs for /var/cache/nginx to avoid host chmod requirements
 
 # Database management targets
 db-backup:
@@ -279,7 +361,8 @@ migrate:
 	# Apply database migrations (ENV=$(ENV))
 	@echo "📦 Applying Alembic migrations for $(ENV) environment..."
 	@/bin/sh -lc 'set -eu; \
-	  if [ -f "$(ENV_FILE)" ]; then set -a; . "$(ENV_FILE)"; set +a; fi; \
+	  ENV_ABS="$(abspath $(ENV_FILE))"; \
+	  if [ -f "$$ENV_ABS" ]; then echo "Sourcing env: $$ENV_ABS"; set -a; . "$$ENV_ABS"; set +a; else echo "⚠️  Env file not found at $$ENV_ABS"; fi; \
 	  ATTEMPTS=30; \
 	  until docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec -T db pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB >/dev/null 2>&1; do \
 	    ATTEMPTS=$$((ATTEMPTS-1)); \
@@ -300,7 +383,7 @@ migrate-prod:
 check-migrations:
 	# Validate Alembic migrations by applying to a temporary database
 	@chmod +x scripts/check_migrations.sh >/dev/null 2>&1 || true
-	@/bin/sh scripts/check_migrations.sh "$(ENV_FILE)" "$(COMPOSE_FILES)"
+	@./scripts/check_migrations.sh "$(ENV_FILE)" "$(COMPOSE_FILES)"
 
 # =============================================================================
 # Cleanup and Maintenance Commands

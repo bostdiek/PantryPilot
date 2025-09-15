@@ -9,16 +9,28 @@ import {
 const API_BASE_URL = getApiBaseUrl();
 
 function getApiBaseUrl(): string {
+  // 1. Explicit build-time override wins (useful for staging/CDN or dev containers)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
+
+  // 2. Local development + test runner: talk to backend dev server directly
   if (
     import.meta.env.MODE === 'development' ||
     import.meta.env.MODE === 'test'
   ) {
     return 'http://localhost:8000';
   }
-  throw new Error('VITE_API_URL must be set in production environments');
+
+  // 3. Production fallback: rely on SAME-ORIGIN reverse proxy routing.
+  // We intentionally return an empty string so that requests become
+  //   fetch('/api/v1/...')
+  // which the browser resolves against the current origin (scheme + host + port).
+  // This removes the need to embed hostnames/IPs at build time, avoids CORS & CSP
+  // complications, and makes the image environment-agnostic (works under any domain
+  // or internal IP as long as the reverse proxy forwards /api/ to the backend).
+  // NOTE: If you ever deploy frontend & backend on DIFFERENT origins, set VITE_API_URL.
+  return '';
 }
 
 // API client with proper error handling

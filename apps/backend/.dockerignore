@@ -1,0 +1,33 @@
+# Exclude local development artifacts from Docker build context
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environments
+.venv/
+.env/
+
+# Tests coverage and reports
+htmlcov/
+.coverage*
+
+# Git
+.git
+.gitignore
+
+# Editors/IDE
+.vscode/
+.idea/
+
+# Local databases
+*.db
+
+# Node modules (if any stray)
+node_modules/
+
+# OS files
+.DS_Store

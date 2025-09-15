@@ -57,6 +57,10 @@ RUN npm ci --include=dev
 # Copy source code
 COPY . .
 
+# Allow injecting the API base URL at build time (Vite picks up VITE_* env vars)
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Build the application for production
 # TypeScript check + Vite build as per package.json script
 RUN npm run build

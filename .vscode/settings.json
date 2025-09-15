@@ -68,5 +68,6 @@
     "python-envs.pythonProjects": [],
     "cSpell.words": [
         "headlessui"
-    ]
+    ],
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }

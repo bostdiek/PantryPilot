@@ -130,14 +130,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Expose port (internal only, not mapped in production)
 EXPOSE 8000
 
-# Production command with gunicorn + uvicorn workers
+# Production command with gunicorn + uvicorn workers via uv (consistent toolchain; .venv now isolated by .dockerignore)
 CMD ["uv", "run", "gunicorn", "src.main:app", \
-     "--workers", "4", \
-     "--worker-class", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", \
-     "--worker-tmp-dir", "/dev/shm", \
-     "--max-requests", "1000", \
-     "--max-requests-jitter", "50", \
-     "--preload", \
-     "--timeout", "120", \
-     "--keepalive", "5"]
+    "--workers", "4", \
+    "--worker-class", "uvicorn.workers.UvicornWorker", \
+    "--bind", "0.0.0.0:8000", \
+    "--worker-tmp-dir", "/dev/shm", \
+    "--max-requests", "1000", \
+    "--max-requests-jitter", "50", \
+    "--preload", \
+    "--timeout", "120", \
+    "--keep-alive", "5"]
