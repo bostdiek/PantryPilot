@@ -6,8 +6,8 @@ services:
   db:
     # No ports exposed in production (internal access only)
     environment:
-      POSTGRES_LOG_STATEMENT: ddl  # Only log DDL statements
-      POSTGRES_LOG_MIN_DURATION_STATEMENT: 1000  # Log slow queries (>1s)
+      POSTGRES_LOG_STATEMENT: ddl # Only log DDL statements
+      POSTGRES_LOG_MIN_DURATION_STATEMENT: 1000 # Log slow queries (>1s)
     command: >
       postgres
       -c shared_buffers=256MB
@@ -33,29 +33,46 @@ services:
   # Backend - Production Configuration
   backend:
     build:
-      target: production  # Use production stage of Dockerfile
+      target: production # Use production stage of Dockerfile
     # No ports exposed (accessed via nginx)
     environment:
       FASTAPI_ENV: production
       PYTHONPATH: /app/src
-      WORKERS: 4
-    command: >
-      uv run gunicorn src.main:app
-      --workers 4
-      --worker-class uvicorn.workers.UvicornWorker
-      --bind 0.0.0.0:8000
-      --worker-tmp-dir /dev/shm
-      --max-requests 1000
-      --max-requests-jitter 50
-      --preload
-      --timeout 120
-      --keepalive 5
+      # On low-memory devices (Raspberry Pi) reduce workers to 1 by default.
+      # Override this in your .env.prod or via compose if you have more RAM.
+      WORKERS: 1
+    command:
+      - "uv"
+      - "run"
+      - "gunicorn"
+      - "src.main:app"
+      - "--workers"
+      - "${WORKERS}"
+      - "--worker-class"
+      - "uvicorn.workers.UvicornWorker"
+      - "--bind"
+      - "0.0.0.0:8000"
+      - "--worker-tmp-dir"
+      - "/dev/shm"
+      - "--max-requests"
+      - "1000"
+      - "--max-requests-jitter"
+      - "50"
+      - "--preload"
+      - "--timeout"
+      - "120"
+      - "--keep-alive"
+      - "5"
     # Production security
     user: app
     read_only: true
     tmpfs:
       - /tmp
       - /dev/shm
+      # Allow uv and runtime to write cache directories even when root FS is read-only.
+      # Mount a tmpfs with ownership and mode so the non-root `app` user can write.
+      # If your image creates `app` with a different UID/GID, change uid=1000,gid=1000 accordingly.
+      - /app/.cache:uid=1000,gid=1000,mode=0777,size=100m
     # Override health check for production
     healthcheck:
       interval: 30s
@@ -66,7 +83,10 @@ services:
   # Frontend - Production Configuration (static files via nginx)
   frontend:
     build:
-      target: production  # Use production stage of Dockerfile
+      target: production # Use production stage of Dockerfile
+      # Pass through API base URL at build time so Vite embeds it into the bundle.
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     # No ports exposed (accessed via nginx)
     environment:
       NODE_ENV: production
@@ -75,7 +95,8 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /var/cache/nginx
+      - /var/cache/nginx:mode=0777,size=50m
+      - /var/run:mode=0777,size=10m
 
   # Nginx Reverse Proxy (Production Only)
   nginx:
@@ -86,7 +107,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - nginx_cache:/var/cache/nginx
+      # Persist logs (so access/error are kept across restarts)
       - nginx_logs:/var/log/nginx
       # SSL certificates (uncomment when ready for HTTPS)
       # - ./ssl/certs:/etc/ssl/certs:ro
@@ -109,11 +130,12 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /run/nginx
+      - /var/cache/nginx:mode=0777,size=50m
+      - /var/run:mode=0777,size=10m
+      # Use tmpfs for /var/cache/nginx to avoid host-volume permission issues on read-only containers.
+      # Logs remain persisted to the named volume `nginx_logs`.
 
 # Production-specific volumes
 volumes:
-  nginx_cache:
-    driver: local
   nginx_logs:
     driver: local

@@ -54,6 +54,10 @@ services:
     build:
       context: ./apps/frontend
       dockerfile: Dockerfile
+      # Ensure VITE_API_URL is embedded at build time for production bundles.
+      # (Vite only injects variables during build; runtime env won't affect static assets.)
+      args:
+        VITE_API_URL: ${VITE_API_URL}
     restart: unless-stopped
     depends_on:
       backend:
