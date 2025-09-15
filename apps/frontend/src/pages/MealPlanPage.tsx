@@ -1,37 +1,38 @@
 import type {
-  DragEndEvent,
-  DragOverEvent,
-  DragStartEvent,
+    DragEndEvent,
+    DragOverEvent,
+    DragStartEvent,
 } from '@dnd-kit/core';
 import {
-  DndContext,
-  DragOverlay,
-  KeyboardSensor,
-  PointerSensor,
-  useDraggable,
-  useDroppable,
-  useSensor,
-  useSensors,
+    DndContext,
+    DragOverlay,
+    KeyboardSensor,
+    PointerSensor,
+    useDraggable,
+    useDroppable,
+    useSensor,
+    useSensors,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { Menu, Transition } from '@headlessui/react';
 import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type FC,
-  type ReactNode,
-  type CSSProperties,
-  Fragment,
+    Fragment,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+    type CSSProperties,
+    type FC,
+    type ReactNode,
 } from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
+import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -44,7 +45,6 @@ import { Select, type SelectOption } from '../components/ui/Select';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
-import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 
 function toYyyyMmDd(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -57,7 +57,6 @@ const MealPlanPage: FC = () => {
     error,
     addEntry,
     updateEntry,
-    markCooked,
     removeEntry,
     loadWeek,
   } = useMealPlanStore();
@@ -746,7 +745,10 @@ const MealPlanPage: FC = () => {
                                   })()}
                                   wasCooked={e.wasCooked}
                                   cookedAt={e.cookedAt}
-                                  onCook={() => markCooked(e.id)}
+                                  // Call markCooked from fresh store state so tests can spy/override after initial render
+                                  onCook={() =>
+                                    useMealPlanStore.getState().markCooked(e.id)
+                                  }
                                   onRemove={() => removeEntry(e.id)}
                                   isRecipe={!!e.recipeId}
                                   onRecipeClick={() =>

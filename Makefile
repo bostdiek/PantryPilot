@@ -383,7 +383,7 @@ migrate-prod:
 check-migrations:
 	# Validate Alembic migrations by applying to a temporary database
 	@chmod +x scripts/check_migrations.sh >/dev/null 2>&1 || true
-	@/bin/sh scripts/check_migrations.sh "$(ENV_FILE)" "$(COMPOSE_FILES)"
+	@./scripts/check_migrations.sh "$(ENV_FILE)" "$(COMPOSE_FILES)"
 
 # =============================================================================
 # Cleanup and Maintenance Commands

@@ -5,7 +5,7 @@ import { hasPendingRecipes, syncPendingRecipes } from './offlineSync';
  */
 class ApiHealthService {
   private checkInterval: number | null = null;
-  private apiUrl: string;
+  private healthEndpoint: string;
   private listeners: Array<(isOnline: boolean) => void> = [];
   private isOnline = true;
   /** Timeout for health-check requests in milliseconds. */
@@ -16,7 +16,20 @@ class ApiHealthService {
       import.meta.env.VITE_API_HEALTH_TIMEOUT_MS ?? 5000
     )
   ) {
-    this.apiUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/v1/health`;
+    // Respect deployment strategy: if VITE_API_URL is defined, use it.
+    // Otherwise rely on same-origin reverse proxy routing.
+    // We intentionally avoid defaulting to localhost in production so that
+    // a production build running behind a proxy does not falsely report
+    // offline status.
+    const explicitBase = import.meta.env.VITE_API_URL?.trim();
+    if (explicitBase) {
+      this.healthEndpoint = `${explicitBase.replace(/\/$/, '')}/api/v1/health`;
+    } else if (typeof window !== 'undefined') {
+      this.healthEndpoint = `${window.location.origin}/api/v1/health`;
+    } else {
+      // SSR / non-browser fallback (retain prior localhost behavior only here)
+      this.healthEndpoint = 'http://localhost:8000/api/v1/health';
+    }
     this.healthTimeoutMs = timeoutMs;
   }
 
@@ -69,19 +82,24 @@ class ApiHealthService {
    */
   private async checkHealth(): Promise<void> {
     try {
-      const response = await fetch(this.apiUrl, {
+      const response = await fetch(this.healthEndpoint, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
-        // Short timeout to avoid long waits
         signal: AbortSignal.timeout(this.healthTimeoutMs),
       });
 
-      const newStatus = response.ok;
+      // Treat any successful fetch (including 401/403 auth required) as the API being ONLINE.
+      // We only consider 5xx or network errors as offline conditions.
+      const status = response.status;
+      const newStatus = status < 500; // 1xx-4xx => online (API reachable)
 
-      // If status changed from offline to online
+      if (!newStatus) {
+        console.warn('Health check indicates server error status:', status);
+      }
+
+      // If coming back online, attempt pending sync.
       if (!this.isOnline && newStatus) {
-        console.log('API back online, checking for pending recipes to sync');
-        // Check if there are pending recipes to sync
+        console.log('API back online, attempting pending recipe sync');
         if (hasPendingRecipes()) {
           try {
             const result = await syncPendingRecipes();
@@ -94,14 +112,14 @@ class ApiHealthService {
         }
       }
 
-      // Only notify listeners if status changed
       if (this.isOnline !== newStatus) {
         this.isOnline = newStatus;
         this.notifyListeners();
       }
-    } catch {
-      // If we caught an error, API is offline
+    } catch (err) {
+      // Network / timeout => offline
       if (this.isOnline) {
+        console.warn('Health check network error -> offline', err);
         this.isOnline = false;
         this.notifyListeners();
       }

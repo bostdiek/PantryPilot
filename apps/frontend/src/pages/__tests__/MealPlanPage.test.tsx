@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMealPlanStore } from '../../stores/useMealPlanStore';
@@ -102,37 +102,39 @@ beforeEach(() => {
 describe('MealPlanPage', () => {
   it('renders a planned entry and marks it cooked', async () => {
     const user = userEvent.setup();
-
-    // Store the original markCooked method
-    const originalMarkCooked = useMealPlanStore.getState().markCooked;
-
-    // Create a spy on the store's markCooked method
-    // Provide explicit undefined so TS satisfies mockResolvedValue(value: Awaited<ReturnType<T>>)
-    const markSpy = vi.fn().mockResolvedValue(undefined);
-
-    // Update the store state to include our spy
-    useMealPlanStore.setState((state) => ({
-      ...state,
-      markCooked: markSpy,
-    }));
+    // Override markCooked with a spy that also mutates state to reflect cooked status
+    const markSpy = vi.fn(async (id: string) => {
+      const state = useMealPlanStore.getState();
+      const week = state.currentWeek;
+      if (!week) return;
+      for (const d of week.days) {
+        const idx = d.entries.findIndex((e) => e.id === id);
+        if (idx !== -1) {
+          d.entries[idx] = {
+            ...d.entries[idx],
+            wasCooked: true,
+            cookedAt: new Date().toISOString(),
+          } as any;
+          break;
+        }
+      }
+      useMealPlanStore.setState({ currentWeek: { ...week } } as any);
+    });
+    useMealPlanStore.setState((s) => ({ ...(s as any), markCooked: markSpy }));
 
     render(<MealPlanPage />);
 
     // Find the entry item and then the scoped Cooked button within it
     const entryItem = screen.getByText('Planned item').closest('li')!;
-    const cookedBtn = within(entryItem).getByRole('button', {
-      name: /Mark.*cooked/i,
-    });
+    const cookedBtn = within(entryItem).getByLabelText(
+      /Mark Planned item as cooked/i
+    );
     await user.click(cookedBtn);
 
-    expect(markSpy).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(markSpy).toHaveBeenCalledTimes(1));
     expect(markSpy.mock.calls[0][0]).toBe('m1');
 
-    // Restore the original markCooked method
-    useMealPlanStore.setState((state) => ({
-      ...state,
-      markCooked: originalMarkCooked,
-    }));
+    // no restore needed; state reset by test beforeEach
   });
 
   it('removes an entry when clicking Remove', async () => {

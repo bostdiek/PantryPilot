@@ -15,7 +15,10 @@ function getApiBaseUrl(): string {
   }
 
   // 2. Local development + test runner: talk to backend dev server directly
-  if (import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test') {
+  if (
+    import.meta.env.MODE === 'development' ||
+    import.meta.env.MODE === 'test'
+  ) {
     return 'http://localhost:8000';
   }
 
