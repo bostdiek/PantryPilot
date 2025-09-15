@@ -152,18 +152,20 @@ export function getUserFriendlyErrorMessage(
   }
 
   // Prioritize canonical error type mapping (machine-friendly)
-  // NOTE: some canonical types are very generic (e.g. domain_error) so allow
-  // more specific message-based fallbacks to apply for those cases (e.g.
-  // "already exists" on register flows). Only early-return for canonical
-  // types that are already user-friendly and specific.
+  // We only early-return for canonical types that are already specific and
+  // user-friendly. Very generic canonical types (currently only 'domain_error')
+  // fall through so that message-pattern heuristics (e.g. "already exists") and
+  // context-aware fallbacks (like registration flows) can produce a more precise
+  // message. If additional generic types are introduced later they can be added
+  // to the GENERIC_CANONICAL_TYPES set without changing the logic structure.
+  const GENERIC_CANONICAL_TYPES = new Set<string>(['domain_error']);
   if (errorType && errorType in ERROR_TYPE_MESSAGES) {
-    if (errorType !== 'domain_error') {
+    if (!GENERIC_CANONICAL_TYPES.has(errorType)) {
       const canonicalMessage =
         ERROR_TYPE_MESSAGES[errorType as keyof typeof ERROR_TYPE_MESSAGES];
       return addContextToErrorMessage(canonicalMessage, context);
     }
-    // otherwise, fall through so that message-patterns and context-aware
-    // register fallbacks can produce a more helpful message.
+    // Intentional fall-through for generic canonical types.
   }
 
   // Coerce non-string raw messages into safe strings for sanitization.

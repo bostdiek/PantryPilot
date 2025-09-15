@@ -95,10 +95,7 @@ class ApiClient {
         }
 
         // Always throw ApiErrorImpl for API errors - consistent error contract
-        // Extract canonical error code if present in the body and coerce types safely
-        const rawCanonical = (body as any)?.error?.type ?? (body as any)?.code;
-        const canonicalCodeSafe: string | undefined =
-          typeof rawCanonical === 'string' ? rawCanonical : undefined;
+        const canonicalCodeSafe = extractCanonicalErrorCode(body);
         throw new ApiErrorImpl(
           thrownMessage,
           resp.status,
@@ -130,10 +127,7 @@ class ApiClient {
           }
 
           // Consistent error type for wrapped API responses
-          const rawCanonical =
-            (apiResponse as any)?.error?.type ?? (apiResponse as any)?.code;
-          const canonicalCodeSafe: string | undefined =
-            typeof rawCanonical === 'string' ? rawCanonical : undefined;
+          const canonicalCodeSafe = extractCanonicalErrorCode(apiResponse);
           throw new ApiErrorImpl(
             thrownMessage,
             resp.status,
@@ -189,3 +183,14 @@ class ApiClient {
 
 // Export singleton instance
 export const apiClient = new ApiClient(API_BASE_URL);
+
+/**
+ * Extract a canonical error code (backend canonical error type) from a variety
+ * of possible error envelope shapes in a type-safe way.
+ */
+function extractCanonicalErrorCode(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const container: any = body;
+  const rawCanonical = container?.error?.type ?? container?.code;
+  return typeof rawCanonical === 'string' ? rawCanonical : undefined;
+}

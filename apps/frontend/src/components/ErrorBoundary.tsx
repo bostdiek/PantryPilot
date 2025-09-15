@@ -3,6 +3,7 @@ import { Component } from 'react';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Container } from './ui/Container';
+import { navigateTo } from '../utils/navigation';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -103,21 +104,11 @@ export class ErrorBoundary extends Component<
                   href="/"
                   className="block w-full"
                   onClick={(e) => {
-                    // In tests we sometimes mock window.location to a plain object.
-                    // Honor that by setting href on the mocked object instead of
-                    // performing a full page navigation.
-                    if (
-                      typeof window !== 'undefined' &&
-                      (window as any).location
-                    ) {
-                      try {
-                        (window as any).location.href = '/';
-                        // prevent default to avoid full navigation in tests
-                        e.preventDefault();
-                      } catch {
-                        // ignore failures and allow normal anchor behavior
-                      }
-                    }
+                    navigateTo('/');
+                    // Prevent default so tests that assert single-page behavior
+                    // aren't forced into a full reload; real navigation already
+                    // initiated above when applicable.
+                    e.preventDefault();
                   }}
                 >
                   <Button variant="secondary" className="w-full">

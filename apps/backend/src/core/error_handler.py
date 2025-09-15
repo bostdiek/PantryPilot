@@ -123,7 +123,9 @@ class StructuredLogger:
 
         # Fast-paths reduce overall complexity: non-dict or empty dict
         if not isinstance(data, dict) or not data:
-            return {} if not isinstance(data, dict) else {}
+            # Both non-dict inputs and empty dicts sanitize to an empty object.
+            # Returning a fresh {} keeps callers from mutating shared references.
+            return {}
 
         header_redaction = self._redact_header_like(data)
         if header_redaction is not None:
@@ -153,9 +155,11 @@ class StructuredLogger:
         A header-like dict has keys like `name`/`key` and `value`. If the name/key
         is considered sensitive, its value is redacted.
         """
-        # `data` is annotated as a dict in the signature, so this runtime
-        # check is unreachable and confuses static type checkers (mypy).
-        # Remove the redundant check to keep mypy happy.
+        # Even though `data` is statically typed as a dict, we still verify it
+        # conforms to the minimal *shape* of a header-like mapping (must contain
+        # name/key plus value). This guards against accidental misuse where a
+        # non-header dict could be passed and avoids performing header-specific
+        # logic on arbitrary structures. The shape check is thus intentional.
 
         if not (
             ("name" in data and "value" in data) or ("key" in data and "value" in data)
