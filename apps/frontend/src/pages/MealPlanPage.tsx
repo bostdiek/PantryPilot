@@ -1,35 +1,35 @@
 import type {
-    DragEndEvent,
-    DragOverEvent,
-    DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+  DragStartEvent,
 } from '@dnd-kit/core';
 import {
-    DndContext,
-    DragOverlay,
-    KeyboardSensor,
-    PointerSensor,
-    useDraggable,
-    useDroppable,
-    useSensor,
-    useSensors,
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
 } from '@dnd-kit/core';
 import {
-    arrayMove,
-    SortableContext,
-    sortableKeyboardCoordinates,
-    useSortable,
-    verticalListSortingStrategy,
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { Menu, Transition } from '@headlessui/react';
 import {
-    Fragment,
-    useEffect,
-    useMemo,
-    useRef,
-    useState,
-    type CSSProperties,
-    type FC,
-    type ReactNode,
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type FC,
+  type ReactNode,
 } from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';

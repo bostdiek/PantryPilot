@@ -41,6 +41,8 @@ services:
       # On low-memory devices (Raspberry Pi) reduce workers to 1 by default.
       # Override this in your .env.prod or via compose if you have more RAM.
       WORKERS: 1
+    env_file:
+      - .env.prod
     command:
       - "uv"
       - "run"
