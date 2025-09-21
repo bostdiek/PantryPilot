@@ -40,7 +40,8 @@ export function RecipeCard({ recipe, className = '' }: RecipeCardProps) {
         className="h-full overflow-hidden p-0 transition-all duration-200 group-hover:scale-[1.02] hover:shadow-lg"
       >
         {/* Recipe content */}
-        <div className="p-4">
+        {/* min-w-0 allows long titles to wrap inside a flex parent and prevents overflow */}
+        <div className="min-w-0 p-4">
           {/* Category badge at top */}
           <div className="mb-3 flex justify-end">
             <span className="inline-block rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
