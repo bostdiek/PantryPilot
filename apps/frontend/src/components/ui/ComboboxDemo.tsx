@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Combobox } from './Combobox';
+import { Combobox, type ComboboxOption } from './Combobox';
 
 /**
  * ComboboxDemo component that demonstrates the usage of our Combobox component
@@ -33,8 +33,11 @@ export function ComboboxDemo() {
   ];
 
   // State for the different comboboxes
-  const [selectedIngredient, setSelectedIngredient] = useState(ingredients[0]);
-  const [selectedTool, setSelectedTool] = useState(kitchenTools[0]);
+  const [selectedIngredient, setSelectedIngredient] =
+    useState<ComboboxOption | null>(ingredients[0]);
+  const [selectedTool, setSelectedTool] = useState<ComboboxOption | null>(
+    kitchenTools[0]
+  );
 
   return (
     <div className="space-y-8 p-6">
