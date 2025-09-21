@@ -14,8 +14,9 @@ export type ComboboxOption = {
 
 type ComboboxProps = {
   options: ComboboxOption[];
-  value: ComboboxOption;
-  onChange: (value: ComboboxOption) => void;
+  // Headless UI Combobox value may be nullable; accept null to match types
+  value: ComboboxOption | null;
+  onChange: (value: ComboboxOption | null) => void;
   label?: string;
   placeholder?: string;
   disabled?: boolean;
@@ -94,7 +95,10 @@ export function Combobox({
               <div className="relative w-full cursor-default overflow-hidden rounded-md border border-gray-300 bg-white text-left shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500">
                 <HeadlessCombobox.Input
                   className="w-full border-none py-2 pr-10 pl-3 text-sm leading-5 text-gray-900 focus:ring-0 focus:outline-none"
-                  displayValue={(option: ComboboxOption) => option.name}
+                  // account for nullable option in displayValue
+                  displayValue={(option: ComboboxOption | null) =>
+                    option ? option.name : ''
+                  }
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={placeholder}
                 />
