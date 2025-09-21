@@ -14,7 +14,8 @@ export type ComboboxOption = {
 
 type ComboboxProps = {
   options: ComboboxOption[];
-  // Headless UI Combobox value may be nullable; accept null to match types
+  // Headless UI Combobox components can pass null values in controlled scenarios,
+  // especially when no option is selected or during reset operations
   value: ComboboxOption | null;
   onChange: (value: ComboboxOption | null) => void;
   label?: string;
