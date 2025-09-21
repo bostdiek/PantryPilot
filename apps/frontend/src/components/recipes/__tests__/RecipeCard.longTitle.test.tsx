@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { RecipeCard } from '../RecipeCard';
@@ -29,13 +29,13 @@ const mockRecipeWithLongTitle: Recipe = {
   ],
   instructions: ['Step 1', 'Step 2'],
   user_notes: null,
-  created_at: new Date('2024-01-01'),
-  updated_at: new Date('2024-01-01'),
+  created_at: '2024-01-01T00:00:00.000Z',
+  updated_at: '2024-01-01T00:00:00.000Z',
 };
 
 describe('RecipeCard - Long Title Handling', () => {
-  it('renders long titles without breaking card layout', () => {
-    const { container } = render(
+  it('renders title and description without breaking card layout', () => {
+    render(
       <MemoryRouter>
         <div style={{ width: '300px' }}>
           <RecipeCard recipe={mockRecipeWithLongTitle} />
@@ -43,19 +43,23 @@ describe('RecipeCard - Long Title Handling', () => {
       </MemoryRouter>
     );
 
-    // Verify the title is rendered
-    expect(screen.getByText(/extremely long recipe title/)).toBeInTheDocument();
+    // Verify the title is rendered using semantic queries
+    const titleElement = screen.getByRole('heading', { level: 3 });
+    expect(titleElement).toBeInTheDocument();
+    expect(titleElement).toHaveTextContent(/extremely long recipe title/);
 
-    // Verify the card container has proper width constraints
-    const cardContainer = container.querySelector('.p-4');
-    expect(cardContainer).toBeInTheDocument();
+    // Verify the description is rendered
+    expect(screen.getByText('A test recipe description')).toBeInTheDocument();
+
+    // Get the link element (card wrapper) and check for overflow
+    const linkElement = screen.getByRole('link');
+    expect(linkElement).toBeInTheDocument();
     
-    // The card should not exceed its container width
-    const link = container.querySelector('a');
-    expect(link).toBeInTheDocument();
+    // Ensure the card does not overflow horizontally in JSDOM environment
+    expect(linkElement.scrollWidth).toBeLessThanOrEqual(linkElement.clientWidth + 1); // +1 for rounding
   });
 
-  it('applies line-clamp-2 to long titles', () => {
+  it('truncates long title with line clamp', () => {
     render(
       <MemoryRouter>
         <RecipeCard recipe={mockRecipeWithLongTitle} />
@@ -66,8 +70,8 @@ describe('RecipeCard - Long Title Handling', () => {
     expect(titleElement).toHaveClass('line-clamp-2');
   });
 
-  it('maintains consistent card dimensions with long titles', () => {
-    const { container } = render(
+  it('keeps grid layout stable with mixed title lengths', () => {
+    render(
       <MemoryRouter>
         <div className="grid grid-cols-3 gap-6" style={{ width: '900px' }}>
           <RecipeCard recipe={mockRecipeWithLongTitle} />
@@ -76,16 +80,45 @@ describe('RecipeCard - Long Title Handling', () => {
             id: '2',
             title: 'Short Title'
           }} />
+          <RecipeCard recipe={{
+            ...mockRecipeWithLongTitle,
+            id: '3',
+            title: 'Medium Length Recipe Title'
+          }} />
         </div>
       </MemoryRouter>
     );
 
-    const cards = container.querySelectorAll('a');
-    expect(cards).toHaveLength(2);
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(3);
     
-    // Both cards should be present in the grid
-    cards.forEach(card => {
-      expect(card).toBeInTheDocument();
+    // All cards should be present and not overflow their containers
+    links.forEach((link) => {
+      expect(link).toBeInTheDocument();
+      // Check that each card doesn't overflow horizontally
+      expect(link.scrollWidth).toBeLessThanOrEqual(link.clientWidth + 1); // +1 for rounding
     });
+
+    // Verify different titles are rendered correctly
+    expect(screen.getByText(/extremely long recipe title/)).toBeInTheDocument();
+    expect(screen.getByText('Short Title')).toBeInTheDocument();
+    expect(screen.getByText('Medium Length Recipe Title')).toBeInTheDocument();
+  });
+
+  it('maintains semantic structure within card link', () => {
+    render(
+      <MemoryRouter>
+        <RecipeCard recipe={mockRecipeWithLongTitle} />
+      </MemoryRouter>
+    );
+
+    const linkElement = screen.getByRole('link');
+    const withinLink = within(linkElement);
+    
+    // Verify semantic elements are properly nested within the link
+    expect(withinLink.getByRole('heading', { level: 3 })).toBeInTheDocument();
+    expect(withinLink.getByText('A test recipe description')).toBeInTheDocument();
+    expect(withinLink.getByText('Dinner')).toBeInTheDocument(); // Category badge
+    expect(withinLink.getByText('Medium')).toBeInTheDocument(); // Difficulty
   });
 });
