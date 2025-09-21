@@ -46,6 +46,7 @@ import { Select, type SelectOption } from '../components/ui/Select';
 import { useIsMobile } from '../hooks/useMediaQuery';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
+import type { DayOption } from '../types/DayOption';
 import type { Recipe, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
 
 function toYyyyMmDd(d: Date): string {
@@ -1061,7 +1062,7 @@ const MealPlanPage: FC = () => {
         onDaySelect={handleDaySelect}
         recipeTitle={selectedRecipeForDay?.title || ''}
         availableDays={
-          currentWeek?.days.map((day) => ({
+          currentWeek?.days.map((day): DayOption => ({
             dayOfWeek: day.dayOfWeek,
             date: day.date,
             isToday: day.date === toYyyyMmDd(today),

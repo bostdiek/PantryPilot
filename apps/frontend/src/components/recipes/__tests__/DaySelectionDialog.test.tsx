@@ -42,10 +42,10 @@ describe('DaySelectionDialog', () => {
   it('highlights today with primary variant', () => {
     render(<DaySelectionDialog {...defaultProps} />);
     
-    const tuesdayButton = screen.getByRole('button', { name: /Tuesday.*2025-01-14.*Today/ });
+    const tuesdayButton = screen.getByTestId('day-button-tuesday');
     expect(tuesdayButton).toBeInTheDocument();
-    // Check for primary button class - using a more generic approach
-    expect(tuesdayButton.className).toContain('bg-primary');
+    expect(tuesdayButton).toHaveAttribute('data-variant', 'primary');
+    expect(tuesdayButton).toHaveAttribute('aria-label', 'Add recipe to Tuesday, 2025-01-14 (Today)');
   });
 
   it('calls onDaySelect when a day is clicked', async () => {
@@ -96,6 +96,55 @@ describe('DaySelectionDialog', () => {
     // Should not have any day buttons
     mockDays.forEach(day => {
       expect(screen.queryByText(day.dayOfWeek)).not.toBeInTheDocument();
+    });
+  });
+
+  it('supports keyboard navigation', async () => {
+    const onDaySelect = vi.fn();
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    
+    render(
+      <DaySelectionDialog
+        {...defaultProps}
+        onDaySelect={onDaySelect}
+        onClose={onClose}
+      />
+    );
+    
+    // Tab to first day button and press Enter
+    await user.tab();
+    await user.keyboard('{Enter}');
+    
+    expect(onDaySelect).toHaveBeenCalledWith('Monday', '2025-01-13');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('closes dialog when Escape key is pressed', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    
+    render(<DaySelectionDialog {...defaultProps} onClose={onClose} />);
+    
+    // Press Escape key
+    await user.keyboard('{Escape}');
+    
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('has proper ARIA attributes for accessibility', () => {
+    render(<DaySelectionDialog {...defaultProps} />);
+    
+    // Check for dialog role
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    
+    // Check for group role on days container
+    expect(screen.getByRole('group', { name: 'Days of the week' })).toBeInTheDocument();
+    
+    // Check that each day button has proper aria-label
+    mockDays.forEach(day => {
+      const expectedLabel = `Add recipe to ${day.dayOfWeek}, ${day.date}${day.isToday ? ' (Today)' : ''}`;
+      expect(screen.getByRole('button', { name: expectedLabel })).toBeInTheDocument();
     });
   });
 });

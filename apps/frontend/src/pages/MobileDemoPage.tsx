@@ -4,6 +4,7 @@ import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { DaySelectionDialog } from '../components/recipes/DaySelectionDialog';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import type { DayOption } from '../types/DayOption';
 
 // Mock recipe data
 const mockRecipe = {
@@ -20,7 +21,7 @@ const mockRecipe = {
 };
 
 // Mock week data
-const mockDays = [
+const mockDays: DayOption[] = [
   { dayOfWeek: 'Monday', date: '2025-01-13', isToday: false },
   { dayOfWeek: 'Tuesday', date: '2025-01-14', isToday: true },
   { dayOfWeek: 'Wednesday', date: '2025-01-15', isToday: false },

@@ -1,5 +1,6 @@
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import type { DayOption } from '../../types/DayOption';
 
 export interface DaySelectionDialogProps {
   /**
@@ -25,11 +26,7 @@ export interface DaySelectionDialogProps {
   /**
    * Array of available days to choose from
    */
-  availableDays: Array<{
-    dayOfWeek: string;
-    date: string;
-    isToday?: boolean;
-  }>;
+  availableDays: DayOption[];
 }
 
 /**
@@ -59,7 +56,7 @@ export function DaySelectionDialog({
           Select which day to add <span className="font-medium">{recipeTitle}</span> to:
         </p>
         
-        <div className="grid grid-cols-1 gap-2">
+        <div className="grid grid-cols-1 gap-2" role="group" aria-label="Days of the week">
           {availableDays.map(({ dayOfWeek, date, isToday }) => (
             <Button
               key={date}
@@ -67,6 +64,9 @@ export function DaySelectionDialog({
               onClick={() => handleDayClick(dayOfWeek, date)}
               className="justify-start text-left"
               fullWidth
+              aria-label={`Add recipe to ${dayOfWeek}, ${date}${isToday ? ' (Today)' : ''}`}
+              data-variant={isToday ? 'primary' : 'outline'}
+              data-testid={`day-button-${dayOfWeek.toLowerCase()}`}
             >
               <span className="flex items-center justify-between w-full">
                 <span>{dayOfWeek}</span>

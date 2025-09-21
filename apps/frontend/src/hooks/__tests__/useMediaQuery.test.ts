@@ -106,4 +106,22 @@ describe('useIsMobile', () => {
 
     expect(result.current).toBe(false);
   });
+
+  it('should use fallback methods for older browsers without addEventListener', () => {
+    const mockMediaQuery = {
+      matches: true,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      // No addEventListener/removeEventListener
+    };
+    mockMatchMedia.mockReturnValue(mockMediaQuery);
+
+    const { unmount } = renderHook(() => useMediaQuery('(max-width: 767px)'));
+
+    expect(mockMediaQuery.addListener).toHaveBeenCalledWith(expect.any(Function));
+
+    unmount();
+
+    expect(mockMediaQuery.removeListener).toHaveBeenCalledWith(expect.any(Function));
+  });
 });
