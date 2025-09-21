@@ -165,8 +165,6 @@ const RecipesDetail: FC = () => {
             </Card>
           </header>
 
-
-
           {/* Recipe Metadata */}
           <section className="mb-6" aria-labelledby="recipe-details">
             <Card variant="elevated" className="p-6">

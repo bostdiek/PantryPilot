@@ -11,7 +11,7 @@ const mockOptions: ComboboxOption[] = [
 describe('Combobox', () => {
   it('handles null value in displayValue without errors', () => {
     const mockOnChange = vi.fn();
-    
+
     render(
       <Combobox
         options={mockOptions}
@@ -29,7 +29,7 @@ describe('Combobox', () => {
 
   it('displays selected option name when value is provided', () => {
     const mockOnChange = vi.fn();
-    
+
     render(
       <Combobox
         options={mockOptions}
@@ -45,7 +45,7 @@ describe('Combobox', () => {
 
   it('renders with label when provided', () => {
     const mockOnChange = vi.fn();
-    
+
     render(
       <Combobox
         options={mockOptions}

@@ -51,19 +51,19 @@ describe('RecipeCard', () => {
 
     // Verify recipe title is rendered
     expect(screen.getByText('Test Recipe')).toBeInTheDocument();
-    
+
     // Verify description is rendered
     expect(screen.getByText('A test recipe description')).toBeInTheDocument();
-    
+
     // Verify category badge is rendered
     expect(screen.getByText('Dinner')).toBeInTheDocument();
-    
+
     // Verify timing information is rendered
     expect(screen.getByText('⏱️ 35 mins')).toBeInTheDocument();
-    
+
     // Verify difficulty is rendered
     expect(screen.getByText('Medium')).toBeInTheDocument();
-    
+
     // Verify ingredients preview is rendered
     expect(screen.getByText('2 ingredients:')).toBeInTheDocument();
     expect(screen.getByText('Tomatoes, Olive Oil')).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('RecipeCard', () => {
     // Verify there's no gradient background element
     const gradientElement = container.querySelector('.bg-gradient-to-br');
     expect(gradientElement).toBeNull();
-    
+
     // Verify there's no h-48 height element (the old image placeholder)
     const largeHeightElement = container.querySelector('.h-48');
     expect(largeHeightElement).toBeNull();
@@ -94,7 +94,7 @@ describe('RecipeCard', () => {
 
     const categoryBadge = screen.getByText('Dinner');
     expect(categoryBadge).toBeInTheDocument();
-    
+
     // Verify it has the proper styling classes for top positioning
     expect(categoryBadge.closest('.mb-3')).toBeInTheDocument();
   });

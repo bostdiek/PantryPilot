@@ -252,8 +252,6 @@ function RecipePreviewContent({
         </p>
       )}
 
-
-
       {/* Key metadata */}
       <div className="mb-4 grid grid-cols-3 gap-4 text-sm">
         <div className="text-center">
