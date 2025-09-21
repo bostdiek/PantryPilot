@@ -63,7 +63,7 @@ function DemoRecipeCard() {
               {mockRecipe.total_time_minutes} min • {mockRecipe.difficulty}
             </div>
             <div className="mt-1 text-xs text-gray-500">
-              {isMobile ? 'Tap "Add" to add to a day' : 'Drag to a day to add'}
+              {isMobile ? 'Tap "Add" to add to a day' : 'Drag to a day to add or use "Add" button'}
             </div>
             {selectedDay && (
               <div className="mt-2 text-xs text-green-600 font-medium">
@@ -72,20 +72,18 @@ function DemoRecipeCard() {
             )}
           </div>
           
-          {/* Mobile Add Button */}
-          {isMobile && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={handleMobileAdd}
-              className="ml-2 shrink-0"
-              aria-label={`Add ${mockRecipe.title} to meal plan`}
-            >
-              Add
-            </Button>
-          )}
+          {/* Add Button - available on both mobile and desktop */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleMobileAdd}
+            className="ml-2 shrink-0"
+            aria-label={`Add ${mockRecipe.title} to meal plan`}
+          >
+            Add
+          </Button>
 
-          {/* Desktop Drag Handle Placeholder */}
+          {/* Desktop Drag Handle Indicator - shown alongside Add button */}
           {!isMobile && (
             <div className="ml-2 shrink-0 text-gray-400 text-xs cursor-grab">
               ⋮⋮ Drag
@@ -145,9 +143,9 @@ export default function MobileDemoPage() {
               ) : (
                 <>
                   <li>• Drag handle visible for mouse interaction</li>
-                  <li>• "Add" button hidden to save space</li>
+                  <li>• "Add" button also available for convenience</li>
                   <li>• Full drag-and-drop functionality</li>
-                  <li>• Traditional desktop interaction</li>
+                  <li>• Dual interaction options (drag or click Add)</li>
                 </>
               )}
             </ul>
@@ -156,8 +154,8 @@ export default function MobileDemoPage() {
           <div className="text-center">
             <p className="text-xs text-gray-500">
               This demo shows the responsive behavior of the recipe cards in the meal planning interface.
-              The actual implementation includes full drag-and-drop functionality on desktop
-              and touch-optimized interactions on mobile devices.
+              The implementation provides "Add" buttons on all devices for easy access, plus full drag-and-drop 
+              functionality on desktop for users who prefer that interaction method.
             </p>
           </div>
         </div>

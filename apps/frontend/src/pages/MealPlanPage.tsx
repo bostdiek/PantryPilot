@@ -533,22 +533,20 @@ const MealPlanPage: FC = () => {
               {recipe.total_time_minutes} min • {recipe.difficulty}
             </div>
             <div className="mt-1 text-xs text-gray-500">
-              {isMobile ? 'Tap "Add" to add to a day' : 'Drag to a day to add'}
+              {isMobile ? 'Tap "Add" to add to a day' : 'Drag to a day to add or use "Add" button'}
             </div>
           </div>
           
-          {/* Mobile Add Button - visible only on mobile */}
-          {isMobile && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => handleMobileAddRecipe(recipe)}
-              className="ml-2 shrink-0"
-              aria-label={`Add ${recipe.title} to meal plan`}
-            >
-              Add
-            </Button>
-          )}
+          {/* Add Button - available on both mobile and desktop */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => handleMobileAddRecipe(recipe)}
+            className="ml-2 shrink-0"
+            aria-label={`Add ${recipe.title} to meal plan`}
+          >
+            Add
+          </Button>
         </div>
       </Card>
     );
