@@ -165,31 +165,7 @@ const RecipesDetail: FC = () => {
             </Card>
           </header>
 
-          {/* Hero Image Placeholder */}
-          <section className="mb-6" aria-labelledby="recipe-image">
-            <Card variant="elevated" className="overflow-hidden p-0">
-              <div className="flex h-64 items-center justify-center bg-gradient-to-br from-orange-100 to-orange-200 md:h-80">
-                <div className="text-center text-orange-600">
-                  <svg
-                    className="mx-auto mb-4 h-16 w-16"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                    aria-hidden="true"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.5}
-                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                    />
-                  </svg>
-                  <p className="text-sm font-medium">Recipe Image</p>
-                  <p className="text-xs opacity-75">Coming Soon</p>
-                </div>
-              </div>
-            </Card>
-          </section>
+
 
           {/* Recipe Metadata */}
           <section className="mb-6" aria-labelledby="recipe-details">
