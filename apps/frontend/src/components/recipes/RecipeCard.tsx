@@ -39,17 +39,14 @@ export function RecipeCard({ recipe, className = '' }: RecipeCardProps) {
         variant="elevated"
         className="h-full overflow-hidden p-0 transition-all duration-200 group-hover:scale-[1.02] hover:shadow-lg"
       >
-        {/* Recipe image placeholder or actual image */}
-        <div className="flex h-48 items-end bg-gradient-to-br from-orange-100 to-orange-200 p-4">
-          <div className="w-full text-right">
-            <span className="inline-block rounded-full bg-white/90 px-2 py-1 text-xs font-medium text-gray-800">
+        {/* Recipe content */}
+        <div className="p-4">
+          {/* Category badge at top */}
+          <div className="mb-3 flex justify-end">
+            <span className="inline-block rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
               {formatCategory(recipe.category)}
             </span>
           </div>
-        </div>
-
-        {/* Recipe content */}
-        <div className="p-4">
           {/* Title */}
           <h3 className="mb-2 line-clamp-2 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
             {recipe.title}
