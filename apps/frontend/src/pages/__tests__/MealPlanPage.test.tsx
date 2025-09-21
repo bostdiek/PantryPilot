@@ -48,6 +48,21 @@ vi.mock('../../components/ui/icons/chevron-up-down.svg?react', () => ({
   default: () => <span data-testid="icon-chevron" />,
 }));
 
+// Mock window.matchMedia for useMediaQuery hook
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: vi.fn().mockImplementation(query => ({
+    matches: false, // Default to desktop (not mobile)
+    media: query,
+    onchange: null,
+    addListener: vi.fn(), // deprecated
+    removeListener: vi.fn(), // deprecated
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })),
+});
+
 beforeEach(() => {
   // Get the initial state with all methods
   const initialState = useMealPlanStore.getState();
