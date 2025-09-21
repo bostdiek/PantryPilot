@@ -41,7 +41,7 @@ export function RecipeCard({ recipe, className = '' }: RecipeCardProps) {
       >
         {/* Recipe content */}
         {/* min-w-0 allows long titles to wrap inside a flex parent and prevents overflow */}
-        <div className="p-4 min-w-0">
+        <div className="min-w-0 p-4">
           {/* Category badge at top */}
           <div className="mb-3 flex justify-end">
             <span className="inline-block rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">

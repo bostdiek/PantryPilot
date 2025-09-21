@@ -6,7 +6,8 @@ import type { Recipe } from '../../../types/Recipe';
 
 const mockRecipeWithLongTitle: Recipe = {
   id: '1',
-  title: 'This is an extremely long recipe title that should wrap to multiple lines and not cause the card to expand horizontally beyond its allocated space in the grid layout when using line-clamp-2 utility',
+  title:
+    'This is an extremely long recipe title that should wrap to multiple lines and not cause the card to expand horizontally beyond its allocated space in the grid layout when using line-clamp-2 utility',
   description: 'A test recipe description',
   category: 'dinner',
   difficulty: 'medium',
@@ -54,9 +55,11 @@ describe('RecipeCard - Long Title Handling', () => {
     // Get the link element (card wrapper) and check for overflow
     const linkElement = screen.getByRole('link');
     expect(linkElement).toBeInTheDocument();
-    
+
     // Ensure the card does not overflow horizontally in JSDOM environment
-    expect(linkElement.scrollWidth).toBeLessThanOrEqual(linkElement.clientWidth + 1); // +1 for rounding
+    expect(linkElement.scrollWidth).toBeLessThanOrEqual(
+      linkElement.clientWidth + 1
+    ); // +1 for rounding
   });
 
   it('truncates long title with line clamp', () => {
@@ -75,23 +78,27 @@ describe('RecipeCard - Long Title Handling', () => {
       <MemoryRouter>
         <div className="grid grid-cols-3 gap-6" style={{ width: '900px' }}>
           <RecipeCard recipe={mockRecipeWithLongTitle} />
-          <RecipeCard recipe={{
-            ...mockRecipeWithLongTitle,
-            id: '2',
-            title: 'Short Title'
-          }} />
-          <RecipeCard recipe={{
-            ...mockRecipeWithLongTitle,
-            id: '3',
-            title: 'Medium Length Recipe Title'
-          }} />
+          <RecipeCard
+            recipe={{
+              ...mockRecipeWithLongTitle,
+              id: '2',
+              title: 'Short Title',
+            }}
+          />
+          <RecipeCard
+            recipe={{
+              ...mockRecipeWithLongTitle,
+              id: '3',
+              title: 'Medium Length Recipe Title',
+            }}
+          />
         </div>
       </MemoryRouter>
     );
 
     const links = screen.getAllByRole('link');
     expect(links).toHaveLength(3);
-    
+
     // All cards should be present and not overflow their containers
     links.forEach((link) => {
       expect(link).toBeInTheDocument();
@@ -114,10 +121,12 @@ describe('RecipeCard - Long Title Handling', () => {
 
     const linkElement = screen.getByRole('link');
     const withinLink = within(linkElement);
-    
+
     // Verify semantic elements are properly nested within the link
     expect(withinLink.getByRole('heading', { level: 3 })).toBeInTheDocument();
-    expect(withinLink.getByText('A test recipe description')).toBeInTheDocument();
+    expect(
+      withinLink.getByText('A test recipe description')
+    ).toBeInTheDocument();
     expect(withinLink.getByText('Dinner')).toBeInTheDocument(); // Category badge
     expect(withinLink.getByText('Medium')).toBeInTheDocument(); // Difficulty
   });
