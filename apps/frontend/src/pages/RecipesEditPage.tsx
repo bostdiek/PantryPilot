@@ -7,6 +7,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
@@ -639,9 +640,8 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                     >
                       Step {idx + 1}
                     </label>
-                    <textarea
+                    <Textarea
                       id={`step-${idx}`}
-                      className="resize-vertical w-full rounded-md border-gray-300 px-3 py-2 text-base leading-relaxed whitespace-normal focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       value={step}
                       rows={3}
                       maxLength={1000} // reasonable limit for individual steps

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import { Textarea } from '../ui/Textarea';
 
 interface PasteSplitModalProps {
   isOpen: boolean;
@@ -99,9 +100,9 @@ export function PasteSplitModal({
               </div>
               {/* Apply reading width constraint to the textarea preview */}
               <div className="mx-auto max-w-prose">
-                <textarea
+                <Textarea
                   id={`step-preview-${index}`}
-                  className="resize-vertical w-full rounded-md border-gray-300 px-3 py-2 text-base leading-relaxed whitespace-normal"
+                  focus={false}
                   value={step}
                   onChange={(e) => handleStepChange(index, e.target.value)}
                   rows={3}

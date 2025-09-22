@@ -21,6 +21,7 @@ import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { usePasteSplit } from '../hooks/usePasteSplit';
+import { Textarea } from '../components/ui/Textarea';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -547,9 +548,8 @@ const RecipesNewPage: FC = () => {
                     >
                       Step {idx + 1}
                     </label>
-                    <textarea
+                    <Textarea
                       id={`step-${idx}`}
-                      className="resize-vertical w-full rounded-md border-gray-300 px-3 py-2 text-base leading-relaxed whitespace-normal focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       value={step}
                       rows={3}
                       maxLength={1000} // reasonable limit for individual steps
