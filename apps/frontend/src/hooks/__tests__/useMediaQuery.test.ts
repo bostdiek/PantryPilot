@@ -7,7 +7,7 @@ const mockMatchMedia = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  
+
   // Ensure window exists and mock matchMedia
   if (typeof window !== 'undefined') {
     Object.defineProperty(window, 'matchMedia', {
@@ -55,11 +55,17 @@ describe('useMediaQuery', () => {
 
     const { unmount } = renderHook(() => useMediaQuery('(max-width: 768px)'));
 
-    expect(mockMediaQuery.addEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+    expect(mockMediaQuery.addEventListener).toHaveBeenCalledWith(
+      'change',
+      expect.any(Function)
+    );
 
     unmount();
 
-    expect(mockMediaQuery.removeEventListener).toHaveBeenCalledWith('change', expect.any(Function));
+    expect(mockMediaQuery.removeEventListener).toHaveBeenCalledWith(
+      'change',
+      expect.any(Function)
+    );
   });
 
   it('should handle server-side rendering gracefully', () => {
@@ -118,10 +124,14 @@ describe('useIsMobile', () => {
 
     const { unmount } = renderHook(() => useMediaQuery('(max-width: 767px)'));
 
-    expect(mockMediaQuery.addListener).toHaveBeenCalledWith(expect.any(Function));
+    expect(mockMediaQuery.addListener).toHaveBeenCalledWith(
+      expect.any(Function)
+    );
 
     unmount();
 
-    expect(mockMediaQuery.removeListener).toHaveBeenCalledWith(expect.any(Function));
+    expect(mockMediaQuery.removeListener).toHaveBeenCalledWith(
+      expect.any(Function)
+    );
   });
 });

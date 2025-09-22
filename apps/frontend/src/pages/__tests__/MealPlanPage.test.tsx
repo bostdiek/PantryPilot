@@ -51,7 +51,7 @@ vi.mock('../../components/ui/icons/chevron-up-down.svg?react', () => ({
 // Mock window.matchMedia for useMediaQuery hook
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: vi.fn().mockImplementation(query => ({
+  value: vi.fn().mockImplementation((query) => ({
     matches: false, // Default to desktop (not mobile)
     media: query,
     onchange: null,

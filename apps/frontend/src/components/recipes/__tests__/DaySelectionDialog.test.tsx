@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { dayButtonAriaLabel } from '../../../utils/labelHelpers';
 import { DaySelectionDialog } from '../DaySelectionDialog';
 
 const mockDays = [
@@ -24,7 +25,7 @@ describe('DaySelectionDialog', () => {
 
   it('renders the dialog with recipe title', () => {
     render(<DaySelectionDialog {...defaultProps} />);
-    
+
     expect(screen.getByText('Add Recipe to Day')).toBeInTheDocument();
     expect(screen.getByText(/Select which day to add/)).toBeInTheDocument();
     expect(screen.getByText('Spaghetti Carbonara')).toBeInTheDocument();
@@ -32,8 +33,8 @@ describe('DaySelectionDialog', () => {
 
   it('renders all available days', () => {
     render(<DaySelectionDialog {...defaultProps} />);
-    
-    mockDays.forEach(day => {
+
+    mockDays.forEach((day) => {
       expect(screen.getByText(day.dayOfWeek)).toBeInTheDocument();
       expect(screen.getByText(day.date, { exact: false })).toBeInTheDocument();
     });
@@ -41,18 +42,21 @@ describe('DaySelectionDialog', () => {
 
   it('highlights today with primary variant', () => {
     render(<DaySelectionDialog {...defaultProps} />);
-    
+
     const tuesdayButton = screen.getByTestId('day-button-tuesday');
     expect(tuesdayButton).toBeInTheDocument();
     expect(tuesdayButton).toHaveAttribute('data-variant', 'primary');
-    expect(tuesdayButton).toHaveAttribute('aria-label', 'Add recipe to Tuesday, 2025-01-14 (Today)');
+    expect(tuesdayButton).toHaveAttribute(
+      'aria-label',
+      dayButtonAriaLabel('Tuesday', '2025-01-14', true)
+    );
   });
 
   it('calls onDaySelect when a day is clicked', async () => {
     const onDaySelect = vi.fn();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    
+
     render(
       <DaySelectionDialog
         {...defaultProps}
@@ -60,10 +64,10 @@ describe('DaySelectionDialog', () => {
         onClose={onClose}
       />
     );
-    
+
     const mondayButton = screen.getByRole('button', { name: /Monday/ });
     await user.click(mondayButton);
-    
+
     expect(onDaySelect).toHaveBeenCalledWith('Monday', '2025-01-13');
     expect(onClose).toHaveBeenCalled();
   });
@@ -71,30 +75,30 @@ describe('DaySelectionDialog', () => {
   it('calls onClose when dialog backdrop is clicked', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
-    
+
     render(<DaySelectionDialog {...defaultProps} onClose={onClose} />);
-    
+
     // Click on the backdrop (overlay) to close dialog
     const overlay = screen.getByRole('dialog');
     await user.click(overlay);
-    
+
     expect(onClose).toHaveBeenCalled();
   });
 
   it('does not render when isOpen is false', () => {
     render(<DaySelectionDialog {...defaultProps} isOpen={false} />);
-    
+
     expect(screen.queryByText('Add Recipe to Day')).not.toBeInTheDocument();
   });
 
   it('handles empty availableDays array', () => {
     render(<DaySelectionDialog {...defaultProps} availableDays={[]} />);
-    
+
     expect(screen.getByText('Add Recipe to Day')).toBeInTheDocument();
     expect(screen.getByText(/Select which day to add/)).toBeInTheDocument();
-    
+
     // Should not have any day buttons
-    mockDays.forEach(day => {
+    mockDays.forEach((day) => {
       expect(screen.queryByText(day.dayOfWeek)).not.toBeInTheDocument();
     });
   });
@@ -103,7 +107,7 @@ describe('DaySelectionDialog', () => {
     const onDaySelect = vi.fn();
     const onClose = vi.fn();
     const user = userEvent.setup();
-    
+
     render(
       <DaySelectionDialog
         {...defaultProps}
@@ -111,11 +115,11 @@ describe('DaySelectionDialog', () => {
         onClose={onClose}
       />
     );
-    
+
     // Tab to first day button and press Enter
     await user.tab();
     await user.keyboard('{Enter}');
-    
+
     expect(onDaySelect).toHaveBeenCalledWith('Monday', '2025-01-13');
     expect(onClose).toHaveBeenCalled();
   });
@@ -123,28 +127,36 @@ describe('DaySelectionDialog', () => {
   it('closes dialog when Escape key is pressed', async () => {
     const onClose = vi.fn();
     const user = userEvent.setup();
-    
+
     render(<DaySelectionDialog {...defaultProps} onClose={onClose} />);
-    
+
     // Press Escape key
     await user.keyboard('{Escape}');
-    
+
     expect(onClose).toHaveBeenCalled();
   });
 
   it('has proper ARIA attributes for accessibility', () => {
     render(<DaySelectionDialog {...defaultProps} />);
-    
+
     // Check for dialog role
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-    
+
     // Check for group role on days container
-    expect(screen.getByRole('group', { name: 'Days of the week' })).toBeInTheDocument();
-    
+    expect(
+      screen.getByRole('group', { name: 'Days of the week' })
+    ).toBeInTheDocument();
+
     // Check that each day button has proper aria-label
-    mockDays.forEach(day => {
-      const expectedLabel = `Add recipe to ${day.dayOfWeek}, ${day.date}${day.isToday ? ' (Today)' : ''}`;
-      expect(screen.getByRole('button', { name: expectedLabel })).toBeInTheDocument();
+    mockDays.forEach((day) => {
+      const expectedLabel = dayButtonAriaLabel(
+        day.dayOfWeek,
+        day.date,
+        !!day.isToday
+      );
+      expect(
+        screen.getByRole('button', { name: expectedLabel })
+      ).toBeInTheDocument();
     });
   });
 });

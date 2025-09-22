@@ -53,25 +53,25 @@ function DemoRecipeCard() {
 
   return (
     <>
-      <Card
-        className={`p-3 select-none ${!isMobile ? 'cursor-grab' : ''}`}
-      >
+      <Card className={`p-3 select-none ${!isMobile ? 'cursor-grab' : ''}`}>
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="mb-1 text-base font-medium">{mockRecipe.title}</div>
             <div className="mb-2 text-xs text-gray-600">
               {mockRecipe.total_time_minutes} min • {mockRecipe.difficulty}
             </div>
             <div className="mt-1 text-xs text-gray-500">
-              {isMobile ? 'Tap "Add" to add to a day' : 'Drag to a day to add or use "Add" button'}
+              {isMobile
+                ? 'Tap "Add" to add to a day'
+                : 'Drag to a day to add or use "Add" button'}
             </div>
             {selectedDay && (
-              <div className="mt-2 text-xs text-green-600 font-medium">
+              <div className="mt-2 text-xs font-medium text-green-600">
                 ✓ Added to {selectedDay}
               </div>
             )}
           </div>
-          
+
           {/* Add Button - available on both mobile and desktop */}
           <Button
             variant="primary"
@@ -85,7 +85,7 @@ function DemoRecipeCard() {
 
           {/* Desktop Drag Handle Indicator - shown alongside Add button */}
           {!isMobile && (
-            <div className="ml-2 shrink-0 text-gray-400 text-xs cursor-grab">
+            <div className="ml-2 shrink-0 cursor-grab text-xs text-gray-400">
               ⋮⋮ Drag
             </div>
           )}
@@ -108,31 +108,36 @@ function DemoRecipeCard() {
  */
 export default function MobileDemoPage() {
   const isMobile = useIsMobile();
-  
+
   return (
     <Container>
-      <div className="py-6 space-y-6">
+      <div className="space-y-6 py-6">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-2">Mobile Meal Planning Demo</h1>
+          <h1 className="mb-2 text-2xl font-bold">Mobile Meal Planning Demo</h1>
           <p className="text-gray-600">
-            Current viewport: <span className="font-semibold">{isMobile ? 'Mobile' : 'Desktop'}</span>
+            Current viewport:{' '}
+            <span className="font-semibold">
+              {isMobile ? 'Mobile' : 'Desktop'}
+            </span>
           </p>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="mt-1 text-sm text-gray-500">
             Resize your browser window to see the differences
           </p>
         </div>
 
         <div className="grid gap-4">
           <div>
-            <h2 className="text-lg font-semibold mb-3">Recipe Card Behavior:</h2>
+            <h2 className="mb-3 text-lg font-semibold">
+              Recipe Card Behavior:
+            </h2>
             <DemoRecipeCard />
           </div>
 
-          <Card className="p-4 bg-blue-50 border-blue-200">
-            <h3 className="font-semibold text-blue-900 mb-2">
+          <Card className="border-blue-200 bg-blue-50 p-4">
+            <h3 className="mb-2 font-semibold text-blue-900">
               {isMobile ? '📱 Mobile Experience' : '🖥️ Desktop Experience'}
             </h3>
-            <ul className="text-sm text-blue-800 space-y-1">
+            <ul className="space-y-1 text-sm text-blue-800">
               {isMobile ? (
                 <>
                   <li>• "Add" button visible for easy tapping</li>
@@ -153,9 +158,11 @@ export default function MobileDemoPage() {
 
           <div className="text-center">
             <p className="text-xs text-gray-500">
-              This demo shows the responsive behavior of the recipe cards in the meal planning interface.
-              The implementation provides "Add" buttons on all devices for easy access, plus full drag-and-drop 
-              functionality on desktop for users who prefer that interaction method.
+              This demo shows the responsive behavior of the recipe cards in the
+              meal planning interface. The implementation provides "Add" buttons
+              on all devices for easy access, plus full drag-and-drop
+              functionality on desktop for users who prefer that interaction
+              method.
             </p>
           </div>
         </div>

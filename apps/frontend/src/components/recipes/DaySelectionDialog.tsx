@@ -1,6 +1,7 @@
+import type { DayOption } from '../../types/DayOption';
+import { dayButtonAriaLabel } from '../../utils/labelHelpers';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
-import type { DayOption } from '../../types/DayOption';
 
 export interface DaySelectionDialogProps {
   /**
@@ -53,10 +54,15 @@ export function DaySelectionDialog({
     >
       <div className="space-y-4">
         <p className="text-sm text-gray-600">
-          Select which day to add <span className="font-medium">{recipeTitle}</span> to:
+          Select which day to add{' '}
+          <span className="font-medium">{recipeTitle}</span> to:
         </p>
-        
-        <div className="grid grid-cols-1 gap-2" role="group" aria-label="Days of the week">
+
+        <div
+          className="grid grid-cols-1 gap-2"
+          role="group"
+          aria-label="Days of the week"
+        >
           {availableDays.map(({ dayOfWeek, date, isToday }) => (
             <Button
               key={date}
@@ -64,13 +70,13 @@ export function DaySelectionDialog({
               onClick={() => handleDayClick(dayOfWeek, date)}
               className="justify-start text-left"
               fullWidth
-              aria-label={`Add recipe to ${dayOfWeek}, ${date}${isToday ? ' (Today)' : ''}`}
+              aria-label={dayButtonAriaLabel(dayOfWeek, date, !!isToday)}
               data-variant={isToday ? 'primary' : 'outline'}
               data-testid={`day-button-${dayOfWeek.toLowerCase()}`}
             >
-              <span className="flex items-center justify-between w-full">
+              <span className="flex w-full items-center justify-between">
                 <span>{dayOfWeek}</span>
-                <span className="text-xs text-gray-500 ml-2">
+                <span className="ml-2 text-xs text-gray-500">
                   {date}
                   {isToday && ' (Today)'}
                 </span>

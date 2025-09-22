@@ -166,17 +166,19 @@ const MealPlanPage: FC = () => {
 
   // Day selection dialog state (for mobile)
   const [daySelectionOpen, setDaySelectionOpen] = useState(false);
-  const [selectedRecipeForDay, setSelectedRecipeForDay] = useState<Recipe | null>(null);
+  const [selectedRecipeForDay, setSelectedRecipeForDay] =
+    useState<Recipe | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { 
+    useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
       // Disable pointer sensor on mobile to prevent conflicts with scrolling
       disabled: isMobile,
     }),
-    useSensor(KeyboardSensor, { 
+    useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-      // Keep keyboard sensor enabled for accessibility
+      // Disable keyboard sensor on mobile for consistency
+      disabled: isMobile,
     })
   );
 
@@ -290,9 +292,9 @@ const MealPlanPage: FC = () => {
     setDaySelectionOpen(true);
   }
 
-  async function handleDaySelect(dayOfWeek: string, date: string) {
+  async function handleDaySelect(_dayOfWeek: string, date: string) {
     if (!selectedRecipeForDay) return;
-    
+
     const nextIndex = getNextOrderIndex(date);
     try {
       await addEntry({
@@ -518,7 +520,7 @@ const MealPlanPage: FC = () => {
       data: { type: 'recipe', recipeId: recipe.id },
       disabled: isMobile, // Disable dragging on mobile
     });
-    
+
     return (
       <Card
         ref={setNodeRef}
@@ -527,16 +529,18 @@ const MealPlanPage: FC = () => {
         {...(!isMobile ? attributes : {})}
       >
         <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="mb-1 text-base font-medium">{recipe.title}</div>
             <div className="mb-2 text-xs text-gray-600">
               {recipe.total_time_minutes} min • {recipe.difficulty}
             </div>
             <div className="mt-1 text-xs text-gray-500">
-              {isMobile ? 'Tap "Add" to add to a day' : 'Drag to a day to add or use "Add" button'}
+              {isMobile
+                ? 'Tap "Add" to add to a day'
+                : 'Drag to a day to add or use "Add" button'}
             </div>
           </div>
-          
+
           {/* Add Button - available on both mobile and desktop */}
           <Button
             variant="primary"
@@ -1060,11 +1064,13 @@ const MealPlanPage: FC = () => {
         onDaySelect={handleDaySelect}
         recipeTitle={selectedRecipeForDay?.title || ''}
         availableDays={
-          currentWeek?.days.map((day): DayOption => ({
-            dayOfWeek: day.dayOfWeek,
-            date: day.date,
-            isToday: day.date === toYyyyMmDd(today),
-          })) || []
+          currentWeek?.days.map(
+            (day): DayOption => ({
+              dayOfWeek: day.dayOfWeek,
+              date: day.date,
+              isToday: day.date === toYyyyMmDd(today),
+            })
+          ) || []
         }
       />
     </Container>
