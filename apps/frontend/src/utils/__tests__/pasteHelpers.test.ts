@@ -27,6 +27,17 @@ describe('pasteHelpers', () => {
       const text = 'Mix ingredients\nBake in oven';
       expect(looksMultiStep(text)).toBe(false);
     });
+
+    it('should return false for empty or very short content', () => {
+      expect(looksMultiStep('')).toBe(false);
+      expect(looksMultiStep('   ')).toBe(false);
+      expect(looksMultiStep('a')).toBe(false);
+    });
+
+    it('should return false for very large content (performance guard)', () => {
+      const largeText = 'a'.repeat(60000); // > 50KB
+      expect(looksMultiStep(largeText)).toBe(false);
+    });
   });
 
   describe('splitSteps', () => {
@@ -110,6 +121,26 @@ describe('pasteHelpers', () => {
         'Second step',
         'Third step'
       ]);
+    });
+
+    it('should return empty array for empty content', () => {
+      expect(splitSteps('')).toEqual([]);
+      expect(splitSteps('   ')).toEqual([]);
+    });
+
+    it('should handle very large content by returning single step (performance guard)', () => {
+      const largeText = 'a'.repeat(60000); // > 50KB
+      const result = splitSteps(largeText);
+      expect(result).toEqual([largeText.trim()]);
+    });
+
+    it('should limit number of steps to prevent UI freezing', () => {
+      // Create content that would result in > 50 steps
+      const manySteps = Array.from({ length: 60 }, (_, i) => `${i + 1}. Step ${i + 1}`).join('\n');
+      const result = splitSteps(manySteps);
+      expect(result.length).toBeLessThanOrEqual(50);
+      expect(result[0]).toBe('Step 1');
+      expect(result[49]).toBe('Step 50');
     });
   });
 });

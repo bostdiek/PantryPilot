@@ -1,4 +1,4 @@
-import { useReducer, useState, type FC, type FormEvent, type ClipboardEvent } from 'react';
+import { useReducer, useState, type FC, type FormEvent } from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -23,7 +23,7 @@ import {
   normalizeIngredientsForForm,
 } from '../utils/ingredients';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
-import { looksMultiStep, splitSteps } from '../utils/pasteHelpers';
+import { usePasteSplit } from '../hooks/usePasteSplit';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -69,7 +69,8 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     | { type: 'ADD_INSTRUCTION' }
     | { type: 'REMOVE_INSTRUCTION'; index: number }
     | { type: 'MOVE_INSTRUCTION_UP'; index: number }
-    | { type: 'MOVE_INSTRUCTION_DOWN'; index: number };
+    | { type: 'MOVE_INSTRUCTION_DOWN'; index: number }
+    | { type: 'INSERT_INSTRUCTIONS_AT'; index: number; steps: string[]; replaceEmpty?: boolean };
 
   function reducer(state: FormState, action: Action): FormState {
     switch (action.type) {
@@ -136,6 +137,26 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
         }
         return state;
       }
+      case 'INSERT_INSTRUCTIONS_AT': {
+        const next = [...state.instructions];
+        const { index, steps, replaceEmpty } = action;
+        
+        // Guard against invalid index
+        if (index < 0 || index >= next.length) {
+          console.warn(`Invalid instruction index ${index}, appending steps instead`);
+          return { ...state, instructions: [...next, ...steps.filter(s => s.trim() !== '')] };
+        }
+        
+        // If replaceEmpty is true and target step is empty, replace it
+        if (replaceEmpty && next[index].trim() === '') {
+          next.splice(index, 1, ...steps.filter(s => s.trim() !== ''));
+        } else {
+          // Insert steps after the target index
+          next.splice(index + 1, 0, ...steps.filter(s => s.trim() !== ''));
+        }
+        
+        return { ...state, instructions: next };
+      }
       default:
         return state;
     }
@@ -170,89 +191,43 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Paste splitting modal state
-  const [pasteSplitModal, setPasteSplitModal] = useState<{
-    isOpen: boolean;
-    targetIndex: number;
-    candidateSteps: string[];
-    originalContent: string;
-  }>({
-    isOpen: false,
-    targetIndex: -1,
-    candidateSteps: [],
-    originalContent: '',
-  });
-
-  // Paste handling for instructions
-  const handleInstructionPaste = (e: ClipboardEvent<HTMLTextAreaElement>, idx: number) => {
-    const text = e.clipboardData.getData('text');
-    
-    if (!looksMultiStep(text)) {
-      // Allow normal paste for single-step content
-      return;
-    }
-
-    // Prevent default paste behavior
-    e.preventDefault();
-    
-    const steps = splitSteps(text);
-    if (steps.length <= 1) {
-      // If splitting didn't result in multiple steps, allow normal paste
-      const textarea = e.target as HTMLTextAreaElement;
-      const currentValue = textarea.value;
-      const selectionStart = textarea.selectionStart;
-      const selectionEnd = textarea.selectionEnd;
+  // Shared paste handling hook
+  const {
+    pasteSplitModal,
+    handleInstructionPaste,
+    handlePasteSplitConfirm,
+    handlePasteAsSingle,
+    handlePasteSplitCancel,
+    closePasteSplitModal,
+  } = usePasteSplit({
+    onInsertSteps: (targetIndex: number, steps: string[], replaceEmpty?: boolean) => {
+      // Guard against invalid index with bounds checking
+      if (targetIndex < 0 || targetIndex >= form.instructions.length) {
+        console.warn(`Invalid target index ${targetIndex}, appending steps instead`);
+        dispatch({ type: 'INSERT_INSTRUCTIONS_AT', index: form.instructions.length - 1, steps });
+        return;
+      }
       
-      const newValue = currentValue.substring(0, selectionStart) + text + currentValue.substring(selectionEnd);
-      dispatch({ type: 'SET_INSTRUCTION', index: idx, value: newValue });
-      return;
-    }
-
-    // Open modal for multi-step confirmation
-    setPasteSplitModal({
-      isOpen: true,
-      targetIndex: idx,
-      candidateSteps: steps,
-      originalContent: text,
-    });
-  };
-
-  const handlePasteSplitConfirm = (steps: string[]) => {
-    const targetIdx = pasteSplitModal.targetIndex;
-    
-    // If the target step is empty, replace it with the first step and insert the rest
-    if (form.instructions[targetIdx].trim() === '') {
-      // Replace the empty step with the first new step
-      dispatch({ type: 'SET_INSTRUCTION', index: targetIdx, value: steps[0] });
-      // Insert remaining steps after
-      for (let i = 1; i < steps.length; i++) {
-        dispatch({ type: 'ADD_INSTRUCTION' });
-        // We need to set the instruction value after adding
-        setTimeout(() => {
-          dispatch({ type: 'SET_INSTRUCTION', index: targetIdx + i, value: steps[i] });
-        }, 0);
+      dispatch({ 
+        type: 'INSERT_INSTRUCTIONS_AT', 
+        index: targetIndex, 
+        steps, 
+        replaceEmpty 
+      });
+    },
+    onReplaceStep: (targetIndex: number, content: string) => {
+      // Guard against invalid index
+      if (targetIndex < 0 || targetIndex >= form.instructions.length) {
+        console.warn(`Invalid target index ${targetIndex}, cannot replace step`);
+        return;
       }
-    } else {
-      // Insert steps after the current index
-      for (let i = 0; i < steps.length; i++) {
-        dispatch({ type: 'ADD_INSTRUCTION' });
-        setTimeout(() => {
-          dispatch({ type: 'SET_INSTRUCTION', index: targetIdx + 1 + i, value: steps[i] });
-        }, 0);
-      }
-    }
-  };
-
-  const handlePasteSplitCancel = () => {
-    // Do nothing - user cancelled the split
-  };
-
-  const handlePasteAsSingle = (content: string) => {
-    const targetIdx = pasteSplitModal.targetIndex;
-    
-    // Replace the target step with the original content
-    dispatch({ type: 'SET_INSTRUCTION', index: targetIdx, value: content });
-  };
+      
+      dispatch({ type: 'SET_INSTRUCTION', index: targetIndex, value: content });
+    },
+    getCurrentStepValue: (index: number) => {
+      return form.instructions[index] || '';
+    },
+  });
 
   // Check if there are unsaved changes by comparing current form state with original recipe
   const hasUnsavedChanges =
@@ -716,7 +691,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
         {/* Paste Split Modal */}
         <PasteSplitModal
           isOpen={pasteSplitModal.isOpen}
-          onClose={() => setPasteSplitModal(prev => ({ ...prev, isOpen: false }))}
+          onClose={closePasteSplitModal}
           onConfirm={handlePasteSplitConfirm}
           onCancel={handlePasteSplitCancel}
           onPasteAsSingle={handlePasteAsSingle}
