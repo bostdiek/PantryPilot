@@ -189,7 +189,7 @@
 5. Bake for 25-30 minutes until golden brown
                 </div>
                 
-                <div class="bg-white rounded-lg border p-4">
+                <div class="bg-white rounded-lg border p-4 mb-4">
                     <div class="space-y-1">
                         <label class="block text-sm font-medium text-gray-700">Try pasting here</label>
                         <div class="mx-auto max-w-prose">
@@ -197,8 +197,45 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Mock of the improved modal -->
+                <div class="bg-gray-800 bg-opacity-50 p-4 rounded-lg">
+                    <div class="bg-white rounded-lg p-6 max-w-2xl mx-auto">
+                        <h3 class="text-lg font-semibold mb-4">Import Multiple Steps</h3>
+                        <p class="text-sm text-gray-600 mb-4">Detected 2 steps. You can edit or remove steps before importing.</p>
+                        
+                        <div class="space-y-3 mb-6">
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="text-sm font-medium text-gray-700">Step 1</label>
+                                    <button class="text-sm text-gray-600 hover:text-gray-800">Remove</button>
+                                </div>
+                                <div class="mx-auto max-w-prose">
+                                    <textarea class="instruction-textarea w-full text-sm" rows="2">Preheat oven to 375°F</textarea>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="flex justify-between items-center mb-1">
+                                    <label class="text-sm font-medium text-gray-700">Step 2</label>
+                                    <button class="text-sm text-gray-600 hover:text-gray-800">Remove</button>
+                                </div>
+                                <div class="mx-auto max-w-prose">
+                                    <textarea class="instruction-textarea w-full text-sm" rows="2">Mix dry ingredients in large bowl</textarea>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-between items-center pt-4 border-t">
+                            <button class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                            <div class="flex space-x-2">
+                                <button class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Paste as Single Step</button>
+                                <button class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Import 2 Steps</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 
-                <p class="text-sm text-blue-600 mt-2"><em>✓ Feature: Automatically detects numbered lists, blank line separators, or content with 3+ line breaks and offers to split into separate steps</em></p>
+                <p class="text-sm text-blue-600 mt-2"><em>✓ Feature: Automatically detects numbered lists, blank line separators, or content with 3+ line breaks and offers to split into separate steps OR paste as a single step</em></p>
             </div>
         </div>
     </div>

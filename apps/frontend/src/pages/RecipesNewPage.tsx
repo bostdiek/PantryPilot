@@ -72,10 +72,12 @@ const RecipesNewPage: FC = () => {
     isOpen: boolean;
     targetIndex: number;
     candidateSteps: string[];
+    originalContent: string;
   }>({
     isOpen: false,
     targetIndex: -1,
     candidateSteps: [],
+    originalContent: '',
   });
 
   // Use the custom hook instead of direct useEffect
@@ -114,6 +116,7 @@ const RecipesNewPage: FC = () => {
       isOpen: true,
       targetIndex: idx,
       candidateSteps: steps,
+      originalContent: text,
     });
   };
 
@@ -134,6 +137,15 @@ const RecipesNewPage: FC = () => {
 
   const handlePasteSplitCancel = () => {
     // Do nothing - user cancelled the split
+  };
+
+  const handlePasteAsSingle = (content: string) => {
+    const newInstructions = [...instructions];
+    const targetIdx = pasteSplitModal.targetIndex;
+    
+    // Replace the target step with the original content
+    newInstructions[targetIdx] = content;
+    setInstructions(newInstructions);
   };
 
   // Check if there are unsaved changes
@@ -629,7 +641,9 @@ const RecipesNewPage: FC = () => {
           onClose={() => setPasteSplitModal(prev => ({ ...prev, isOpen: false }))}
           onConfirm={handlePasteSplitConfirm}
           onCancel={handlePasteSplitCancel}
+          onPasteAsSingle={handlePasteAsSingle}
           candidateSteps={pasteSplitModal.candidateSteps}
+          originalContent={pasteSplitModal.originalContent}
         />
       </Card>
     </Container>

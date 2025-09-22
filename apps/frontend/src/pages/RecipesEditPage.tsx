@@ -175,10 +175,12 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     isOpen: boolean;
     targetIndex: number;
     candidateSteps: string[];
+    originalContent: string;
   }>({
     isOpen: false,
     targetIndex: -1,
     candidateSteps: [],
+    originalContent: '',
   });
 
   // Paste handling for instructions
@@ -211,6 +213,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
       isOpen: true,
       targetIndex: idx,
       candidateSteps: steps,
+      originalContent: text,
     });
   };
 
@@ -242,6 +245,13 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
 
   const handlePasteSplitCancel = () => {
     // Do nothing - user cancelled the split
+  };
+
+  const handlePasteAsSingle = (content: string) => {
+    const targetIdx = pasteSplitModal.targetIndex;
+    
+    // Replace the target step with the original content
+    dispatch({ type: 'SET_INSTRUCTION', index: targetIdx, value: content });
   };
 
   // Check if there are unsaved changes by comparing current form state with original recipe
@@ -709,7 +719,9 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           onClose={() => setPasteSplitModal(prev => ({ ...prev, isOpen: false }))}
           onConfirm={handlePasteSplitConfirm}
           onCancel={handlePasteSplitCancel}
+          onPasteAsSingle={handlePasteAsSingle}
           candidateSteps={pasteSplitModal.candidateSteps}
+          originalContent={pasteSplitModal.originalContent}
         />
       </Card>
     </Container>

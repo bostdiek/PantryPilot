@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 
@@ -7,7 +7,9 @@ interface PasteSplitModalProps {
   onClose: () => void;
   onConfirm: (steps: string[]) => void;
   onCancel: () => void;
+  onPasteAsSingle: (content: string) => void;
   candidateSteps: string[];
+  originalContent: string;
 }
 
 export function PasteSplitModal({
@@ -15,9 +17,18 @@ export function PasteSplitModal({
   onClose,
   onConfirm,
   onCancel,
+  onPasteAsSingle,
   candidateSteps,
+  originalContent,
 }: PasteSplitModalProps) {
   const [editableSteps, setEditableSteps] = useState<string[]>(candidateSteps);
+
+  // Properly synchronize state when modal opens with new data
+  useEffect(() => {
+    if (isOpen) {
+      setEditableSteps([...candidateSteps]);
+    }
+  }, [isOpen, candidateSteps]);
 
   const handleStepChange = (index: number, value: string) => {
     const newSteps = [...editableSteps];
@@ -30,10 +41,15 @@ export function PasteSplitModal({
     setEditableSteps(newSteps);
   };
 
-  const handleConfirm = () => {
+  const handleConfirmMultiple = () => {
     // Filter out empty steps before confirming
     const filteredSteps = editableSteps.filter((step) => step.trim() !== '');
     onConfirm(filteredSteps);
+    onClose();
+  };
+
+  const handlePasteSingle = () => {
+    onPasteAsSingle(originalContent);
     onClose();
   };
 
@@ -41,11 +57,6 @@ export function PasteSplitModal({
     onCancel();
     onClose();
   };
-
-  // Reset editable steps when modal opens with new data
-  if (isOpen && editableSteps !== candidateSteps) {
-    setEditableSteps(candidateSteps);
-  }
 
   return (
     <Dialog
@@ -97,7 +108,7 @@ export function PasteSplitModal({
           ))}
         </div>
 
-        <div className="flex items-center justify-end space-x-2 pt-4 border-t">
+        <div className="flex items-center justify-between space-x-2 pt-4 border-t">
           <Button
             type="button"
             variant="ghost"
@@ -105,14 +116,24 @@ export function PasteSplitModal({
           >
             Cancel
           </Button>
-          <Button
-            type="button"
-            variant="primary"
-            onClick={handleConfirm}
-            disabled={editableSteps.filter(step => step.trim() !== '').length === 0}
-          >
-            Import {editableSteps.filter(step => step.trim() !== '').length} Step{editableSteps.filter(step => step.trim() !== '').length !== 1 ? 's' : ''}
-          </Button>
+          
+          <div className="flex space-x-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePasteSingle}
+            >
+              Paste as Single Step
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              onClick={handleConfirmMultiple}
+              disabled={editableSteps.filter(step => step.trim() !== '').length === 0}
+            >
+              Import {editableSteps.filter(step => step.trim() !== '').length} Step{editableSteps.filter(step => step.trim() !== '').length !== 1 ? 's' : ''}
+            </Button>
+          </div>
         </div>
       </div>
     </Dialog>
