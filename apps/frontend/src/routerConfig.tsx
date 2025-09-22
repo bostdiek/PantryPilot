@@ -18,7 +18,6 @@ const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = lazy(() => import('./pages/RecipesPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
-const MobileDemoPage = lazy(() => import('./pages/MobileDemoPage'));
 
 // Loader functions for protected routes
 const homeLoader = async () => {
@@ -125,14 +124,6 @@ export const router = createBrowserRouter([
               element: (
                 <Suspense fallback={<LoadingSpinner />}>
                   <ComponentShowcase />
-                </Suspense>
-              ),
-            },
-            {
-              path: 'demo/mobile',
-              element: (
-                <Suspense fallback={<LoadingSpinner />}>
-                  <MobileDemoPage />
                 </Suspense>
               ),
             },
