@@ -1,5 +1,6 @@
 import { useReducer, useState, type FC, type FormEvent } from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
+import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -9,6 +10,7 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
 import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
+import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
@@ -23,8 +25,6 @@ import {
   mapIngredientsForApi,
   normalizeIngredientsForForm,
 } from '../utils/ingredients';
-import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
-import { usePasteSplit } from '../hooks/usePasteSplit';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
