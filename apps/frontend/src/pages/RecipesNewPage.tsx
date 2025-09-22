@@ -1,5 +1,6 @@
 import { useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -7,7 +8,9 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
+import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
@@ -64,6 +67,70 @@ const RecipesNewPage: FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { addRecipe } = useRecipeStore();
+
+  // Shared paste handling hook
+  const {
+    pasteSplitModal,
+    handleInstructionPaste,
+    handlePasteSplitConfirm,
+    handlePasteAsSingle,
+    handlePasteSplitCancel,
+    closePasteSplitModal,
+  } = usePasteSplit({
+    onInsertSteps: (
+      targetIndex: number,
+      steps: string[],
+      replaceEmpty?: boolean
+    ) => {
+      // Guard against invalid index
+      if (targetIndex < 0 || targetIndex >= instructions.length) {
+        console.warn(
+          `Invalid target index ${targetIndex}, appending steps instead`
+        );
+        setInstructions((prev) => [
+          ...prev,
+          ...steps.filter((s) => s.trim() !== ''),
+        ]);
+        return;
+      }
+
+      const newInstructions = [...instructions];
+
+      // If replaceEmpty is true and target step is empty, replace it
+      if (replaceEmpty && newInstructions[targetIndex].trim() === '') {
+        newInstructions.splice(
+          targetIndex,
+          1,
+          ...steps.filter((s) => s.trim() !== '')
+        );
+      } else {
+        // Insert steps after the current index
+        newInstructions.splice(
+          targetIndex + 1,
+          0,
+          ...steps.filter((s) => s.trim() !== '')
+        );
+      }
+
+      setInstructions(newInstructions);
+    },
+    onReplaceStep: (targetIndex: number, content: string) => {
+      // Guard against invalid index
+      if (targetIndex < 0 || targetIndex >= instructions.length) {
+        console.warn(
+          `Invalid target index ${targetIndex}, cannot replace step`
+        );
+        return;
+      }
+
+      const newInstructions = [...instructions];
+      newInstructions[targetIndex] = content;
+      setInstructions(newInstructions);
+    },
+    getCurrentStepValue: (index: number) => {
+      return instructions[index] || '';
+    },
+  });
 
   // Use the custom hook instead of direct useEffect
   const { isApiOnline } = useApiHealth();
@@ -418,8 +485,8 @@ const RecipesNewPage: FC = () => {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Instructions</h2>
             {instructions.map((step, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
-                <div className="flex flex-col space-y-1">
+              <div key={idx} className="flex items-start space-x-2">
+                <div className="flex flex-col space-y-1 pt-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -471,31 +538,51 @@ const RecipesNewPage: FC = () => {
                     </svg>
                   </button>
                 </div>
-                <Input
-                  className="flex-1"
-                  value={step}
-                  onChange={(v) => {
-                    const list = [...instructions];
-                    list[idx] = v;
-                    setInstructions(list);
-                  }}
-                  placeholder={`Step ${idx + 1}`}
-                  aria-label={`Step ${idx + 1}`}
-                />
+
+                {/* Constrained reading width for better typography */}
+                <div className="mx-auto max-w-prose flex-1">
+                  <div className="space-y-1">
+                    <label
+                      className="block text-sm font-medium text-gray-700"
+                      htmlFor={`step-${idx}`}
+                    >
+                      Step {idx + 1}
+                    </label>
+                    <Textarea
+                      id={`step-${idx}`}
+                      value={step}
+                      rows={3}
+                      maxLength={1000} // reasonable limit for individual steps
+                      onPaste={(e) => handleInstructionPaste(e, idx)}
+                      onChange={(e) => {
+                        const list = [...instructions];
+                        list[idx] = e.target.value;
+                        setInstructions(list);
+                      }}
+                      placeholder={`Describe step ${idx + 1}...`}
+                      aria-label={`Step ${idx + 1}`}
+                    />
+                  </div>
+                </div>
+
                 {instructions.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const list = [...instructions];
-                      list.splice(idx, 1);
-                      setInstructions(list);
-                    }}
-                    aria-label={`Remove step ${idx + 1}`}
-                  >
-                    Remove
-                  </Button>
+                  <div className="pt-7">
+                    {' '}
+                    {/* Align with textarea top */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const list = [...instructions];
+                        list.splice(idx, 1);
+                        setInstructions(list);
+                      }}
+                      aria-label={`Remove step ${idx + 1}`}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
@@ -536,6 +623,17 @@ const RecipesNewPage: FC = () => {
             </Button>
           </div>
         </form>
+
+        {/* Paste Split Modal */}
+        <PasteSplitModal
+          isOpen={pasteSplitModal.isOpen}
+          onClose={closePasteSplitModal}
+          onConfirm={handlePasteSplitConfirm}
+          onCancel={handlePasteSplitCancel}
+          onPasteAsSingle={handlePasteAsSingle}
+          candidateSteps={pasteSplitModal.candidateSteps}
+          originalContent={pasteSplitModal.originalContent}
+        />
       </Card>
     </Container>
   );

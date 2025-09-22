@@ -1,5 +1,6 @@
 import { useReducer, useState, type FC, type FormEvent } from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
+import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -7,7 +8,9 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
+import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
@@ -67,7 +70,13 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     | { type: 'ADD_INSTRUCTION' }
     | { type: 'REMOVE_INSTRUCTION'; index: number }
     | { type: 'MOVE_INSTRUCTION_UP'; index: number }
-    | { type: 'MOVE_INSTRUCTION_DOWN'; index: number };
+    | { type: 'MOVE_INSTRUCTION_DOWN'; index: number }
+    | {
+        type: 'INSERT_INSTRUCTIONS_AT';
+        index: number;
+        steps: string[];
+        replaceEmpty?: boolean;
+      };
 
   function reducer(state: FormState, action: Action): FormState {
     switch (action.type) {
@@ -134,6 +143,31 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
         }
         return state;
       }
+      case 'INSERT_INSTRUCTIONS_AT': {
+        const next = [...state.instructions];
+        const { index, steps, replaceEmpty } = action;
+
+        // Guard against invalid index
+        if (index < 0 || index >= next.length) {
+          console.warn(
+            `Invalid instruction index ${index}, appending steps instead`
+          );
+          return {
+            ...state,
+            instructions: [...next, ...steps.filter((s) => s.trim() !== '')],
+          };
+        }
+
+        // If replaceEmpty is true and target step is empty, replace it
+        if (replaceEmpty && next[index].trim() === '') {
+          next.splice(index, 1, ...steps.filter((s) => s.trim() !== ''));
+        } else {
+          // Insert steps after the target index
+          next.splice(index + 1, 0, ...steps.filter((s) => s.trim() !== ''));
+        }
+
+        return { ...state, instructions: next };
+      }
       default:
         return state;
     }
@@ -167,6 +201,56 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Shared paste handling hook
+  const {
+    pasteSplitModal,
+    handleInstructionPaste,
+    handlePasteSplitConfirm,
+    handlePasteAsSingle,
+    handlePasteSplitCancel,
+    closePasteSplitModal,
+  } = usePasteSplit({
+    onInsertSteps: (
+      targetIndex: number,
+      steps: string[],
+      replaceEmpty?: boolean
+    ) => {
+      // Guard against invalid index with bounds checking
+      if (targetIndex < 0 || targetIndex >= form.instructions.length) {
+        console.warn(
+          `Invalid target index ${targetIndex}, appending steps instead`
+        );
+        dispatch({
+          type: 'INSERT_INSTRUCTIONS_AT',
+          index: form.instructions.length - 1,
+          steps,
+        });
+        return;
+      }
+
+      dispatch({
+        type: 'INSERT_INSTRUCTIONS_AT',
+        index: targetIndex,
+        steps,
+        replaceEmpty,
+      });
+    },
+    onReplaceStep: (targetIndex: number, content: string) => {
+      // Guard against invalid index
+      if (targetIndex < 0 || targetIndex >= form.instructions.length) {
+        console.warn(
+          `Invalid target index ${targetIndex}, cannot replace step`
+        );
+        return;
+      }
+
+      dispatch({ type: 'SET_INSTRUCTION', index: targetIndex, value: content });
+    },
+    getCurrentStepValue: (index: number) => {
+      return form.instructions[index] || '';
+    },
+  });
 
   // Check if there are unsaved changes by comparing current form state with original recipe
   const hasUnsavedChanges =
@@ -501,8 +585,8 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Instructions</h2>
             {form.instructions.map((step, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
-                <div className="flex flex-col space-y-1">
+              <div key={idx} className="flex items-start space-x-2">
+                <div className="flex flex-col space-y-1 pt-2">
                   <button
                     type="button"
                     onClick={() =>
@@ -546,27 +630,51 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                     </svg>
                   </button>
                 </div>
-                <Input
-                  className="flex-1"
-                  value={step}
-                  onChange={(v) =>
-                    dispatch({ type: 'SET_INSTRUCTION', index: idx, value: v })
-                  }
-                  placeholder={`Step ${idx + 1}`}
-                  aria-label={`Step ${idx + 1}`}
-                />
+
+                {/* Constrained reading width for better typography */}
+                <div className="mx-auto max-w-prose flex-1">
+                  <div className="space-y-1">
+                    <label
+                      className="block text-sm font-medium text-gray-700"
+                      htmlFor={`step-${idx}`}
+                    >
+                      Step {idx + 1}
+                    </label>
+                    <Textarea
+                      id={`step-${idx}`}
+                      value={step}
+                      rows={3}
+                      maxLength={1000} // reasonable limit for individual steps
+                      onPaste={(e) => handleInstructionPaste(e, idx)}
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'SET_INSTRUCTION',
+                          index: idx,
+                          value: e.target.value,
+                        })
+                      }
+                      placeholder={`Describe step ${idx + 1}...`}
+                      aria-label={`Step ${idx + 1}`}
+                    />
+                  </div>
+                </div>
+
                 {form.instructions.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
-                    }
-                    aria-label={`Remove step ${idx + 1}`}
-                  >
-                    Remove
-                  </Button>
+                  <div className="pt-7">
+                    {' '}
+                    {/* Align with textarea top */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
+                      }
+                      aria-label={`Remove step ${idx + 1}`}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
@@ -607,6 +715,17 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
             </Button>
           </div>
         </form>
+
+        {/* Paste Split Modal */}
+        <PasteSplitModal
+          isOpen={pasteSplitModal.isOpen}
+          onClose={closePasteSplitModal}
+          onConfirm={handlePasteSplitConfirm}
+          onCancel={handlePasteSplitCancel}
+          onPasteAsSingle={handlePasteAsSingle}
+          candidateSteps={pasteSplitModal.candidateSteps}
+          originalContent={pasteSplitModal.originalContent}
+        />
       </Card>
     </Container>
   );
