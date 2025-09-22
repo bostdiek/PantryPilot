@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 
@@ -24,7 +24,10 @@ export function PasteSplitModal({
   const [editableSteps, setEditableSteps] = useState<string[]>(candidateSteps);
 
   // Properly synchronize state when modal opens with new data
-  useEffect(() => {
+  // Use useLayoutEffect so the editableSteps state is synchronized
+  // with the incoming candidateSteps before the browser paints the modal.
+  // This prevents a brief flash of stale content when opening the dialog.
+  useLayoutEffect(() => {
     if (isOpen) {
       setEditableSteps([...candidateSteps]);
     }
