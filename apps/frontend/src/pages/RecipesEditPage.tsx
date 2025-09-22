@@ -70,7 +70,12 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     | { type: 'REMOVE_INSTRUCTION'; index: number }
     | { type: 'MOVE_INSTRUCTION_UP'; index: number }
     | { type: 'MOVE_INSTRUCTION_DOWN'; index: number }
-    | { type: 'INSERT_INSTRUCTIONS_AT'; index: number; steps: string[]; replaceEmpty?: boolean };
+    | {
+        type: 'INSERT_INSTRUCTIONS_AT';
+        index: number;
+        steps: string[];
+        replaceEmpty?: boolean;
+      };
 
   function reducer(state: FormState, action: Action): FormState {
     switch (action.type) {
@@ -140,21 +145,26 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
       case 'INSERT_INSTRUCTIONS_AT': {
         const next = [...state.instructions];
         const { index, steps, replaceEmpty } = action;
-        
+
         // Guard against invalid index
         if (index < 0 || index >= next.length) {
-          console.warn(`Invalid instruction index ${index}, appending steps instead`);
-          return { ...state, instructions: [...next, ...steps.filter(s => s.trim() !== '')] };
+          console.warn(
+            `Invalid instruction index ${index}, appending steps instead`
+          );
+          return {
+            ...state,
+            instructions: [...next, ...steps.filter((s) => s.trim() !== '')],
+          };
         }
-        
+
         // If replaceEmpty is true and target step is empty, replace it
         if (replaceEmpty && next[index].trim() === '') {
-          next.splice(index, 1, ...steps.filter(s => s.trim() !== ''));
+          next.splice(index, 1, ...steps.filter((s) => s.trim() !== ''));
         } else {
           // Insert steps after the target index
-          next.splice(index + 1, 0, ...steps.filter(s => s.trim() !== ''));
+          next.splice(index + 1, 0, ...steps.filter((s) => s.trim() !== ''));
         }
-        
+
         return { ...state, instructions: next };
       }
       default:
@@ -200,28 +210,40 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     handlePasteSplitCancel,
     closePasteSplitModal,
   } = usePasteSplit({
-    onInsertSteps: (targetIndex: number, steps: string[], replaceEmpty?: boolean) => {
+    onInsertSteps: (
+      targetIndex: number,
+      steps: string[],
+      replaceEmpty?: boolean
+    ) => {
       // Guard against invalid index with bounds checking
       if (targetIndex < 0 || targetIndex >= form.instructions.length) {
-        console.warn(`Invalid target index ${targetIndex}, appending steps instead`);
-        dispatch({ type: 'INSERT_INSTRUCTIONS_AT', index: form.instructions.length - 1, steps });
+        console.warn(
+          `Invalid target index ${targetIndex}, appending steps instead`
+        );
+        dispatch({
+          type: 'INSERT_INSTRUCTIONS_AT',
+          index: form.instructions.length - 1,
+          steps,
+        });
         return;
       }
-      
-      dispatch({ 
-        type: 'INSERT_INSTRUCTIONS_AT', 
-        index: targetIndex, 
-        steps, 
-        replaceEmpty 
+
+      dispatch({
+        type: 'INSERT_INSTRUCTIONS_AT',
+        index: targetIndex,
+        steps,
+        replaceEmpty,
       });
     },
     onReplaceStep: (targetIndex: number, content: string) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= form.instructions.length) {
-        console.warn(`Invalid target index ${targetIndex}, cannot replace step`);
+        console.warn(
+          `Invalid target index ${targetIndex}, cannot replace step`
+        );
         return;
       }
-      
+
       dispatch({ type: 'SET_INSTRUCTION', index: targetIndex, value: content });
     },
     getCurrentStepValue: (index: number) => {
@@ -609,23 +631,27 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                 </div>
 
                 {/* Constrained reading width for better typography */}
-                <div className="flex-1 mx-auto max-w-prose">
+                <div className="mx-auto max-w-prose flex-1">
                   <div className="space-y-1">
-                    <label 
-                      className="block text-sm font-medium text-gray-700" 
+                    <label
+                      className="block text-sm font-medium text-gray-700"
                       htmlFor={`step-${idx}`}
                     >
                       Step {idx + 1}
                     </label>
                     <textarea
                       id={`step-${idx}`}
-                      className="w-full rounded-md border-gray-300 px-3 py-2 resize-vertical whitespace-normal leading-relaxed text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="resize-vertical w-full rounded-md border-gray-300 px-3 py-2 text-base leading-relaxed whitespace-normal focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       value={step}
                       rows={3}
                       maxLength={1000} // reasonable limit for individual steps
                       onPaste={(e) => handleInstructionPaste(e, idx)}
                       onChange={(e) =>
-                        dispatch({ type: 'SET_INSTRUCTION', index: idx, value: e.target.value })
+                        dispatch({
+                          type: 'SET_INSTRUCTION',
+                          index: idx,
+                          value: e.target.value,
+                        })
                       }
                       placeholder={`Describe step ${idx + 1}...`}
                       aria-label={`Step ${idx + 1}`}
@@ -634,7 +660,9 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                 </div>
 
                 {form.instructions.length > 1 && (
-                  <div className="pt-7"> {/* Align with textarea top */}
+                  <div className="pt-7">
+                    {' '}
+                    {/* Align with textarea top */}
                     <Button
                       type="button"
                       variant="ghost"

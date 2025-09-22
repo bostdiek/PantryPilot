@@ -42,22 +42,24 @@ describe('pasteHelpers', () => {
 
   describe('splitSteps', () => {
     it('should split on blank lines', () => {
-      const text = 'Heat oil in pan\n\nAdd onions and cook until soft\n\nAdd garlic and stir';
+      const text =
+        'Heat oil in pan\n\nAdd onions and cook until soft\n\nAdd garlic and stir';
       const result = splitSteps(text);
       expect(result).toEqual([
         'Heat oil in pan',
         'Add onions and cook until soft',
-        'Add garlic and stir'
+        'Add garlic and stir',
       ]);
     });
 
     it('should split numbered lists with periods', () => {
-      const text = '1. Preheat oven to 350°F\n2. Mix dry ingredients\n3. Add wet ingredients';
+      const text =
+        '1. Preheat oven to 350°F\n2. Mix dry ingredients\n3. Add wet ingredients';
       const result = splitSteps(text);
       expect(result).toEqual([
         'Preheat oven to 350°F',
         'Mix dry ingredients',
-        'Add wet ingredients'
+        'Add wet ingredients',
       ]);
     });
 
@@ -67,44 +69,36 @@ describe('pasteHelpers', () => {
       expect(result).toEqual([
         'Heat oil',
         'Add vegetables',
-        'Season with salt'
+        'Season with salt',
       ]);
     });
 
     it('should handle multiline numbered steps', () => {
-      const text = '1. Heat oil in a large pan\nover medium heat\n2. Add chopped onions\nand cook until translucent';
+      const text =
+        '1. Heat oil in a large pan\nover medium heat\n2. Add chopped onions\nand cook until translucent';
       const result = splitSteps(text);
       expect(result).toEqual([
         'Heat oil in a large pan over medium heat',
-        'Add chopped onions and cook until translucent'
+        'Add chopped onions and cook until translucent',
       ]);
     });
 
     it('should remove leading/trailing whitespace', () => {
       const text = '  \n  Step 1 content  \n\n  Step 2 content  \n  ';
       const result = splitSteps(text);
-      expect(result).toEqual([
-        'Step 1 content',
-        'Step 2 content'
-      ]);
+      expect(result).toEqual(['Step 1 content', 'Step 2 content']);
     });
 
     it('should collapse multiple spaces', () => {
       const text = 'Mix    all     ingredients\n\nBake   for    30   minutes';
       const result = splitSteps(text);
-      expect(result).toEqual([
-        'Mix all ingredients',
-        'Bake for 30 minutes'
-      ]);
+      expect(result).toEqual(['Mix all ingredients', 'Bake for 30 minutes']);
     });
 
     it('should filter out empty steps', () => {
       const text = 'Step 1\n\n\n\nStep 2\n\n';
       const result = splitSteps(text);
-      expect(result).toEqual([
-        'Step 1',
-        'Step 2'
-      ]);
+      expect(result).toEqual(['Step 1', 'Step 2']);
     });
 
     it('should return single step if no clear separators found', () => {
@@ -114,12 +108,13 @@ describe('pasteHelpers', () => {
     });
 
     it('should handle complex numbered list with spacing', () => {
-      const text = '1.  First step with extra spacing\n 2. Second step\n  3.   Third step   ';
+      const text =
+        '1.  First step with extra spacing\n 2. Second step\n  3.   Third step   ';
       const result = splitSteps(text);
       expect(result).toEqual([
         'First step with extra spacing',
         'Second step',
-        'Third step'
+        'Third step',
       ]);
     });
 
@@ -136,7 +131,10 @@ describe('pasteHelpers', () => {
 
     it('should limit number of steps to prevent UI freezing', () => {
       // Create content that would result in > 50 steps
-      const manySteps = Array.from({ length: 60 }, (_, i) => `${i + 1}. Step ${i + 1}`).join('\n');
+      const manySteps = Array.from(
+        { length: 60 },
+        (_, i) => `${i + 1}. Step ${i + 1}`
+      ).join('\n');
       const result = splitSteps(manySteps);
       expect(result.length).toBeLessThanOrEqual(50);
       expect(result[0]).toBe('Step 1');

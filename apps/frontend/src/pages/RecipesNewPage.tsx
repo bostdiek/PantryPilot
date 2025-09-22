@@ -76,33 +76,52 @@ const RecipesNewPage: FC = () => {
     handlePasteSplitCancel,
     closePasteSplitModal,
   } = usePasteSplit({
-    onInsertSteps: (targetIndex: number, steps: string[], replaceEmpty?: boolean) => {
+    onInsertSteps: (
+      targetIndex: number,
+      steps: string[],
+      replaceEmpty?: boolean
+    ) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= instructions.length) {
-        console.warn(`Invalid target index ${targetIndex}, appending steps instead`);
-        setInstructions(prev => [...prev, ...steps.filter(s => s.trim() !== '')]);
+        console.warn(
+          `Invalid target index ${targetIndex}, appending steps instead`
+        );
+        setInstructions((prev) => [
+          ...prev,
+          ...steps.filter((s) => s.trim() !== ''),
+        ]);
         return;
       }
-      
+
       const newInstructions = [...instructions];
-      
+
       // If replaceEmpty is true and target step is empty, replace it
       if (replaceEmpty && newInstructions[targetIndex].trim() === '') {
-        newInstructions.splice(targetIndex, 1, ...steps.filter(s => s.trim() !== ''));
+        newInstructions.splice(
+          targetIndex,
+          1,
+          ...steps.filter((s) => s.trim() !== '')
+        );
       } else {
         // Insert steps after the current index
-        newInstructions.splice(targetIndex + 1, 0, ...steps.filter(s => s.trim() !== ''));
+        newInstructions.splice(
+          targetIndex + 1,
+          0,
+          ...steps.filter((s) => s.trim() !== '')
+        );
       }
-      
+
       setInstructions(newInstructions);
     },
     onReplaceStep: (targetIndex: number, content: string) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= instructions.length) {
-        console.warn(`Invalid target index ${targetIndex}, cannot replace step`);
+        console.warn(
+          `Invalid target index ${targetIndex}, cannot replace step`
+        );
         return;
       }
-      
+
       const newInstructions = [...instructions];
       newInstructions[targetIndex] = content;
       setInstructions(newInstructions);
@@ -518,19 +537,19 @@ const RecipesNewPage: FC = () => {
                     </svg>
                   </button>
                 </div>
-                
+
                 {/* Constrained reading width for better typography */}
-                <div className="flex-1 mx-auto max-w-prose">
+                <div className="mx-auto max-w-prose flex-1">
                   <div className="space-y-1">
-                    <label 
-                      className="block text-sm font-medium text-gray-700" 
+                    <label
+                      className="block text-sm font-medium text-gray-700"
                       htmlFor={`step-${idx}`}
                     >
                       Step {idx + 1}
                     </label>
                     <textarea
                       id={`step-${idx}`}
-                      className="w-full rounded-md border-gray-300 px-3 py-2 resize-vertical whitespace-normal leading-relaxed text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="resize-vertical w-full rounded-md border-gray-300 px-3 py-2 text-base leading-relaxed whitespace-normal focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                       value={step}
                       rows={3}
                       maxLength={1000} // reasonable limit for individual steps
@@ -547,7 +566,9 @@ const RecipesNewPage: FC = () => {
                 </div>
 
                 {instructions.length > 1 && (
-                  <div className="pt-7"> {/* Align with textarea top */}
+                  <div className="pt-7">
+                    {' '}
+                    {/* Align with textarea top */}
                     <Button
                       type="button"
                       variant="ghost"

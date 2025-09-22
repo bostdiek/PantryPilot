@@ -15,7 +15,9 @@ const MAX_STEPS = 50;
 export function looksMultiStep(text: string): boolean {
   // Performance guard: skip detection for very large content
   if (text.length > MAX_PASTE_SIZE) {
-    console.warn(`Paste content too large (${text.length} chars), skipping multi-step detection`);
+    console.warn(
+      `Paste content too large (${text.length} chars), skipping multi-step detection`
+    );
     return false;
   }
 
@@ -47,7 +49,9 @@ export function looksMultiStep(text: string): boolean {
 export function splitSteps(raw: string): string[] {
   // Performance guard: return single step for very large content
   if (raw.length > MAX_PASTE_SIZE) {
-    console.warn(`Paste content too large (${raw.length} chars), treating as single step`);
+    console.warn(
+      `Paste content too large (${raw.length} chars), treating as single step`
+    );
     return [raw.trim()];
   }
 
@@ -100,11 +104,15 @@ export function splitSteps(raw: string): string[] {
   }
 
   // Clean up candidates: collapse duplicate spaces and trim
-  const cleanedSteps = candidates.map((step) => step.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  
+  const cleanedSteps = candidates
+    .map((step) => step.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+
   // Performance guard: limit number of steps to prevent UI freezing
   if (cleanedSteps.length > MAX_STEPS) {
-    console.warn(`Too many steps detected (${cleanedSteps.length}), limiting to ${MAX_STEPS}`);
+    console.warn(
+      `Too many steps detected (${cleanedSteps.length}), limiting to ${MAX_STEPS}`
+    );
     return cleanedSteps.slice(0, MAX_STEPS);
   }
 

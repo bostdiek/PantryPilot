@@ -67,15 +67,16 @@ export function PasteSplitModal({
     >
       <div className="space-y-4">
         <div aria-live="polite" className="text-sm text-gray-600">
-          Detected {editableSteps.length} step{editableSteps.length !== 1 ? 's' : ''}. 
-          You can edit or remove steps before importing.
+          Detected {editableSteps.length} step
+          {editableSteps.length !== 1 ? 's' : ''}. You can edit or remove steps
+          before importing.
         </div>
 
-        <div className="space-y-3 max-h-80 overflow-y-auto">
+        <div className="max-h-80 space-y-3 overflow-y-auto">
           {editableSteps.map((step, index) => (
             <div key={index} className="space-y-1">
               <div className="flex items-center justify-between">
-                <label 
+                <label
                   className="block text-sm font-medium text-gray-700"
                   htmlFor={`step-preview-${index}`}
                 >
@@ -97,7 +98,7 @@ export function PasteSplitModal({
               <div className="mx-auto max-w-prose">
                 <textarea
                   id={`step-preview-${index}`}
-                  className="w-full rounded-md border-gray-300 px-3 py-2 resize-vertical whitespace-normal leading-relaxed text-base"
+                  className="resize-vertical w-full rounded-md border-gray-300 px-3 py-2 text-base leading-relaxed whitespace-normal"
                   value={step}
                   onChange={(e) => handleStepChange(index, e.target.value)}
                   rows={3}
@@ -108,30 +109,28 @@ export function PasteSplitModal({
           ))}
         </div>
 
-        <div className="flex items-center justify-between space-x-2 pt-4 border-t">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleCancel}
-          >
+        <div className="flex items-center justify-between space-x-2 border-t pt-4">
+          <Button type="button" variant="ghost" onClick={handleCancel}>
             Cancel
           </Button>
-          
+
           <div className="flex space-x-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePasteSingle}
-            >
+            <Button type="button" variant="outline" onClick={handlePasteSingle}>
               Paste as Single Step
             </Button>
             <Button
               type="button"
               variant="primary"
               onClick={handleConfirmMultiple}
-              disabled={editableSteps.filter(step => step.trim() !== '').length === 0}
+              disabled={
+                editableSteps.filter((step) => step.trim() !== '').length === 0
+              }
             >
-              Import {editableSteps.filter(step => step.trim() !== '').length} Step{editableSteps.filter(step => step.trim() !== '').length !== 1 ? 's' : ''}
+              Import {editableSteps.filter((step) => step.trim() !== '').length}{' '}
+              Step
+              {editableSteps.filter((step) => step.trim() !== '').length !== 1
+                ? 's'
+                : ''}
             </Button>
           </div>
         </div>
