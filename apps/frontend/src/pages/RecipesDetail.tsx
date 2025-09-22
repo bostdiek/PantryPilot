@@ -243,20 +243,19 @@ const RecipesDetail: FC = () => {
               >
                 Ingredients
               </h2>
-              <ul className="space-y-2 list-disc pl-5" role="list">
+              <ul className="space-y-2 list-disc pl-5 marker:text-orange-600">
                 {recipe.ingredients.map((ingredient, index) => (
                   <li
                     key={ingredient.id || index}
                     className="rounded-lg p-3 transition-colors hover:bg-gray-50"
                   >
-                    <p className="text-gray-900">
-                      {ingredient.quantity_value &&
-                        ingredient.quantity_unit && (
-                          <span className="mr-2 font-semibold text-orange-600">
-                            {ingredient.quantity_value}{' '}
-                            {ingredient.quantity_unit}
-                          </span>
-                        )}
+                    <p className="text-gray-900 break-words">
+                      {ingredient.quantity_value && (
+                        <span className="mr-2 font-semibold text-orange-600">
+                          {ingredient.quantity_value}
+                          {ingredient.quantity_unit ? ` ${ingredient.quantity_unit}` : ''}
+                        </span>
+                      )}
                       <span>{ingredient.name}</span>
                       {ingredient.prep?.method && (
                         <span className="ml-1 text-gray-600">
