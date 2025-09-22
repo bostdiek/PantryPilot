@@ -33,6 +33,7 @@ import {
 } from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
+import { DaySelectionDialog } from '../components/recipes/DaySelectionDialog';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -42,8 +43,10 @@ import DragHandleIcon from '../components/ui/icons/drag-handle.svg?react';
 import XIcon from '../components/ui/icons/x.svg?react';
 import { Input } from '../components/ui/Input';
 import { Select, type SelectOption } from '../components/ui/Select';
+import { useIsMobile } from '../hooks/useMediaQuery';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
+import type { DayOption } from '../types/DayOption';
 import type { Recipe, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
 
 function toYyyyMmDd(d: Date): string {
@@ -61,6 +64,7 @@ const MealPlanPage: FC = () => {
     loadWeek,
   } = useMealPlanStore();
   const today = useMemo(() => new Date(), []);
+  const isMobile = useIsMobile();
 
   // Week helpers
   function startOfSundayWeek(d: Date): Date {
@@ -160,9 +164,22 @@ const MealPlanPage: FC = () => {
   );
   const [previewEntryId, setPreviewEntryId] = useState<string | null>(null);
 
+  // Day selection dialog state (for mobile)
+  const [daySelectionOpen, setDaySelectionOpen] = useState(false);
+  const [selectedRecipeForDay, setSelectedRecipeForDay] =
+    useState<Recipe | null>(null);
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+      // Disable pointer sensor on mobile to prevent conflicts with scrolling
+      disabled: isMobile,
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      // Disable keyboard sensor on mobile for consistency
+      disabled: isMobile,
+    })
   );
 
   const difficultyOptions: SelectOption[] = [
@@ -267,6 +284,32 @@ const MealPlanPage: FC = () => {
         // Don't close modal on error so user can try again
       }
     }
+  }
+
+  // Mobile day selection functions
+  function handleMobileAddRecipe(recipe: Recipe) {
+    setSelectedRecipeForDay(recipe);
+    setDaySelectionOpen(true);
+  }
+
+  async function handleDaySelect(_dayOfWeek: string, date: string) {
+    if (!selectedRecipeForDay) return;
+
+    const nextIndex = getNextOrderIndex(date);
+    try {
+      await addEntry({
+        plannedForDate: date,
+        recipeId: selectedRecipeForDay.id,
+        orderIndex: nextIndex,
+      });
+    } catch (error) {
+      console.error('Failed to add recipe to day:', error);
+    }
+  }
+
+  function handleCloseDaySelection() {
+    setDaySelectionOpen(false);
+    setSelectedRecipeForDay(null);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -475,19 +518,40 @@ const MealPlanPage: FC = () => {
     const { attributes, listeners, setNodeRef } = useDraggable({
       id: `recipe-${recipe.id}`,
       data: { type: 'recipe', recipeId: recipe.id },
+      disabled: isMobile, // Disable dragging on mobile
     });
+
     return (
       <Card
         ref={setNodeRef}
-        className="cursor-grab p-3 select-none"
-        {...listeners}
-        {...attributes}
+        className={`p-3 select-none ${!isMobile ? 'cursor-grab' : ''}`}
+        {...(!isMobile ? listeners : {})}
+        {...(!isMobile ? attributes : {})}
       >
-        <div className="mb-1 text-base font-medium">{recipe.title}</div>
-        <div className="mb-2 text-xs text-gray-600">
-          {recipe.total_time_minutes} min • {recipe.difficulty}
+        <div className="flex items-start justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1 text-base font-medium">{recipe.title}</div>
+            <div className="mb-2 text-xs text-gray-600">
+              {recipe.total_time_minutes} min • {recipe.difficulty}
+            </div>
+            <div className="mt-1 text-xs text-gray-500">
+              {isMobile
+                ? 'Tap "Add" to add to a day'
+                : 'Drag to a day to add or use "Add" button'}
+            </div>
+          </div>
+
+          {/* Add Button - available on both mobile and desktop */}
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => handleMobileAddRecipe(recipe)}
+            className="ml-2 shrink-0"
+            aria-label={`Add ${recipe.title} to meal plan`}
+          >
+            Add
+          </Button>
         </div>
-        <div className="mt-1 text-xs text-gray-500">Drag to a day to add</div>
       </Card>
     );
   }
@@ -991,6 +1055,23 @@ const MealPlanPage: FC = () => {
         recipe={previewRecipe}
         dateContext={previewDateContext || undefined}
         onRemoveFromDay={handleRemoveFromDay}
+      />
+
+      {/* Day Selection Dialog for Mobile */}
+      <DaySelectionDialog
+        isOpen={daySelectionOpen}
+        onClose={handleCloseDaySelection}
+        onDaySelect={handleDaySelect}
+        recipeTitle={selectedRecipeForDay?.title || ''}
+        availableDays={
+          currentWeek?.days.map(
+            (day): DayOption => ({
+              dayOfWeek: day.dayOfWeek,
+              date: day.date,
+              isToday: day.date === toYyyyMmDd(today),
+            })
+          ) || []
+        }
       />
     </Container>
   );
