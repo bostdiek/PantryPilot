@@ -3,10 +3,10 @@ import { useSyncExternalStore } from 'react';
 /**
  * Custom hook to detect media query matches
  * Useful for responsive behavior in components
- * 
+ *
  * @param query - The media query string to test
  * @returns boolean indicating if the media query matches
- * 
+ *
  * @example
  * ```tsx
  * const isMobile = useMediaQuery('(max-width: 767px)');
