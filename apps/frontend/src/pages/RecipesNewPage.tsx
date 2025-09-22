@@ -1,4 +1,4 @@
-import { useState, type FC, type FormEvent } from 'react';
+import { useState, type FC, type FormEvent, type ClipboardEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -19,6 +19,8 @@ import {
 } from '../types/Recipe';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
+import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
+import { looksMultiStep, splitSteps } from '../utils/pasteHelpers';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -65,9 +67,74 @@ const RecipesNewPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { addRecipe } = useRecipeStore();
 
+  // Paste splitting modal state
+  const [pasteSplitModal, setPasteSplitModal] = useState<{
+    isOpen: boolean;
+    targetIndex: number;
+    candidateSteps: string[];
+  }>({
+    isOpen: false,
+    targetIndex: -1,
+    candidateSteps: [],
+  });
+
   // Use the custom hook instead of direct useEffect
   const { isApiOnline } = useApiHealth();
   const apiUnavailable = !isApiOnline;
+
+  // Paste handling for instructions
+  const handleInstructionPaste = (e: ClipboardEvent<HTMLTextAreaElement>, idx: number) => {
+    const text = e.clipboardData.getData('text');
+    
+    if (!looksMultiStep(text)) {
+      // Allow normal paste for single-step content
+      return;
+    }
+
+    // Prevent default paste behavior
+    e.preventDefault();
+    
+    const steps = splitSteps(text);
+    if (steps.length <= 1) {
+      // If splitting didn't result in multiple steps, allow normal paste
+      const textarea = e.target as HTMLTextAreaElement;
+      const currentValue = textarea.value;
+      const selectionStart = textarea.selectionStart;
+      const selectionEnd = textarea.selectionEnd;
+      
+      const newValue = currentValue.substring(0, selectionStart) + text + currentValue.substring(selectionEnd);
+      const list = [...instructions];
+      list[idx] = newValue;
+      setInstructions(list);
+      return;
+    }
+
+    // Open modal for multi-step confirmation
+    setPasteSplitModal({
+      isOpen: true,
+      targetIndex: idx,
+      candidateSteps: steps,
+    });
+  };
+
+  const handlePasteSplitConfirm = (steps: string[]) => {
+    const newInstructions = [...instructions];
+    const targetIdx = pasteSplitModal.targetIndex;
+    
+    // If the target step is empty, replace it with the first step and insert the rest
+    if (newInstructions[targetIdx].trim() === '') {
+      newInstructions.splice(targetIdx, 1, ...steps);
+    } else {
+      // Insert steps after the current index
+      newInstructions.splice(targetIdx + 1, 0, ...steps);
+    }
+    
+    setInstructions(newInstructions);
+  };
+
+  const handlePasteSplitCancel = () => {
+    // Do nothing - user cancelled the split
+  };
 
   // Check if there are unsaved changes
   const hasUnsavedChanges =
@@ -418,8 +485,8 @@ const RecipesNewPage: FC = () => {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Instructions</h2>
             {instructions.map((step, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
-                <div className="flex flex-col space-y-1">
+              <div key={idx} className="flex items-start space-x-2">
+                <div className="flex flex-col space-y-1 pt-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -471,31 +538,50 @@ const RecipesNewPage: FC = () => {
                     </svg>
                   </button>
                 </div>
-                <Input
-                  className="flex-1"
-                  value={step}
-                  onChange={(v) => {
-                    const list = [...instructions];
-                    list[idx] = v;
-                    setInstructions(list);
-                  }}
-                  placeholder={`Step ${idx + 1}`}
-                  aria-label={`Step ${idx + 1}`}
-                />
+                
+                {/* Constrained reading width for better typography */}
+                <div className="flex-1 mx-auto max-w-prose">
+                  <div className="space-y-1">
+                    <label 
+                      className="block text-sm font-medium text-gray-700" 
+                      htmlFor={`step-${idx}`}
+                    >
+                      Step {idx + 1}
+                    </label>
+                    <textarea
+                      id={`step-${idx}`}
+                      className="w-full rounded-md border-gray-300 px-3 py-2 resize-vertical whitespace-normal leading-relaxed text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={step}
+                      rows={3}
+                      maxLength={1000} // reasonable limit for individual steps
+                      onPaste={(e) => handleInstructionPaste(e, idx)}
+                      onChange={(e) => {
+                        const list = [...instructions];
+                        list[idx] = e.target.value;
+                        setInstructions(list);
+                      }}
+                      placeholder={`Describe step ${idx + 1}...`}
+                      aria-label={`Step ${idx + 1}`}
+                    />
+                  </div>
+                </div>
+
                 {instructions.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const list = [...instructions];
-                      list.splice(idx, 1);
-                      setInstructions(list);
-                    }}
-                    aria-label={`Remove step ${idx + 1}`}
-                  >
-                    Remove
-                  </Button>
+                  <div className="pt-7"> {/* Align with textarea top */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        const list = [...instructions];
+                        list.splice(idx, 1);
+                        setInstructions(list);
+                      }}
+                      aria-label={`Remove step ${idx + 1}`}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
@@ -536,6 +622,15 @@ const RecipesNewPage: FC = () => {
             </Button>
           </div>
         </form>
+
+        {/* Paste Split Modal */}
+        <PasteSplitModal
+          isOpen={pasteSplitModal.isOpen}
+          onClose={() => setPasteSplitModal(prev => ({ ...prev, isOpen: false }))}
+          onConfirm={handlePasteSplitConfirm}
+          onCancel={handlePasteSplitCancel}
+          candidateSteps={pasteSplitModal.candidateSteps}
+        />
       </Card>
     </Container>
   );

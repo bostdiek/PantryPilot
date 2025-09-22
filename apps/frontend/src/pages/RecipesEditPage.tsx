@@ -1,4 +1,4 @@
-import { useReducer, useState, type FC, type FormEvent } from 'react';
+import { useReducer, useState, type FC, type FormEvent, type ClipboardEvent } from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -22,6 +22,8 @@ import {
   mapIngredientsForApi,
   normalizeIngredientsForForm,
 } from '../utils/ingredients';
+import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
+import { looksMultiStep, splitSteps } from '../utils/pasteHelpers';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -167,6 +169,80 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Paste splitting modal state
+  const [pasteSplitModal, setPasteSplitModal] = useState<{
+    isOpen: boolean;
+    targetIndex: number;
+    candidateSteps: string[];
+  }>({
+    isOpen: false,
+    targetIndex: -1,
+    candidateSteps: [],
+  });
+
+  // Paste handling for instructions
+  const handleInstructionPaste = (e: ClipboardEvent<HTMLTextAreaElement>, idx: number) => {
+    const text = e.clipboardData.getData('text');
+    
+    if (!looksMultiStep(text)) {
+      // Allow normal paste for single-step content
+      return;
+    }
+
+    // Prevent default paste behavior
+    e.preventDefault();
+    
+    const steps = splitSteps(text);
+    if (steps.length <= 1) {
+      // If splitting didn't result in multiple steps, allow normal paste
+      const textarea = e.target as HTMLTextAreaElement;
+      const currentValue = textarea.value;
+      const selectionStart = textarea.selectionStart;
+      const selectionEnd = textarea.selectionEnd;
+      
+      const newValue = currentValue.substring(0, selectionStart) + text + currentValue.substring(selectionEnd);
+      dispatch({ type: 'SET_INSTRUCTION', index: idx, value: newValue });
+      return;
+    }
+
+    // Open modal for multi-step confirmation
+    setPasteSplitModal({
+      isOpen: true,
+      targetIndex: idx,
+      candidateSteps: steps,
+    });
+  };
+
+  const handlePasteSplitConfirm = (steps: string[]) => {
+    const targetIdx = pasteSplitModal.targetIndex;
+    
+    // If the target step is empty, replace it with the first step and insert the rest
+    if (form.instructions[targetIdx].trim() === '') {
+      // Replace the empty step with the first new step
+      dispatch({ type: 'SET_INSTRUCTION', index: targetIdx, value: steps[0] });
+      // Insert remaining steps after
+      for (let i = 1; i < steps.length; i++) {
+        dispatch({ type: 'ADD_INSTRUCTION' });
+        // We need to set the instruction value after adding
+        setTimeout(() => {
+          dispatch({ type: 'SET_INSTRUCTION', index: targetIdx + i, value: steps[i] });
+        }, 0);
+      }
+    } else {
+      // Insert steps after the current index
+      for (let i = 0; i < steps.length; i++) {
+        dispatch({ type: 'ADD_INSTRUCTION' });
+        setTimeout(() => {
+          dispatch({ type: 'SET_INSTRUCTION', index: targetIdx + 1 + i, value: steps[i] });
+        }, 0);
+      }
+    }
+  };
+
+  const handlePasteSplitCancel = () => {
+    // Do nothing - user cancelled the split
+  };
 
   // Check if there are unsaved changes by comparing current form state with original recipe
   const hasUnsavedChanges =
@@ -501,8 +577,8 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Instructions</h2>
             {form.instructions.map((step, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
-                <div className="flex flex-col space-y-1">
+              <div key={idx} className="flex items-start space-x-2">
+                <div className="flex flex-col space-y-1 pt-2">
                   <button
                     type="button"
                     onClick={() =>
@@ -546,27 +622,46 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                     </svg>
                   </button>
                 </div>
-                <Input
-                  className="flex-1"
-                  value={step}
-                  onChange={(v) =>
-                    dispatch({ type: 'SET_INSTRUCTION', index: idx, value: v })
-                  }
-                  placeholder={`Step ${idx + 1}`}
-                  aria-label={`Step ${idx + 1}`}
-                />
+
+                {/* Constrained reading width for better typography */}
+                <div className="flex-1 mx-auto max-w-prose">
+                  <div className="space-y-1">
+                    <label 
+                      className="block text-sm font-medium text-gray-700" 
+                      htmlFor={`step-${idx}`}
+                    >
+                      Step {idx + 1}
+                    </label>
+                    <textarea
+                      id={`step-${idx}`}
+                      className="w-full rounded-md border-gray-300 px-3 py-2 resize-vertical whitespace-normal leading-relaxed text-base focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      value={step}
+                      rows={3}
+                      maxLength={1000} // reasonable limit for individual steps
+                      onPaste={(e) => handleInstructionPaste(e, idx)}
+                      onChange={(e) =>
+                        dispatch({ type: 'SET_INSTRUCTION', index: idx, value: e.target.value })
+                      }
+                      placeholder={`Describe step ${idx + 1}...`}
+                      aria-label={`Step ${idx + 1}`}
+                    />
+                  </div>
+                </div>
+
                 {form.instructions.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
-                    }
-                    aria-label={`Remove step ${idx + 1}`}
-                  >
-                    Remove
-                  </Button>
+                  <div className="pt-7"> {/* Align with textarea top */}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
+                      }
+                      aria-label={`Remove step ${idx + 1}`}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 )}
               </div>
             ))}
@@ -607,6 +702,15 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
             </Button>
           </div>
         </form>
+
+        {/* Paste Split Modal */}
+        <PasteSplitModal
+          isOpen={pasteSplitModal.isOpen}
+          onClose={() => setPasteSplitModal(prev => ({ ...prev, isOpen: false }))}
+          onConfirm={handlePasteSplitConfirm}
+          onCancel={handlePasteSplitCancel}
+          candidateSteps={pasteSplitModal.candidateSteps}
+        />
       </Card>
     </Container>
   );
