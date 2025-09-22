@@ -1,6 +1,12 @@
 import { renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { useMediaQuery, useIsMobile } from '../useMediaQuery';
+import { 
+  useMediaQuery, 
+  useIsMobile, 
+  useIsTablet, 
+  useIsDesktop,
+  useIsTouchDevice 
+} from '../useMediaQuery';
 
 // Mock window.matchMedia
 const mockMatchMedia = vi.fn();
@@ -133,5 +139,53 @@ describe('useIsMobile', () => {
     expect(mockMediaQuery.removeListener).toHaveBeenCalledWith(
       expect.any(Function)
     );
+  });
+});
+
+describe('useIsTablet', () => {
+  it('should use correct tablet breakpoint query', () => {
+    const mockMediaQuery = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    mockMatchMedia.mockReturnValue(mockMediaQuery);
+
+    const { result } = renderHook(() => useIsTablet());
+
+    expect(result.current).toBe(true);
+    expect(mockMatchMedia).toHaveBeenCalledWith('(min-width: 768px) and (max-width: 1024px)');
+  });
+});
+
+describe('useIsDesktop', () => {
+  it('should use correct desktop breakpoint query', () => {
+    const mockMediaQuery = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    mockMatchMedia.mockReturnValue(mockMediaQuery);
+
+    const { result } = renderHook(() => useIsDesktop());
+
+    expect(result.current).toBe(true);
+    expect(mockMatchMedia).toHaveBeenCalledWith('(min-width: 1025px)');
+  });
+});
+
+describe('useIsTouchDevice', () => {
+  it('should use correct touch device query', () => {
+    const mockMediaQuery = {
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    };
+    mockMatchMedia.mockReturnValue(mockMediaQuery);
+
+    const { result } = renderHook(() => useIsTouchDevice());
+
+    expect(result.current).toBe(true);
+    expect(mockMatchMedia).toHaveBeenCalledWith('(pointer: coarse)');
   });
 });
