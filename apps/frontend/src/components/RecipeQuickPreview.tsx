@@ -67,7 +67,7 @@ export function RecipeQuickPreview({
 
   // Enhanced mobile/tablet touch handling (disabled in test environments)
   const isTestEnvironment = typeof window !== 'undefined' && 
-    (window.location?.href?.includes('vitest') || process.env.NODE_ENV === 'test');
+    (window.location?.href?.includes('vitest') || import.meta.env.MODE === 'test');
   
   const modalRef = useClickOutside<HTMLDivElement>(isTestEnvironment ? () => {} : handleClose);
   const swipeRef = useSwipeGesture<HTMLDivElement>({
@@ -178,7 +178,7 @@ export function RecipeQuickPreview({
                   onViewFull={handleViewFullClick}
                   onRemove={onRemoveFromDay ? handleRemove : undefined}
                   onClose={onClose}
-                  isMobile={false}
+                  isMobile={isMobile}
                   isTablet={isTablet}
                 />
               </DialogPanel>
@@ -211,7 +211,7 @@ export function RecipeQuickPreview({
                   onViewFull={handleViewFullClick}
                   onRemove={onRemoveFromDay ? handleRemove : undefined}
                   onClose={onClose}
-                  isMobile={true}
+                  isMobile={isMobile}
                   isTablet={isTablet}
                 />
               </DialogPanel>

@@ -1,8 +1,29 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { RecipeCard } from '../RecipeCard';
 import type { Recipe } from '../../../types/Recipe';
+
+// Mock window.matchMedia for media query hooks
+const mockMatchMedia = vi.fn();
+beforeEach(() => {
+  mockMatchMedia.mockImplementation((query) => ({
+    matches: false, // Default to desktop/non-mobile
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: mockMatchMedia,
+  });
+});
 
 const mockRecipe: Recipe = {
   id: '1',
@@ -97,5 +118,40 @@ describe('RecipeCard', () => {
 
     // Verify it has the proper styling classes for top positioning
     expect(categoryBadge.closest('.mb-3')).toBeInTheDocument();
+  });
+
+  it('renders preview button when enablePreview is true', async () => {
+    const mockOnPreview = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <MemoryRouter>
+        <RecipeCard 
+          recipe={mockRecipe} 
+          enablePreview={true}
+          onPreview={mockOnPreview}
+        />
+      </MemoryRouter>
+    );
+
+    // Preview button should be present
+    const previewButton = screen.getByRole('button', { name: /preview test recipe/i });
+    expect(previewButton).toBeInTheDocument();
+
+    // Click preview button and verify callback
+    await user.click(previewButton);
+    expect(mockOnPreview).toHaveBeenCalledWith(mockRecipe);
+  });
+
+  it('does not render preview button when enablePreview is false or undefined', () => {
+    render(
+      <MemoryRouter>
+        <RecipeCard recipe={mockRecipe} />
+      </MemoryRouter>
+    );
+
+    // Preview button should not be present
+    const previewButton = screen.queryByRole('button', { name: /preview/i });
+    expect(previewButton).not.toBeInTheDocument();
   });
 });
