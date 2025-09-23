@@ -88,7 +88,7 @@ If real secrets are detected:
    ```python
    # Bad
    api_key = "sk-1234567890abcdef"
-   
+
    # Good
    api_key = os.getenv("API_KEY")
    ```
@@ -139,11 +139,11 @@ If CI fails due to secret detection:
    ```bash
    # Run scan to reproduce the issue
    make secrets-scan
-   
+
    # Fix the detected secrets
    # Update baseline if needed
    make secrets-update
-   
+
    # Commit and push the fix
    git add .secrets.baseline
    git commit -m "Update secrets baseline"
@@ -249,7 +249,7 @@ curl -H "Authorization: Bearer YOUR_API_KEY" ...
    ```bash
    # Update pre-commit hooks
    pre-commit autoupdate
-   
+
    # Clear cache if needed
    pre-commit clean
    pre-commit install

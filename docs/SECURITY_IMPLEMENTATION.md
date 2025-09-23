@@ -73,7 +73,7 @@ add_header Pragma "no-cache" always;
 ### Deployment Options Covered
 1. **Nginx TLS Termination** - Direct certificate management
 2. **Let's Encrypt/Certbot** - Automated certificate management
-3. **Cloudflare TLS** - Cloud-based TLS termination  
+3. **Cloudflare TLS** - Cloud-based TLS termination
 4. **External Reverse Proxy** - AWS ALB, nginx proxy, etc.
 
 ### Management Tools

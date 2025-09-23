@@ -29,7 +29,7 @@ This document outlines the immediate steps to take when secrets (API keys, passw
   ```bash
   # Generate new SECRET_KEY for JWT
   openssl rand -hex 32
-  
+
   # Generate new database password
   openssl rand -base64 32
   ```

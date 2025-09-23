@@ -116,7 +116,7 @@ PantryPilot includes baseline security configurations for small private deployme
 
 ### Security Headers (Nginx)
 - **Content Security Policy**: Prevents XSS attacks and restricts resource loading
-- **HSTS**: Forces HTTPS connections when enabled  
+- **HSTS**: Forces HTTPS connections when enabled
 - **X-Content-Type-Options**: Prevents MIME sniffing attacks
 - **Referrer-Policy**: Controls referrer information disclosure
 - **Frame-ancestors**: Prevents clickjacking attacks
