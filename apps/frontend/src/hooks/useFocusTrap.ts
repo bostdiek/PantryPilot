@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, type RefObject } from 'react';
+import { useCallback, useRef, useEffect, useLayoutEffect, type RefObject } from 'react';
 
 interface FocusTrapOptions {
   active?: boolean;
@@ -72,7 +72,7 @@ export function useFocusTrap<T extends HTMLElement>(
     }
   }, [getFocusableElements]);
 
-  // Set initial focus
+  // Set initial focus using useLayoutEffect to avoid flicker
   const setInitialFocus = useCallback(() => {
     const element = ref.current;
     if (!element) return;
@@ -89,10 +89,16 @@ export function useFocusTrap<T extends HTMLElement>(
     }
 
     if (targetElement) {
-      // Use setTimeout to ensure the element is visible before focusing
-      setTimeout(() => targetElement?.focus(), 0);
+      targetElement.focus();
     }
   }, [initialFocus, getFocusableElements]);
+
+  // Use useLayoutEffect for initial focus to prevent flicker
+  useLayoutEffect(() => {
+    if (active) {
+      setInitialFocus();
+    }
+  }, [active, setInitialFocus]);
 
   useEffect(() => {
     if (!active) return;
@@ -102,7 +108,6 @@ export function useFocusTrap<T extends HTMLElement>(
 
     // Add event listener
     document.addEventListener('keydown', handleKeyDown);
-    setInitialFocus();
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
@@ -116,7 +121,7 @@ export function useFocusTrap<T extends HTMLElement>(
         }, 0);
       }
     };
-  }, [active, handleKeyDown, setInitialFocus, restoreFocus]);
+  }, [active, handleKeyDown, restoreFocus]);
 
   return ref;
 }

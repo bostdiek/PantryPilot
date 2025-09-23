@@ -69,7 +69,10 @@ export function RecipeQuickPreview({
   const isTestEnvironment = typeof window !== 'undefined' && 
     (window.location?.href?.includes('vitest') || import.meta.env.MODE === 'test');
   
-  const modalRef = useClickOutside<HTMLDivElement>(isTestEnvironment ? () => {} : handleClose);
+  const modalRef = useClickOutside<HTMLDivElement>(
+    isTestEnvironment ? () => {} : handleClose, 
+    isOpen && !isTestEnvironment
+  );
   const swipeRef = useSwipeGesture<HTMLDivElement>({
     onSwipeDown: isTestEnvironment ? () => {} : handleClose,
     threshold: 80, // Slightly higher threshold for accidental dismissal
@@ -148,7 +151,6 @@ export function RecipeQuickPreview({
           leaveTo="opacity-0"
         >
           <div
-            ref={modalRef}
             className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
             aria-hidden="true"
           />
@@ -168,7 +170,11 @@ export function RecipeQuickPreview({
               leaveTo="opacity-0 scale-95"
             >
               <DialogPanel 
-                ref={focusTrapRef}
+                ref={(el) => {
+                  // Combine refs for click outside detection and focus trap
+                  modalRef.current = el;
+                  focusTrapRef.current = el;
+                }}
                 className="relative z-50 w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all"
               >
                 <RecipePreviewContent
@@ -198,8 +204,9 @@ export function RecipeQuickPreview({
             >
               <DialogPanel 
                 ref={(el) => {
-                  // Combine refs for swipe gesture and focus trap
+                  // Combine refs for swipe gesture, click outside, and focus trap
                   swipeRef.current = el;
+                  modalRef.current = el;
                   focusTrapRef.current = el;
                 }}
                 className="relative z-50 max-h-[85vh] w-full transform overflow-hidden rounded-t-lg bg-white text-left align-middle shadow-xl transition-all"

@@ -61,6 +61,25 @@ export function RecipeCard({
 
   return (
     <div className={`group relative ${className}`}>
+      {/* Preview button - positioned absolutely to avoid nested interactive elements */}
+      {enablePreview && onPreview && (
+        <Button
+          ref={previewButtonRef}
+          variant="secondary"
+          size="sm"
+          onClick={handlePreviewClick}
+          className={`
+            absolute top-4 right-4 z-10
+            opacity-0 group-hover:opacity-100 transition-opacity duration-200
+            ${(isMobile || isTablet) ? 'opacity-100' : ''}
+            min-h-[44px] min-w-[44px] !px-2 !py-1 text-xs
+          `}
+          aria-label={`Preview ${recipe.title}`}
+        >
+          👁️ Preview
+        </Button>
+      )}
+      
       <Link to={`/recipes/${recipe.id}`} className="block">
         <Card
           variant="elevated"
@@ -70,28 +89,10 @@ export function RecipeCard({
           {/* min-w-0 allows long titles to wrap inside a flex parent and prevents overflow */}
           <div className="min-w-0 p-4">
             {/* Category badge at top */}
-            <div className="mb-3 flex justify-between items-start">
+            <div className="mb-3 flex justify-end">
               <span className="inline-block rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
                 {formatCategory(recipe.category)}
               </span>
-              
-              {/* Preview button - positioned in top-right */}
-              {enablePreview && onPreview && (
-                <Button
-                  ref={previewButtonRef}
-                  variant="secondary"
-                  size="sm"
-                  onClick={handlePreviewClick}
-                  className={`
-                    opacity-0 group-hover:opacity-100 transition-opacity duration-200
-                    ${(isMobile || isTablet) ? 'opacity-100' : ''}
-                    min-h-[44px] min-w-[44px] !px-2 !py-1 text-xs
-                  `}
-                  aria-label={`Preview ${recipe.title}`}
-                >
-                  👁️ Preview
-                </Button>
-              )}
             </div>
             
             {/* Title */}

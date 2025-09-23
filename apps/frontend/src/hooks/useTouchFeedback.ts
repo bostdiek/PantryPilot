@@ -43,7 +43,7 @@ export function useTouchFeedback<T extends HTMLElement>(
     element.classList.add(activeClass);
 
     // Haptic feedback if supported and enabled
-    if (hapticFeedback && 'vibrate' in navigator) {
+    if (hapticFeedback && typeof navigator.vibrate === 'function') {
       navigator.vibrate(10); // Short vibration
     }
 

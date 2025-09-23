@@ -104,4 +104,54 @@ describe('useClickOutside', () => {
 
     expect(callback).not.toHaveBeenCalled();
   });
+
+  it('should not call callback when active is false', () => {
+    const { result } = renderHook(() => useClickOutside(callback, false));
+    
+    // Create a mock element
+    const element = document.createElement('div');
+    result.current.current = element;
+
+    // Simulate a click outside
+    const outsideElement = document.createElement('div');
+    document.body.appendChild(outsideElement);
+
+    const event = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, 'target', {
+      value: outsideElement,
+      enumerable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    expect(callback).not.toHaveBeenCalled();
+  });
+
+  it('should call callback when active is true', () => {
+    const { result } = renderHook(() => useClickOutside(callback, true));
+    
+    // Create a mock element
+    const element = document.createElement('div');
+    result.current.current = element;
+
+    // Simulate a click outside
+    const outsideElement = document.createElement('div');
+    document.body.appendChild(outsideElement);
+
+    const event = new MouseEvent('mousedown', {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(event, 'target', {
+      value: outsideElement,
+      enumerable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    expect(callback).toHaveBeenCalledTimes(1);
+  });
 });

@@ -5,16 +5,18 @@ import { useCallback, useRef, useEffect, type RefObject } from 'react';
  * Replaces generic useEffect patterns for modal dismissal
  * 
  * @param callback - Function to call when clicking outside
+ * @param active - Whether to listen for outside clicks (default: true)
  * @returns ref to attach to the element that should detect outside clicks
  * 
  * @example
  * ```tsx
- * const modalRef = useClickOutside(() => setIsOpen(false));
+ * const modalRef = useClickOutside(() => setIsOpen(false), isOpen);
  * return <div ref={modalRef}>Modal content</div>
  * ```
  */
 export function useClickOutside<T extends HTMLElement>(
-  callback: () => void
+  callback: () => void,
+  active: boolean = true
 ): RefObject<T> {
   const ref = useRef<T>(null);
   
@@ -25,6 +27,10 @@ export function useClickOutside<T extends HTMLElement>(
   }, [callback]);
 
   useEffect(() => {
+    if (!active) {
+      return;
+    }
+
     // Use capture phase to ensure we catch the event before other handlers
     document.addEventListener('mousedown', handleClickOutside, true);
     document.addEventListener('touchstart', handleClickOutside, true);
@@ -33,7 +39,7 @@ export function useClickOutside<T extends HTMLElement>(
       document.removeEventListener('mousedown', handleClickOutside, true);
       document.removeEventListener('touchstart', handleClickOutside, true);
     };
-  }, [handleClickOutside]);
+  }, [handleClickOutside, active]);
 
   return ref;
 }
