@@ -33,7 +33,7 @@ const Navigation: React.FC = () => {
   }, []);
 
   const handleLogout = () => {
-    logout();
+    logout('manual');
     setUserMenuOpen(false);
     navigate('/login');
   };

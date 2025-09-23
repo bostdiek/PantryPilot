@@ -174,6 +174,42 @@ describe('shouldLogoutOnError', () => {
     expect(shouldLogoutOnError(null)).toBe(false);
     expect(shouldLogoutOnError(undefined)).toBe(false);
   });
+
+  // New tests for httpStatus parameter (primary fix)
+  it('returns true when httpStatus is 401 regardless of error body', () => {
+    const error = { detail: 'Could not validate credentials' };
+    expect(shouldLogoutOnError(error, 401)).toBe(true);
+  });
+
+  it('returns true when httpStatus is 401 even with empty error', () => {
+    expect(shouldLogoutOnError({}, 401)).toBe(true);
+    expect(shouldLogoutOnError(null, 401)).toBe(true);
+  });
+
+  it('still checks canonical types when httpStatus is not 401', () => {
+    const error = { error: { type: 'unauthorized' } };
+    expect(shouldLogoutOnError(error, 500)).toBe(true); // canonical type still matters
+  });
+
+  it('httpStatus 401 takes precedence over non-auth canonical types', () => {
+    const error = { error: { type: 'validation_error' } };
+    expect(shouldLogoutOnError(error, 401)).toBe(true); // 401 overrides validation error
+  });
+
+  it('prioritizes httpStatus over embedded status in error object', () => {
+    const error = { status: 500 }; // embedded status says server error
+    expect(shouldLogoutOnError(error, 401)).toBe(true); // but httpStatus says 401
+  });
+
+  it('handles the backend "Could not validate credentials" with 401 status', () => {
+    const error = { detail: 'Could not validate credentials' };
+    expect(shouldLogoutOnError(error, 401)).toBe(true);
+  });
+
+  it('does not logout on "Could not validate credentials" without 401 status', () => {
+    const error = { detail: 'Could not validate credentials' };
+    expect(shouldLogoutOnError(error, 500)).toBe(false);
+  });
 });
 
 describe('getRetryBehavior', () => {

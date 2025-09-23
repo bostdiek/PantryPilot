@@ -362,12 +362,21 @@ function addContextToErrorMessage(
 /**
  * Check if an error should trigger a logout (e.g., token expired).
  */
-export function shouldLogoutOnError(error: unknown): boolean {
+export function shouldLogoutOnError(
+  error: unknown,
+  httpStatus?: number
+): boolean {
+  // Primary check: HTTP status code from response (most reliable)
+  if (httpStatus === 401) {
+    return true;
+  }
+
+  // Early return if no error to analyze further
   if (!error) {
     return false;
   }
 
-  // First check for canonical error type
+  // Second check: canonical error types (machine-readable)
   if (error && typeof error === 'object') {
     const errorObj = error as any;
     const errorType = errorObj.error?.type;
@@ -377,14 +386,14 @@ export function shouldLogoutOnError(error: unknown): boolean {
       return true;
     }
 
-    // Check HTTP status code
+    // Fallback: check HTTP status code embedded in error object (legacy)
     const status = errorObj.status || errorObj.statusCode;
     if (status === 401) {
       return true;
     }
   }
 
-  // Fallback to message content analysis
+  // Last resort: fallback to message content analysis
   const message = getUserFriendlyErrorMessage(error);
   return (
     message.includes('session has expired') ||

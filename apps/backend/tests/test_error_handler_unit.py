@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, Field
@@ -18,6 +18,7 @@ from core.error_handler import (
     global_exception_handler,
 )
 from core.exceptions import DuplicateUserError, UserNotFoundError
+from core.middleware import CorrelationIdMiddleware
 
 
 class Item(BaseModel):
@@ -27,8 +28,10 @@ class Item(BaseModel):
 
 def build_test_app(env: str) -> TestClient:
     app = FastAPI()
+    app.add_middleware(CorrelationIdMiddleware)
     app.add_middleware(ExceptionNormalizationMiddleware)
     app.add_exception_handler(Exception, global_exception_handler)
+    app.add_exception_handler(HTTPException, global_exception_handler)
     app.add_exception_handler(RequestValidationError, global_exception_handler)
 
     @app.post("/items")
@@ -46,6 +49,21 @@ def build_test_app(env: str) -> TestClient:
     @app.get("/boom")
     async def boom():
         raise RuntimeError("Exploded with secret=should_not_leak")
+
+    @app.get("/unauthorized")
+    async def unauthorized():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    @app.get("/forbidden")
+    async def forbidden():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
 
     client = TestClient(app)
 
@@ -115,3 +133,55 @@ def test_generic_exception_development():
     body = resp.json()
     assert body["error"]["type"] == "internal_server_error"
     assert "traceback" in body["error"]
+
+
+def test_unauthorized_error_canonical_type():
+    """Test that 401 HTTPException returns canonical 'unauthorized' error type."""
+    client = build_test_app("production")
+    resp = client.get("/unauthorized")
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["error"]["type"] == "unauthorized"
+    assert body["error"]["correlation_id"]
+    assert body["success"] is False
+    # Should not leak details in production
+    assert "details" not in body["error"]
+
+
+def test_unauthorized_error_development():
+    """Test that 401 HTTPException includes details in development."""
+    client = build_test_app("development")
+    resp = client.get("/unauthorized")
+    assert resp.status_code == 401
+    body = resp.json()
+    assert body["error"]["type"] == "unauthorized"
+    assert body["error"]["correlation_id"]
+    # Should include details in development
+    assert "details" in body["error"]
+    assert body["error"]["details"]["detail"] == "Could not validate credentials"
+
+
+def test_forbidden_error_canonical_type():
+    """Test that 403 HTTPException returns canonical 'forbidden' error type."""
+    client = build_test_app("production")
+    resp = client.get("/forbidden")
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["error"]["type"] == "forbidden"
+    assert body["error"]["correlation_id"]
+    assert body["success"] is False
+    # Should not leak details in production
+    assert "details" not in body["error"]
+
+
+def test_forbidden_error_development():
+    """Test that 403 HTTPException includes details in development."""
+    client = build_test_app("development")
+    resp = client.get("/forbidden")
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["error"]["type"] == "forbidden"
+    assert body["error"]["correlation_id"]
+    # Should include details in development
+    assert "details" in body["error"]
+    assert body["error"]["details"]["detail"] == "Access denied"
