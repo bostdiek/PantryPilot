@@ -8,13 +8,13 @@ import {
 import clsx from 'clsx';
 import { Fragment, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useClickOutside } from '../hooks/useClickOutside';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useIsMobile, useIsTablet } from '../hooks/useMediaQuery';
+import { useSwipeGesture } from '../hooks/useSwipeGesture';
+import { useTouchFeedback } from '../hooks/useTouchFeedback';
 import type { Recipe } from '../types/Recipe';
 import { Button } from './ui/Button';
-import { useIsMobile, useIsTablet } from '../hooks/useMediaQuery';
-import { useClickOutside } from '../hooks/useClickOutside';
-import { useSwipeGesture } from '../hooks/useSwipeGesture';
-import { useFocusTrap } from '../hooks/useFocusTrap';
-import { useTouchFeedback } from '../hooks/useTouchFeedback';
 
 export interface RecipeQuickPreviewProps {
   /**
@@ -66,10 +66,8 @@ export function RecipeQuickPreview({
   }, [onClose]);
 
   // Enhanced mobile/tablet touch handling (disabled in test environments)
-  const isTestEnvironment =
-    typeof window !== 'undefined' &&
-    (window.location?.href?.includes('vitest') ||
-      import.meta.env.MODE === 'test');
+  // Use build-time env mode which is reliable across test runners
+  const isTestEnvironment = import.meta.env.MODE === 'test';
 
   const modalRef = useClickOutside<HTMLDivElement>(
     isTestEnvironment ? () => {} : handleClose,

@@ -68,20 +68,7 @@ beforeEach(() => {
   });
 });
 
-// Mock window.matchMedia for useMediaQuery hook
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query) => ({
-    matches: false, // Default to desktop (not mobile)
-    media: query,
-    onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
-  })),
-});
+// NOTE: matchMedia is mocked in the beforeEach above; do not redefine it here.
 
 beforeEach(() => {
   // Get the initial state with all methods
