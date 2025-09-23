@@ -50,8 +50,12 @@ ERROR_TYPE_MESSAGES = {
 # Map HTTP status codes to canonical error types used in error responses. Keep
 # this as a top-level constant so it's easy to extend and unit-test.
 STATUS_CODE_TO_ERROR_TYPE: dict[int, str] = {
+    400: "bad_request",
     401: "unauthorized",
     403: "forbidden",
+    404: "not_found",
+    422: "unprocessable_entity",
+    500: "internal_server_error",
 }
 
 
