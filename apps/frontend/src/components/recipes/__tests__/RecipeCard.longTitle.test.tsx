@@ -1,8 +1,28 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { RecipeCard } from '../RecipeCard';
 import type { Recipe } from '../../../types/Recipe';
+
+// Mock window.matchMedia for media query hooks
+const mockMatchMedia = vi.fn();
+beforeEach(() => {
+  mockMatchMedia.mockImplementation((query) => ({
+    matches: false, // Default to desktop/non-mobile
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: mockMatchMedia,
+  });
+});
 
 const mockRecipeWithLongTitle: Recipe = {
   id: '1',

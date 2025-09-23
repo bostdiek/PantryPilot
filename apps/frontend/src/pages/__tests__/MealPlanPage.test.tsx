@@ -48,20 +48,27 @@ vi.mock('../../components/ui/icons/chevron-up-down.svg?react', () => ({
   default: () => <span data-testid="icon-chevron" />,
 }));
 
-// Mock window.matchMedia for useMediaQuery hook
-Object.defineProperty(window, 'matchMedia', {
-  writable: true,
-  value: vi.fn().mockImplementation((query) => ({
-    matches: false, // Default to desktop (not mobile)
+// Mock window.matchMedia for media query hooks
+const mockMatchMedia = vi.fn();
+beforeEach(() => {
+  mockMatchMedia.mockImplementation((query) => ({
+    matches: false, // Default to desktop/non-mobile
     media: query,
-    onchange: null,
-    addListener: vi.fn(), // deprecated
-    removeListener: vi.fn(), // deprecated
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  })),
+  }));
+
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: mockMatchMedia,
+  });
 });
+
+// NOTE: matchMedia is mocked in the beforeEach above; do not redefine it here.
 
 beforeEach(() => {
   // Get the initial state with all methods

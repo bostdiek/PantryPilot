@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type FC } from 'react';
+import { useEffect, useMemo, useState, type FC } from 'react';
 import { Link } from 'react-router-dom';
 import { Grid } from '../components/layout/Grid';
 import { Button } from '../components/ui/Button';
@@ -13,6 +13,8 @@ import { useRecipeFilters } from '../hooks/useRecipeFilters';
 import { RecipeSearchFilters } from '../components/recipes/RecipeSearchFilters';
 import { RecipePagination } from '../components/recipes/RecipePagination';
 import { RecipeCard } from '../components/recipes/RecipeCard';
+import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
+import type { Recipe } from '../types/Recipe';
 
 const RecipesPage: FC = () => {
   const {
@@ -27,12 +29,24 @@ const RecipesPage: FC = () => {
 
   const { filters } = useRecipeFilters();
 
+  // Recipe preview state
+  const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null);
+
   // Fetch recipes on mount
   useEffect(() => {
     if (recipes.length === 0 && !isLoading && !error) {
       fetchRecipes();
     }
   }, [recipes.length, isLoading, error, fetchRecipes]);
+
+  // Handle recipe preview
+  const handleRecipePreview = (recipe: Recipe) => {
+    setPreviewRecipe(recipe);
+  };
+
+  const handleClosePreview = () => {
+    setPreviewRecipe(null);
+  };
 
   // Calculate paginated recipes
   const paginatedRecipes = useMemo(() => {
@@ -96,7 +110,12 @@ const RecipesPage: FC = () => {
           {/* Recipe Grid */}
           <Grid columns={3} gap={6} className="auto-rows-fr">
             {paginatedRecipes.map((recipe) => (
-              <RecipeCard key={recipe.id} recipe={recipe} />
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
+                enablePreview={true}
+                onPreview={handleRecipePreview}
+              />
             ))}
           </Grid>
 
@@ -132,6 +151,14 @@ const RecipesPage: FC = () => {
           </Link>
         </Card>
       )}
+
+      {/* Recipe Quick Preview Modal */}
+      <RecipeQuickPreview
+        isOpen={!!previewRecipe}
+        onClose={handleClosePreview}
+        recipe={previewRecipe}
+        // No dateContext for search page - no "Remove from Day" functionality
+      />
     </Container>
   );
 };

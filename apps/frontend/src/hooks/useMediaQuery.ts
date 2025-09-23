@@ -59,3 +59,27 @@ export function useMediaQuery(query: string): boolean {
 export function useIsMobile(): boolean {
   return useMediaQuery('(max-width: 767px)');
 }
+
+/**
+ * Convenience hook to detect tablet viewports
+ * Covers devices between mobile and desktop (768px - 1024px)
+ */
+export function useIsTablet(): boolean {
+  return useMediaQuery('(min-width: 768px) and (max-width: 1024px)');
+}
+
+/**
+ * Convenience hook to detect desktop viewports
+ * Larger than tablet breakpoint (1024px+)
+ */
+export function useIsDesktop(): boolean {
+  return useMediaQuery('(min-width: 1025px)');
+}
+
+/**
+ * Convenience hook to detect touch-capable devices
+ * Useful for enabling touch-specific interactions
+ */
+export function useIsTouchDevice(): boolean {
+  return useMediaQuery('(pointer: coarse)');
+}

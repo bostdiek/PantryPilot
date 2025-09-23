@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi, beforeEach } from 'vitest';
 import RecipesPage from './RecipesPage';
 
 // Mock SVG import
@@ -17,6 +17,26 @@ vi.mock('../components/ui/icons/search.svg?react', () => ({
 vi.mock('../components/ui/icons/chevron-up-down.svg?react', () => ({
   default: () => <div data-testid="mock-chevron-icon" />,
 }));
+
+// Mock window.matchMedia for media query hooks
+const mockMatchMedia = vi.fn();
+beforeEach(() => {
+  mockMatchMedia.mockImplementation((query) => ({
+    matches: false, // Default to desktop/non-mobile
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: mockMatchMedia,
+  });
+});
 
 // Mock the store
 const fetchRecipesMock = vi.fn();
