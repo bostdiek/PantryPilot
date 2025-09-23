@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 interface TouchFeedbackOptions {
   activeClass?: string;
@@ -26,7 +26,7 @@ interface TouchFeedbackOptions {
  */
 export function useTouchFeedback<T extends HTMLElement>(
   options: TouchFeedbackOptions = {}
-): RefObject<T> {
+): RefObject<T | null> {
   const ref = useRef<T>(null);
   const {
     activeClass = 'touch-active',

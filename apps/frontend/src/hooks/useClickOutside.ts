@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 /**
  * More targeted hook for handling click outside events
@@ -17,7 +17,7 @@ import { useCallback, useRef, useEffect, type RefObject } from 'react';
 export function useClickOutside<T extends HTMLElement>(
   callback: () => void,
   active: boolean = true
-): RefObject<T> {
+): RefObject<T | null> {
   const ref = useRef<T>(null);
 
   const handleClickOutside = useCallback(

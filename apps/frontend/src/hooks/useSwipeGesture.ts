@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type RefObject } from 'react';
 
 interface SwipeGestureOptions {
   onSwipeDown?: () => void;
@@ -35,7 +35,7 @@ interface TouchState {
  */
 export function useSwipeGesture<T extends HTMLElement>(
   options: SwipeGestureOptions
-): RefObject<T> {
+): RefObject<T | null> {
   const ref = useRef<T>(null);
   const touchState = useRef<TouchState>({
     startX: 0,

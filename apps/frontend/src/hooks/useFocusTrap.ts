@@ -1,8 +1,8 @@
 import {
   useCallback,
-  useRef,
   useEffect,
   useLayoutEffect,
+  useRef,
   type RefObject,
 } from 'react';
 
@@ -31,7 +31,7 @@ interface FocusTrapOptions {
  */
 export function useFocusTrap<T extends HTMLElement>(
   options: FocusTrapOptions = {}
-): RefObject<T> {
+): RefObject<T | null> {
   const ref = useRef<T>(null);
   const previousActiveElement = useRef<Element | null>(null);
   const { active = true, initialFocus, restoreFocus = true } = options;

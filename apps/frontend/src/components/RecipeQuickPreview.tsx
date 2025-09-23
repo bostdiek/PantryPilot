@@ -172,8 +172,9 @@ export function RecipeQuickPreview({
               <DialogPanel
                 ref={(el) => {
                   // Combine refs for click outside detection and focus trap
-                  modalRef.current = el;
-                  focusTrapRef.current = el;
+                  // Cast to HTMLDivElement | null to satisfy nullable ref types
+                  modalRef.current = el as HTMLDivElement | null;
+                  focusTrapRef.current = el as HTMLDivElement | null;
                 }}
                 className="relative z-50 w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all"
               >
@@ -205,9 +206,9 @@ export function RecipeQuickPreview({
               <DialogPanel
                 ref={(el) => {
                   // Combine refs for swipe gesture, click outside, and focus trap
-                  swipeRef.current = el;
-                  modalRef.current = el;
-                  focusTrapRef.current = el;
+                  swipeRef.current = el as HTMLDivElement | null;
+                  modalRef.current = el as HTMLDivElement | null;
+                  focusTrapRef.current = el as HTMLDivElement | null;
                 }}
                 className="relative z-50 max-h-[85vh] w-full transform overflow-hidden rounded-t-lg bg-white text-left align-middle shadow-xl transition-all"
               >
