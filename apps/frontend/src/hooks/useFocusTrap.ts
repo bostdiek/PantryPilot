@@ -1,4 +1,10 @@
-import { useCallback, useRef, useEffect, useLayoutEffect, type RefObject } from 'react';
+import {
+  useCallback,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  type RefObject,
+} from 'react';
 
 interface FocusTrapOptions {
   active?: boolean;
@@ -9,10 +15,10 @@ interface FocusTrapOptions {
 /**
  * Targeted hook for focus management in modals and overlays
  * Ensures keyboard accessibility by trapping focus within a container
- * 
+ *
  * @param options - Focus trap configuration
  * @returns ref to attach to the container that should trap focus
- * 
+ *
  * @example
  * ```tsx
  * const trapRef = useFocusTrap({
@@ -45,32 +51,37 @@ export function useFocusTrap<T extends HTMLElement>(
       '[contenteditable="true"]',
     ].join(', ');
 
-    return Array.from(element.querySelectorAll(focusableSelectors)) as HTMLElement[];
+    return Array.from(
+      element.querySelectorAll(focusableSelectors)
+    ) as HTMLElement[];
   }, []);
 
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key !== 'Tab') return;
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
 
-    const focusableElements = getFocusableElements();
-    if (focusableElements.length === 0) return;
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) return;
 
-    const firstElement = focusableElements[0];
-    const lastElement = focusableElements[focusableElements.length - 1];
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
 
-    if (event.shiftKey) {
-      // Shift + Tab (backwards)
-      if (document.activeElement === firstElement) {
-        event.preventDefault();
-        lastElement.focus();
+      if (event.shiftKey) {
+        // Shift + Tab (backwards)
+        if (document.activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+      } else {
+        // Tab (forwards)
+        if (document.activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        }
       }
-    } else {
-      // Tab (forwards)
-      if (document.activeElement === lastElement) {
-        event.preventDefault();
-        firstElement.focus();
-      }
-    }
-  }, [getFocusableElements]);
+    },
+    [getFocusableElements]
+  );
 
   // Set initial focus using useLayoutEffect to avoid flicker
   const setInitialFocus = useCallback(() => {
@@ -111,9 +122,12 @@ export function useFocusTrap<T extends HTMLElement>(
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      
+
       // Restore focus to the previously active element
-      if (restoreFocus && previousActiveElement.current instanceof HTMLElement) {
+      if (
+        restoreFocus &&
+        previousActiveElement.current instanceof HTMLElement
+      ) {
         setTimeout(() => {
           if (previousActiveElement.current instanceof HTMLElement) {
             previousActiveElement.current.focus();

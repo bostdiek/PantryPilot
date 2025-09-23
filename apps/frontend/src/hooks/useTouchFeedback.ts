@@ -10,10 +10,10 @@ interface TouchFeedbackOptions {
 /**
  * Targeted hook for consistent touch interaction patterns
  * Provides visual and haptic feedback for mobile interactions
- * 
+ *
  * @param options - Touch feedback configuration
  * @returns ref to attach to the touchable element
- * 
+ *
  * @example
  * ```tsx
  * const touchRef = useTouchFeedback({
@@ -75,13 +75,15 @@ export function useTouchFeedback<T extends HTMLElement>(
     // Add touch event listeners
     element.addEventListener('touchstart', handleTouchStart, { passive: true });
     element.addEventListener('touchend', handleTouchEnd, { passive: true });
-    element.addEventListener('touchcancel', handleTouchCancel, { passive: true });
+    element.addEventListener('touchcancel', handleTouchCancel, {
+      passive: true,
+    });
 
     return () => {
       element.removeEventListener('touchstart', handleTouchStart);
       element.removeEventListener('touchend', handleTouchEnd);
       element.removeEventListener('touchcancel', handleTouchCancel);
-      
+
       // Clean up any remaining active class
       element.classList.remove(activeClass);
     };

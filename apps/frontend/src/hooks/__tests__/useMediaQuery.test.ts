@@ -1,11 +1,11 @@
 import { renderHook } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
-  useMediaQuery, 
-  useIsMobile, 
-  useIsTablet, 
+import {
+  useMediaQuery,
+  useIsMobile,
+  useIsTablet,
   useIsDesktop,
-  useIsTouchDevice 
+  useIsTouchDevice,
 } from '../useMediaQuery';
 
 // Mock window.matchMedia
@@ -154,7 +154,9 @@ describe('useIsTablet', () => {
     const { result } = renderHook(() => useIsTablet());
 
     expect(result.current).toBe(true);
-    expect(mockMatchMedia).toHaveBeenCalledWith('(min-width: 768px) and (max-width: 1024px)');
+    expect(mockMatchMedia).toHaveBeenCalledWith(
+      '(min-width: 768px) and (max-width: 1024px)'
+    );
   });
 });
 

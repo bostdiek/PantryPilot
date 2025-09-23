@@ -110,9 +110,9 @@ const RecipesPage: FC = () => {
           {/* Recipe Grid */}
           <Grid columns={3} gap={6} className="auto-rows-fr">
             {paginatedRecipes.map((recipe) => (
-              <RecipeCard 
-                key={recipe.id} 
-                recipe={recipe} 
+              <RecipeCard
+                key={recipe.id}
+                recipe={recipe}
                 enablePreview={true}
                 onPreview={handleRecipePreview}
               />
@@ -151,7 +151,7 @@ const RecipesPage: FC = () => {
           </Link>
         </Card>
       )}
-      
+
       {/* Recipe Quick Preview Modal */}
       <RecipeQuickPreview
         isOpen={!!previewRecipe}

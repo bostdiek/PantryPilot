@@ -18,11 +18,11 @@ interface RecipeCardProps {
  * Shows recipe details with hover effects and proper accessibility
  * Optionally supports preview functionality for quick recipe viewing
  */
-export function RecipeCard({ 
-  recipe, 
-  className = '', 
+export function RecipeCard({
+  recipe,
+  className = '',
   onPreview,
-  enablePreview = false 
+  enablePreview = false,
 }: RecipeCardProps) {
   const isMobile = useIsMobile();
   const isTablet = useIsTablet();
@@ -68,18 +68,13 @@ export function RecipeCard({
           variant="secondary"
           size="sm"
           onClick={handlePreviewClick}
-          className={`
-            absolute top-4 right-4 z-10
-            opacity-0 group-hover:opacity-100 transition-opacity duration-200
-            ${(isMobile || isTablet) ? 'opacity-100' : ''}
-            min-h-[44px] min-w-[44px] !px-2 !py-1 text-xs
-          `}
+          className={`absolute top-4 right-4 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${isMobile || isTablet ? 'opacity-100' : ''} min-h-[44px] min-w-[44px] !px-2 !py-1 text-xs`}
           aria-label={`Preview ${recipe.title}`}
         >
           👁️ Preview
         </Button>
       )}
-      
+
       <Link to={`/recipes/${recipe.id}`} className="block">
         <Card
           variant="elevated"
@@ -94,7 +89,7 @@ export function RecipeCard({
                 {formatCategory(recipe.category)}
               </span>
             </div>
-            
+
             {/* Title */}
             <h3 className="mb-2 line-clamp-2 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
               {recipe.title}

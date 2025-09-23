@@ -126,8 +126,8 @@ describe('RecipeCard', () => {
 
     render(
       <MemoryRouter>
-        <RecipeCard 
-          recipe={mockRecipe} 
+        <RecipeCard
+          recipe={mockRecipe}
           enablePreview={true}
           onPreview={mockOnPreview}
         />
@@ -135,7 +135,9 @@ describe('RecipeCard', () => {
     );
 
     // Preview button should be present
-    const previewButton = screen.getByRole('button', { name: /preview test recipe/i });
+    const previewButton = screen.getByRole('button', {
+      name: /preview test recipe/i,
+    });
     expect(previewButton).toBeInTheDocument();
 
     // Click preview button and verify callback

@@ -15,7 +15,7 @@ describe('useClickOutside', () => {
 
   it('should call callback when clicking outside the element', () => {
     const { result } = renderHook(() => useClickOutside(callback));
-    
+
     // Create a mock element
     const element = document.createElement('div');
     result.current.current = element;
@@ -40,7 +40,7 @@ describe('useClickOutside', () => {
 
   it('should not call callback when clicking inside the element', () => {
     const { result } = renderHook(() => useClickOutside(callback));
-    
+
     // Create a mock element
     const element = document.createElement('div');
     const childElement = document.createElement('span');
@@ -64,7 +64,7 @@ describe('useClickOutside', () => {
 
   it('should handle touch events', () => {
     const { result } = renderHook(() => useClickOutside(callback));
-    
+
     // Create a mock element
     const element = document.createElement('div');
     result.current.current = element;
@@ -107,7 +107,7 @@ describe('useClickOutside', () => {
 
   it('should not call callback when active is false', () => {
     const { result } = renderHook(() => useClickOutside(callback, false));
-    
+
     // Create a mock element
     const element = document.createElement('div');
     result.current.current = element;
@@ -132,7 +132,7 @@ describe('useClickOutside', () => {
 
   it('should call callback when active is true', () => {
     const { result } = renderHook(() => useClickOutside(callback, true));
-    
+
     // Create a mock element
     const element = document.createElement('div');
     result.current.current = element;

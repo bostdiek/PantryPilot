@@ -66,11 +66,13 @@ export function RecipeQuickPreview({
   }, [onClose]);
 
   // Enhanced mobile/tablet touch handling (disabled in test environments)
-  const isTestEnvironment = typeof window !== 'undefined' && 
-    (window.location?.href?.includes('vitest') || import.meta.env.MODE === 'test');
-  
+  const isTestEnvironment =
+    typeof window !== 'undefined' &&
+    (window.location?.href?.includes('vitest') ||
+      import.meta.env.MODE === 'test');
+
   const modalRef = useClickOutside<HTMLDivElement>(
-    isTestEnvironment ? () => {} : handleClose, 
+    isTestEnvironment ? () => {} : handleClose,
     isOpen && !isTestEnvironment
   );
   const swipeRef = useSwipeGesture<HTMLDivElement>({
@@ -78,7 +80,7 @@ export function RecipeQuickPreview({
     threshold: 80, // Slightly higher threshold for accidental dismissal
     velocity: 0.3,
   });
-  
+
   // Focus trap for accessibility (only in production/non-test environments)
   const focusTrapRef = useFocusTrap<HTMLDivElement>({
     active: isOpen && !isTestEnvironment,
@@ -169,7 +171,7 @@ export function RecipeQuickPreview({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel 
+              <DialogPanel
                 ref={(el) => {
                   // Combine refs for click outside detection and focus trap
                   modalRef.current = el;
@@ -202,7 +204,7 @@ export function RecipeQuickPreview({
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-full"
             >
-              <DialogPanel 
+              <DialogPanel
                 ref={(el) => {
                   // Combine refs for swipe gesture, click outside, and focus trap
                   swipeRef.current = el;
@@ -258,9 +260,8 @@ function RecipePreviewContent({
   });
 
   // Calculate minimum touch target size (44px for accessibility)
-  const touchTargetClasses = isMobile || isTablet 
-    ? 'min-h-[44px] min-w-[44px] touch-manipulation' 
-    : '';
+  const touchTargetClasses =
+    isMobile || isTablet ? 'min-h-[44px] min-w-[44px] touch-manipulation' : '';
 
   return (
     <div className={clsx('p-6', isMobile && 'max-h-[85vh] overflow-y-auto')}>
@@ -365,28 +366,24 @@ function RecipePreviewContent({
       </div>
 
       {/* Action buttons - Enhanced for mobile/tablet */}
-      <div className={clsx(
-        'flex gap-3 border-t pt-4',
-        (isMobile || isTablet) && 'flex-col' // Stack buttons vertically on mobile/tablet
-      )}>
-        <Button 
-          variant="primary" 
-          className={clsx(
-            'flex-1',
-            touchTargetClasses
-          )} 
+      <div
+        className={clsx(
+          'flex gap-3 border-t pt-4',
+          (isMobile || isTablet) && 'flex-col' // Stack buttons vertically on mobile/tablet
+        )}
+      >
+        <Button
+          variant="primary"
+          className={clsx('flex-1', touchTargetClasses)}
           onClick={onViewFull}
         >
           View Full Recipe
         </Button>
         {onRemove && (
-          <Button 
-            variant="danger" 
-            onClick={onRemove} 
-            className={clsx(
-              'flex-1',
-              touchTargetClasses
-            )}
+          <Button
+            variant="danger"
+            onClick={onRemove}
+            className={clsx('flex-1', touchTargetClasses)}
           >
             Remove from Day
           </Button>

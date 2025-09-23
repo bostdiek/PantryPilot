@@ -6,7 +6,7 @@ interface SwipeGestureOptions {
   onSwipeLeft?: () => void;
   onSwipeRight?: () => void;
   threshold?: number; // Minimum distance for a swipe
-  velocity?: number;  // Minimum velocity for a swipe
+  velocity?: number; // Minimum velocity for a swipe
 }
 
 interface TouchState {
@@ -19,10 +19,10 @@ interface TouchState {
 /**
  * Targeted hook for swipe gesture detection on mobile devices
  * Replaces generic useEffect patterns for touch handling
- * 
+ *
  * @param options - Swipe gesture configuration
  * @returns ref to attach to the swipeable element
- * 
+ *
  * @example
  * ```tsx
  * const swipeRef = useSwipeGesture({
@@ -67,7 +67,7 @@ export function useSwipeGesture<T extends HTMLElement>(
 
   const handleTouchMove = useCallback((event: TouchEvent) => {
     if (!touchState.current.isSwiping) return;
-    
+
     // Prevent scrolling during swipe detection
     const touch = event.touches[0];
     if (!touch) return;
@@ -81,51 +81,56 @@ export function useSwipeGesture<T extends HTMLElement>(
     }
   }, []);
 
-  const handleTouchEnd = useCallback((event: TouchEvent) => {
-    if (!touchState.current.isSwiping) return;
+  const handleTouchEnd = useCallback(
+    (event: TouchEvent) => {
+      if (!touchState.current.isSwiping) return;
 
-    const touch = event.changedTouches[0];
-    if (!touch) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
 
-    const deltaX = touch.clientX - touchState.current.startX;
-    const deltaY = touch.clientY - touchState.current.startY;
-    const deltaTime = Date.now() - touchState.current.startTime;
-    
-    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-    const calculatedVelocity = distance / deltaTime;
+      const deltaX = touch.clientX - touchState.current.startX;
+      const deltaY = touch.clientY - touchState.current.startY;
+      const deltaTime = Date.now() - touchState.current.startTime;
 
-    touchState.current.isSwiping = false;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      const calculatedVelocity = distance / deltaTime;
 
-    // Check if the swipe meets threshold and velocity requirements
-    if (distance < threshold || calculatedVelocity < velocity) return;
+      touchState.current.isSwiping = false;
 
-    // Determine swipe direction
-    const absX = Math.abs(deltaX);
-    const absY = Math.abs(deltaY);
+      // Check if the swipe meets threshold and velocity requirements
+      if (distance < threshold || calculatedVelocity < velocity) return;
 
-    if (absX > absY) {
-      // Horizontal swipe
-      if (deltaX > 0 && onSwipeRight) {
-        onSwipeRight();
-      } else if (deltaX < 0 && onSwipeLeft) {
-        onSwipeLeft();
+      // Determine swipe direction
+      const absX = Math.abs(deltaX);
+      const absY = Math.abs(deltaY);
+
+      if (absX > absY) {
+        // Horizontal swipe
+        if (deltaX > 0 && onSwipeRight) {
+          onSwipeRight();
+        } else if (deltaX < 0 && onSwipeLeft) {
+          onSwipeLeft();
+        }
+      } else {
+        // Vertical swipe
+        if (deltaY > 0 && onSwipeDown) {
+          onSwipeDown();
+        } else if (deltaY < 0 && onSwipeUp) {
+          onSwipeUp();
+        }
       }
-    } else {
-      // Vertical swipe
-      if (deltaY > 0 && onSwipeDown) {
-        onSwipeDown();
-      } else if (deltaY < 0 && onSwipeUp) {
-        onSwipeUp();
-      }
-    }
-  }, [onSwipeDown, onSwipeUp, onSwipeLeft, onSwipeRight, threshold, velocity]);
+    },
+    [onSwipeDown, onSwipeUp, onSwipeLeft, onSwipeRight, threshold, velocity]
+  );
 
   // Use useEffect for event handling since we need access to the DOM element
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
 
-    element.addEventListener('touchstart', handleTouchStart, { passive: false });
+    element.addEventListener('touchstart', handleTouchStart, {
+      passive: false,
+    });
     element.addEventListener('touchmove', handleTouchMove, { passive: false });
     element.addEventListener('touchend', handleTouchEnd, { passive: true });
 
