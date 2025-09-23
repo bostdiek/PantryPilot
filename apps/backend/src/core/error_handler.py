@@ -47,6 +47,13 @@ ERROR_TYPE_MESSAGES = {
     IntegrityError: "A data integrity constraint was violated",
 }
 
+# Map HTTP status codes to canonical error types used in error responses. Keep
+# this as a top-level constant so it's easy to extend and unit-test.
+STATUS_CODE_TO_ERROR_TYPE: dict[int, str] = {
+    401: "unauthorized",
+    403: "forbidden",
+}
+
 
 def get_correlation_id() -> str:
     """Get or create a correlation ID for request tracing."""
@@ -277,12 +284,10 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         status_code = getattr(exc, "status_code", 500)
         detail = getattr(exc, "detail", "An error occurred")
 
-        # Provide specific error types for authentication failures
-        error_type = "http_error"
-        if status_code == 401:
-            error_type = "unauthorized"
-        elif status_code == 403:
-            error_type = "forbidden"
+        # Provide specific error types for authentication failures. Use the
+        # module-level mapping with a sensible fallback to keep logic compact
+        # and easy to extend.
+        error_type = STATUS_CODE_TO_ERROR_TYPE.get(status_code, "http_error")
 
         http_error_body: dict[str, Any] = {
             "correlation_id": correlation_id,

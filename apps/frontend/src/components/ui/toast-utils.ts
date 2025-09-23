@@ -23,8 +23,15 @@ export function addToast(toast: ToastState) {
 }
 
 /**
- * Add a toast if one with the same message doesn't already exist.
- * Useful for preventing duplicate notifications.
+ * Add a toast unless an equivalent toast (same message and type) already exists.
+ *
+ * Prevents duplicate notifications when the same error or info message is
+ * reported multiple times in quick succession.
+ *
+ * @param {ToastState} toast - The toast to add (shape: { id, message, type }).
+ * @example
+ * // Add an error toast only if not already present
+ * addToastIfNotExists({ id: generateToastId(), message: 'Session expired', type: 'error' });
  */
 export function addToastIfNotExists(toast: ToastState) {
   const existingToast = internalToasts.find(
