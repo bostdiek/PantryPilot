@@ -110,8 +110,11 @@ git push origin --force --tags
 
 ### Emergency Credential Rotation
 ```bash
-# Database password
-psql -h localhost -U postgres -c "ALTER USER pantrypilot_user PASSWORD 'NEW_SECURE_PASSWORD';"
+# Database password (safer: use interactive prompt)
+psql -h localhost -U postgres
+# Then, inside psql, run:
+\password pantrypilot_user
+# (You will be prompted securely for the new password)
 
 # Generate new JWT secret
 openssl rand -hex 32
