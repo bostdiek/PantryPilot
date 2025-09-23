@@ -3,6 +3,10 @@ export interface ToastState {
   id: string;
   message: string;
   type: 'success' | 'error' | 'info';
+  // Optional timestamp (ms since epoch). If not provided, callers may rely on
+  // the system to set it when adding a toast. Used to enable time-based
+  // deduplication so the same message can reappear after a short window.
+  createdAt?: number;
 }
 
 let toastId = 0;
@@ -18,6 +22,12 @@ export function notifyListeners() {
 }
 
 export function addToast(toast: ToastState) {
+  // Ensure toasts have a createdAt timestamp to support time-based dedup.
+  if (!toast.createdAt) {
+    // non-mutating callers may rely on the object they passed; create a
+    // shallow copy to avoid surprising external mutations.
+    toast = { ...toast, createdAt: Date.now() };
+  }
   internalToasts.push(toast);
   notifyListeners();
 }
@@ -33,10 +43,23 @@ export function addToast(toast: ToastState) {
  * // Add an error toast only if not already present
  * addToastIfNotExists({ id: generateToastId(), message: 'Session expired', type: 'error' });
  */
-export function addToastIfNotExists(toast: ToastState) {
-  const existingToast = internalToasts.find(
-    (t) => t.message === toast.message && t.type === toast.type
-  );
+/**
+ * Add a toast unless an equivalent toast already exists within a time window.
+ *
+ * By default, prevents duplicate notifications with the same message + type
+ * appearing within 5 seconds. Callers may pass `dedupWindowMs` to change
+ * the window or pass 0 to disable time-based deduplication and rely only on
+ * message+type uniqueness.
+ */
+export function addToastIfNotExists(toast: ToastState, dedupWindowMs = 5000) {
+  const now = Date.now();
+  const existingToast = internalToasts.find((t) => {
+    if (t.message !== toast.message || t.type !== toast.type) return false;
+    if (!dedupWindowMs) return true; // treat any match as duplicate
+    const created = t.createdAt ?? now;
+    return now - created < dedupWindowMs;
+  });
+
   if (!existingToast) {
     addToast(toast);
   }
