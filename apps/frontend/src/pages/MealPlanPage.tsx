@@ -621,7 +621,7 @@ const MealPlanPage: FC = () => {
                 className="w-full rounded-sm text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
                 aria-label={`View ${label} recipe preview`}
               >
-                <span className="block leading-5 font-medium break-words whitespace-normal text-blue-600 hover:text-blue-800">
+                <span className="block leading-5 font-medium text-blue-600 hover:text-blue-800 line-clamp-2">
                   {label}
                 </span>
                 {meta && (
@@ -632,7 +632,7 @@ const MealPlanPage: FC = () => {
               </button>
             ) : (
               <span>
-                <span className="block leading-5 font-medium break-words whitespace-normal">
+                <span className="block leading-5 font-medium line-clamp-2">
                   {label}
                 </span>
                 {meta && (
