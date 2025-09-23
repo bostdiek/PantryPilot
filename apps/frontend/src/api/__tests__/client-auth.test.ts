@@ -25,7 +25,7 @@ describe('ApiClient Authentication Handling', () => {
     // Reset mocks
     vi.clearAllMocks();
     vi.stubGlobal('fetch', fetchMock);
-    
+
     mockGetState.mockReturnValue({
       token: 'test-token',
       user: null,
@@ -47,7 +47,10 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: false,
       status: 401,
-      text: () => Promise.resolve(JSON.stringify({ detail: 'Could not validate credentials' })),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({ detail: 'Could not validate credentials' })
+        ),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
@@ -63,14 +66,17 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: false,
       status: 401,
-      text: () => Promise.resolve(JSON.stringify({
-        success: false,
-        message: 'An HTTP error occurred',
-        error: {
-          type: 'unauthorized',
-          correlation_id: 'test-123'
-        }
-      })),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: false,
+            message: 'An HTTP error occurred',
+            error: {
+              type: 'unauthorized',
+              correlation_id: 'test-123',
+            },
+          })
+        ),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
@@ -86,7 +92,8 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: false,
       status: 500,
-      text: () => Promise.resolve(JSON.stringify({ detail: 'Internal server error' })),
+      text: () =>
+        Promise.resolve(JSON.stringify({ detail: 'Internal server error' })),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
@@ -102,15 +109,18 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: false,
       status: 401,
-      text: () => Promise.resolve(JSON.stringify({
-        success: false,
-        data: null,
-        message: 'Authentication failed',
-        error: {
-          type: 'unauthorized',
-          correlation_id: 'test-456'
-        }
-      })),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: false,
+            data: null,
+            message: 'Authentication failed',
+            error: {
+              type: 'unauthorized',
+              correlation_id: 'test-456',
+            },
+          })
+        ),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
@@ -126,13 +136,16 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: false,
       status: 401,
-      text: () => Promise.resolve(JSON.stringify({
-        success: false,
-        error: {
-          type: 'validation_error', // non-auth type
-          message: 'Some validation error'
-        }
-      })),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: false,
+            error: {
+              type: 'validation_error', // non-auth type
+              message: 'Some validation error',
+            },
+          })
+        ),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
@@ -167,13 +180,16 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: true, // But wrapped response indicates failure
       status: 200,
-      text: () => Promise.resolve(JSON.stringify({
-        success: false,
-        error: {
-          type: 'unauthorized',
-          correlation_id: 'test-correlation-123'
-        }
-      })),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: false,
+            error: {
+              type: 'unauthorized',
+              correlation_id: 'test-correlation-123',
+            },
+          })
+        ),
     };
     fetchMock.mockResolvedValue(mockResponse);
 
@@ -189,13 +205,16 @@ describe('ApiClient Authentication Handling', () => {
     const mockResponse = {
       ok: false,
       status: 200, // Non-401 status but canonical type should trigger logout
-      text: () => Promise.resolve(JSON.stringify({
-        success: false,
-        error: {
-          type: 'token_expired',
-          correlation_id: 'test-correlation-456'
-        }
-      })),
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: false,
+            error: {
+              type: 'token_expired',
+              correlation_id: 'test-correlation-456',
+            },
+          })
+        ),
     };
     fetchMock.mockResolvedValue(mockResponse);
 

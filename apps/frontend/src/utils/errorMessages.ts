@@ -362,7 +362,10 @@ function addContextToErrorMessage(
 /**
  * Check if an error should trigger a logout (e.g., token expired).
  */
-export function shouldLogoutOnError(error: unknown, httpStatus?: number): boolean {
+export function shouldLogoutOnError(
+  error: unknown,
+  httpStatus?: number
+): boolean {
   // Primary check: HTTP status code from response (most reliable)
   if (httpStatus === 401) {
     return true;

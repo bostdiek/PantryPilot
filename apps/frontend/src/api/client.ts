@@ -106,9 +106,13 @@ class ApiClient {
           // Log logout event with correlation ID for debugging
           const correlationId = (body as any)?.error?.correlation_id;
           if (correlationId) {
-            console.info(`Session expired logout triggered (correlation_id: ${correlationId})`);
+            console.info(
+              `Session expired logout triggered (correlation_id: ${correlationId})`
+            );
           } else {
-            console.info('Session expired logout triggered (no correlation_id)');
+            console.info(
+              'Session expired logout triggered (no correlation_id)'
+            );
           }
           useAuthStore.getState().logout('expired');
         }
@@ -145,9 +149,13 @@ class ApiClient {
             // Log logout event with correlation ID for debugging
             const correlationId = (apiResponse as any)?.error?.correlation_id;
             if (correlationId) {
-              console.info(`Session expired logout triggered (correlation_id: ${correlationId})`);
+              console.info(
+                `Session expired logout triggered (correlation_id: ${correlationId})`
+              );
             } else {
-              console.info('Session expired logout triggered (no correlation_id)');
+              console.info(
+                'Session expired logout triggered (no correlation_id)'
+              );
             }
             useAuthStore.getState().logout('expired');
           }
