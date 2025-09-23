@@ -18,10 +18,13 @@ vi.mock('../../components/ui/toast-utils', () => ({
 describe('ApiClient Authentication Handling', () => {
   const mockLogout = vi.fn();
   const mockGetState = vi.mocked(useAuthStore.getState);
+  const fetchMock = vi.fn();
 
   beforeEach(() => {
     // Reset mocks
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', fetchMock);
+    
     mockGetState.mockReturnValue({
       token: 'test-token',
       user: null,
@@ -32,9 +35,6 @@ describe('ApiClient Authentication Handling', () => {
       setUser: vi.fn(),
       getDisplayName: vi.fn(() => 'Test User'),
     });
-
-    // Mock fetch globally
-    global.fetch = vi.fn();
   });
 
   afterEach(() => {
@@ -48,7 +48,7 @@ describe('ApiClient Authentication Handling', () => {
       status: 401,
       text: () => Promise.resolve(JSON.stringify({ detail: 'Could not validate credentials' })),
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    fetchMock.mockResolvedValue(mockResponse);
 
     // Make the request and expect it to throw
     await expect(apiClient.request('/test')).rejects.toThrow();
@@ -71,7 +71,7 @@ describe('ApiClient Authentication Handling', () => {
         }
       })),
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    fetchMock.mockResolvedValue(mockResponse);
 
     // Make the request and expect it to throw
     await expect(apiClient.request('/test')).rejects.toThrow();
@@ -87,7 +87,7 @@ describe('ApiClient Authentication Handling', () => {
       status: 500,
       text: () => Promise.resolve(JSON.stringify({ detail: 'Internal server error' })),
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    fetchMock.mockResolvedValue(mockResponse);
 
     // Make the request and expect it to throw
     await expect(apiClient.request('/test')).rejects.toThrow();
@@ -111,7 +111,7 @@ describe('ApiClient Authentication Handling', () => {
         }
       })),
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    fetchMock.mockResolvedValue(mockResponse);
 
     // Make the request and expect it to throw
     await expect(apiClient.request('/test')).rejects.toThrow();
@@ -133,7 +133,7 @@ describe('ApiClient Authentication Handling', () => {
         }
       })),
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    fetchMock.mockResolvedValue(mockResponse);
 
     // Make the request and expect it to throw
     await expect(apiClient.request('/test')).rejects.toThrow();
@@ -149,7 +149,7 @@ describe('ApiClient Authentication Handling', () => {
       status: 200,
       text: () => Promise.resolve(JSON.stringify({ data: { hello: 'world' } })),
     };
-    global.fetch = vi.fn().mockResolvedValue(mockResponse);
+    fetchMock.mockResolvedValue(mockResponse);
 
     // Make the request
     const result = await apiClient.request('/test');
