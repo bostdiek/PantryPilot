@@ -276,14 +276,14 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         # Wrap into our structure but preserve status code & detail
         status_code = getattr(exc, "status_code", 500)
         detail = getattr(exc, "detail", "An error occurred")
-        
+
         # Provide specific error types for authentication failures
         error_type = "http_error"
         if status_code == 401:
             error_type = "unauthorized"
         elif status_code == 403:
             error_type = "forbidden"
-        
+
         http_error_body: dict[str, Any] = {
             "correlation_id": correlation_id,
             "type": error_type,
