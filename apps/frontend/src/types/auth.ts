@@ -39,7 +39,7 @@ export interface AuthState {
   user: AuthUser | null;
   hasHydrated: boolean; // hydration guard flag
   login: (token: string, user: AuthUser) => void;
-  logout: () => void;
+  logout: (reason?: 'expired' | 'manual') => void;
   setToken: (token: string | null) => void;
   setUser: (user: AuthUser | null) => void;
   getDisplayName: () => string;

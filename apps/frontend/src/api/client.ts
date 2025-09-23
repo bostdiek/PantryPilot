@@ -102,8 +102,8 @@ class ApiClient {
         }
 
         // Check if this error should trigger logout before throwing
-        if (shouldLogoutOnError(body)) {
-          useAuthStore.getState().logout();
+        if (shouldLogoutOnError(body, resp.status)) {
+          useAuthStore.getState().logout('expired');
         }
 
         // Always throw ApiErrorImpl for API errors - consistent error contract
@@ -134,8 +134,8 @@ class ApiClient {
               ? rawMessageStr
               : `Request failed (${resp.status})`;
 
-          if (shouldLogoutOnError(apiResponse)) {
-            useAuthStore.getState().logout();
+          if (shouldLogoutOnError(apiResponse, resp.status)) {
+            useAuthStore.getState().logout('expired');
           }
 
           // Consistent error type for wrapped API responses

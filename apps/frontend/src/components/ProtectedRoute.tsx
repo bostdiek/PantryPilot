@@ -30,7 +30,7 @@ const ProtectedRoute: React.FC = () => {
           console.error('Failed to fetch user profile:', error);
           // If profile fetch fails, the token might be invalid
           // Clear the auth state to force re-login
-          logout();
+          logout('expired');
         }
       }
     };

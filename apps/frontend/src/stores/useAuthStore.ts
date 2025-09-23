@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthState } from '../types/auth';
+import { addToast, generateToastId } from '../components/ui/toast-utils';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -9,7 +10,18 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       hasHydrated: false, // hydration guard flag
       login: (token, user) => set({ token, user }),
-      logout: () => set({ token: null, user: null }),
+      logout: (reason?: 'expired' | 'manual') => {
+        set({ token: null, user: null });
+        
+        // Show user-friendly message for token expiration
+        if (reason === 'expired') {
+          addToast({
+            id: generateToastId(),
+            message: 'Your session has expired. Please log in again.',
+            type: 'info',
+          });
+        }
+      },
       setToken: (token) => set({ token }),
       setUser: (user) => set({ user }),
       getDisplayName: () => {
