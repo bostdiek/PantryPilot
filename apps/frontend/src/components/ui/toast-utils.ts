@@ -22,6 +22,17 @@ export function addToast(toast: ToastState) {
   notifyListeners();
 }
 
+/**
+ * Add a toast if one with the same message doesn't already exist.
+ * Useful for preventing duplicate notifications.
+ */
+export function addToastIfNotExists(toast: ToastState) {
+  const existingToast = internalToasts.find(t => t.message === toast.message && t.type === toast.type);
+  if (!existingToast) {
+    addToast(toast);
+  }
+}
+
 export function removeToast(id: string) {
   internalToasts = internalToasts.filter((t) => t.id !== id);
   notifyListeners();

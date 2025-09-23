@@ -82,6 +82,41 @@ Response envelope: `ApiResponse<T>` with `success`, `data`, `message`, `error`.
 ## Errors
 
 - Standardized error shape via `ApiResponse` with `success=false` and `error` object.
+- Canonical error types for consistent client-side handling:
+
+### Authentication Error Types
+
+| Error Type | HTTP Status | Description | Example |
+|------------|-------------|-------------|---------|
+| `unauthorized` | 401 | Invalid or expired credentials | Token validation failed |
+| `forbidden` | 403 | Valid credentials but insufficient permissions | Access to resource denied |
+
+### Other Error Types
+
+| Error Type | HTTP Status | Description |
+|------------|-------------|-------------|
+| `validation_error` | 422 | Request data validation failed |
+| `domain_error` | 500 | Business logic constraint violated |
+| `internal_server_error` | 500 | Unexpected server error |
+| `http_error` | Various | Generic HTTP error fallback |
+
+### Error Response Format
+
+```json
+{
+  "success": false,
+  "message": "An HTTP error occurred",
+  "error": {
+    "type": "unauthorized",
+    "correlation_id": "uuid-1234-5678",
+    "details": {
+      "detail": "Could not validate credentials"
+    }
+  }
+}
+```
+
+**Note**: The `details` field is only included in non-production environments.
 
 ## OpenAPI
 

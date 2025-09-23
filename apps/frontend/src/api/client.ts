@@ -103,6 +103,13 @@ class ApiClient {
 
         // Check if this error should trigger logout before throwing
         if (shouldLogoutOnError(body, resp.status)) {
+          // Log logout event with correlation ID for debugging
+          const correlationId = (body as any)?.error?.correlation_id;
+          if (correlationId) {
+            console.info(`Session expired logout triggered (correlation_id: ${correlationId})`);
+          } else {
+            console.info('Session expired logout triggered (no correlation_id)');
+          }
           useAuthStore.getState().logout('expired');
         }
 
@@ -135,6 +142,13 @@ class ApiClient {
               : `Request failed (${resp.status})`;
 
           if (shouldLogoutOnError(apiResponse, resp.status)) {
+            // Log logout event with correlation ID for debugging
+            const correlationId = (apiResponse as any)?.error?.correlation_id;
+            if (correlationId) {
+              console.info(`Session expired logout triggered (correlation_id: ${correlationId})`);
+            } else {
+              console.info('Session expired logout triggered (no correlation_id)');
+            }
             useAuthStore.getState().logout('expired');
           }
 

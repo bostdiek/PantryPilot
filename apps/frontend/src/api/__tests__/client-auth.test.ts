@@ -12,6 +12,7 @@ vi.mock('../../stores/useAuthStore', () => ({
 // Mock the toast utilities to avoid side effects
 vi.mock('../../components/ui/toast-utils', () => ({
   addToast: vi.fn(),
+  addToastIfNotExists: vi.fn(),
   generateToastId: vi.fn(() => 'test-toast-id'),
 }));
 
@@ -159,5 +160,49 @@ describe('ApiClient Authentication Handling', () => {
 
     // Verify logout was NOT called
     expect(mockLogout).not.toHaveBeenCalled();
+  });
+
+  it('logs out when canonical error type is unauthorized even with non-401 status', async () => {
+    // Setup response with canonical unauthorized error type but 200 status in wrapped response
+    const mockResponse = {
+      ok: true, // But wrapped response indicates failure
+      status: 200,
+      text: () => Promise.resolve(JSON.stringify({
+        success: false,
+        error: {
+          type: 'unauthorized',
+          correlation_id: 'test-correlation-123'
+        }
+      })),
+    };
+    fetchMock.mockResolvedValue(mockResponse);
+
+    // Make the request and expect it to throw
+    await expect(apiClient.request('/test')).rejects.toThrow();
+
+    // Verify logout was called because canonical type indicates auth failure
+    expect(mockLogout).toHaveBeenCalledWith('expired');
+  });
+
+  it('logs out when token_expired canonical error type is present', async () => {
+    // Setup response with token_expired canonical error type
+    const mockResponse = {
+      ok: false,
+      status: 200, // Non-401 status but canonical type should trigger logout
+      text: () => Promise.resolve(JSON.stringify({
+        success: false,
+        error: {
+          type: 'token_expired',
+          correlation_id: 'test-correlation-456'
+        }
+      })),
+    };
+    fetchMock.mockResolvedValue(mockResponse);
+
+    // Make the request and expect it to throw
+    await expect(apiClient.request('/test')).rejects.toThrow();
+
+    // Verify logout was called for token_expired canonical type
+    expect(mockLogout).toHaveBeenCalledWith('expired');
   });
 });
