@@ -303,7 +303,7 @@ make clean-all                # Remove all Docker resources (safe - PantryPilot 
 
 ### Important Files
 
-- **Configuration**: 
+- **Configuration**:
   - `apps/backend/pyproject.toml` - Python dependencies and tools
   - `apps/frontend/package.json` - Node.js dependencies and scripts
   - `apps/backend/alembic.ini` - Database migration configuration

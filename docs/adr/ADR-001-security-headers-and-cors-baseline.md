@@ -60,7 +60,7 @@ We will implement a **baseline security configuration** that provides essential 
 #### Configuration Files Modified
 ```
 .env.example                           # Enhanced CORS documentation with security warnings
-README.md                             # Added security features section  
+README.md                             # Added security features section
 nginx/nginx.conf                      # Baseline security headers for all responses
 nginx/conf.d/default.conf            # API-specific security measures and BREACH mitigation
 ```
@@ -274,6 +274,6 @@ apps/backend/tests/test_cors_security.py  # Comprehensive CORS test suite (10 te
 This ADR establishes the baseline security architecture. Future ADRs should be created for:
 
 - ADR-002: Authentication and Authorization Architecture
-- ADR-003: Database Security and Encryption Strategy  
+- ADR-003: Database Security and Encryption Strategy
 - ADR-004: Container Security and Deployment Hardening
 - ADR-005: Monitoring and Security Event Management

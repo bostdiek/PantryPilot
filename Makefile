@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db
 
 # Image / build targets (added)
 .PHONY: build-frontend build-backend build-all build-prod-frontend build-prod-backend build-prod-all buildx-setup buildx-push
@@ -58,6 +58,11 @@ help:
 	@echo "  format             - Format all code"
 	@echo "  format-backend     - Format backend code (Ruff)"
 	@echo "  format-frontend    - Format frontend code (Prettier)"
+	@echo ""
+	@echo "Security:"
+	@echo "  secrets-scan       - Run secret scanning with detect-secrets"
+	@echo "  secrets-audit      - Audit secrets baseline and show statistics"
+	@echo "  secrets-update     - Update secrets baseline (after resolving findings)"
 	@echo ""
 	@echo "Testing:"
 	@echo "  test               - Run all tests"
@@ -232,6 +237,20 @@ test-frontend:
 test-coverage:
 	# Run backend tests with coverage
 	cd apps/backend && uv run pytest --cov=src --cov-report=term --cov-report=html
+
+# Security targets
+secrets-scan:
+	# Run secret scanning with detect-secrets
+	cd apps/backend && uv run detect-secrets scan --baseline ../../.secrets.baseline --all-files ../..
+
+secrets-audit:
+	# Audit secrets baseline and show statistics
+	cd apps/backend && uv run detect-secrets audit --stats ../../.secrets.baseline
+
+secrets-update:
+	# Update secrets baseline (run after resolving findings)
+	cd apps/backend && uv run detect-secrets scan --baseline ../../.secrets.baseline --update ../..
+	@echo "⚠️  Remember to review and commit the updated .secrets.baseline file"
 
 # Create a development user in the backend DB (idempotent). Run inside backend container.
 .PHONY: create-dev-user

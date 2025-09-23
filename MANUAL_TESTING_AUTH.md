@@ -49,7 +49,7 @@ This guide documents how to manually test the improved session handling for expi
 ## Verification Checklist
 
 - [ ] 401 HTTP status triggers immediate logout
-- [ ] Backend "Could not validate credentials" message with 401 triggers logout  
+- [ ] Backend "Could not validate credentials" message with 401 triggers logout
 - [ ] Canonical error type "unauthorized" triggers logout
 - [ ] User sees friendly toast: "Your session has expired. Please log in again."
 - [ ] User is redirected to login page automatically
@@ -66,7 +66,7 @@ The backend now returns structured error responses for 401 cases:
 ```json
 {
   "success": false,
-  "message": "An HTTP error occurred", 
+  "message": "An HTTP error occurred",
   "error": {
     "type": "unauthorized",
     "correlation_id": "uuid-123"

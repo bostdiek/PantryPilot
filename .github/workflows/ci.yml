@@ -221,3 +221,32 @@ jobs:
             apps/backend/backend-audit.json
             apps/frontend/frontend-audit.json
           retention-days: 30
+
+  secret-scanning:
+    name: Secret Scanning
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Needed for detect-secrets to analyze all files
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install detect-secrets
+        run: |
+          pip install detect-secrets
+
+      - name: Run secret detection
+        run: |
+          detect-secrets scan --baseline .secrets.baseline --all-files .
+
+      - name: Verify secrets baseline
+        run: |
+          detect-secrets audit --stats .secrets.baseline
