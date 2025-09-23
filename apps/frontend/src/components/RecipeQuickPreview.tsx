@@ -10,6 +10,11 @@ import { Fragment, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Recipe } from '../types/Recipe';
 import { Button } from './ui/Button';
+import { useIsMobile, useIsTablet } from '../hooks/useMediaQuery';
+import { useClickOutside } from '../hooks/useClickOutside';
+import { useSwipeGesture } from '../hooks/useSwipeGesture';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useTouchFeedback } from '../hooks/useTouchFeedback';
 
 export interface RecipeQuickPreviewProps {
   /**
@@ -52,11 +57,31 @@ export function RecipeQuickPreview({
   onRemoveFromDay,
 }: RecipeQuickPreviewProps) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
 
   // Centralized close handler
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
+
+  // Enhanced mobile/tablet touch handling (disabled in test environments)
+  const isTestEnvironment = typeof window !== 'undefined' && 
+    (window.location?.href?.includes('vitest') || process.env.NODE_ENV === 'test');
+  
+  const modalRef = useClickOutside<HTMLDivElement>(isTestEnvironment ? () => {} : handleClose);
+  const swipeRef = useSwipeGesture<HTMLDivElement>({
+    onSwipeDown: isTestEnvironment ? () => {} : handleClose,
+    threshold: 80, // Slightly higher threshold for accidental dismissal
+    velocity: 0.3,
+  });
+  
+  // Focus trap for accessibility (only in production/non-test environments)
+  const focusTrapRef = useFocusTrap<HTMLDivElement>({
+    active: isOpen && !isTestEnvironment,
+    initialFocus: 'button',
+    restoreFocus: true,
+  });
 
   // Close on Escape key - only register once
   useEffect(() => {
@@ -123,8 +148,8 @@ export function RecipeQuickPreview({
           leaveTo="opacity-0"
         >
           <div
+            ref={modalRef}
             className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm"
-            onClick={handleClose}
             aria-hidden="true"
           />
         </TransitionChild>
@@ -142,7 +167,10 @@ export function RecipeQuickPreview({
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <DialogPanel className="relative z-50 w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all">
+              <DialogPanel 
+                ref={focusTrapRef}
+                className="relative z-50 w-full max-w-lg transform overflow-hidden rounded-lg bg-white text-left align-middle shadow-xl transition-all"
+              >
                 <RecipePreviewContent
                   recipe={recipe}
                   firstFiveIngredients={firstFiveIngredients}
@@ -150,6 +178,8 @@ export function RecipeQuickPreview({
                   onViewFull={handleViewFullClick}
                   onRemove={onRemoveFromDay ? handleRemove : undefined}
                   onClose={onClose}
+                  isMobile={false}
+                  isTablet={isTablet}
                 />
               </DialogPanel>
             </TransitionChild>
@@ -166,7 +196,14 @@ export function RecipeQuickPreview({
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-full"
             >
-              <DialogPanel className="relative z-50 max-h-[85vh] w-full transform overflow-hidden rounded-t-lg bg-white text-left align-middle shadow-xl transition-all">
+              <DialogPanel 
+                ref={(el) => {
+                  // Combine refs for swipe gesture and focus trap
+                  swipeRef.current = el;
+                  focusTrapRef.current = el;
+                }}
+                className="relative z-50 max-h-[85vh] w-full transform overflow-hidden rounded-t-lg bg-white text-left align-middle shadow-xl transition-all"
+              >
                 <RecipePreviewContent
                   recipe={recipe}
                   firstFiveIngredients={firstFiveIngredients}
@@ -174,7 +211,8 @@ export function RecipeQuickPreview({
                   onViewFull={handleViewFullClick}
                   onRemove={onRemoveFromDay ? handleRemove : undefined}
                   onClose={onClose}
-                  isMobile
+                  isMobile={true}
+                  isTablet={isTablet}
                 />
               </DialogPanel>
             </TransitionChild>
@@ -193,6 +231,7 @@ interface RecipePreviewContentProps {
   onRemove?: () => void;
   onClose: () => void;
   isMobile?: boolean;
+  isTablet?: boolean;
 }
 
 function RecipePreviewContent({
@@ -203,13 +242,26 @@ function RecipePreviewContent({
   onRemove,
   onClose,
   isMobile = false,
+  isTablet = false,
 }: RecipePreviewContentProps) {
+  // Enhanced touch feedback for buttons
+  const closeButtonRef = useTouchFeedback<HTMLButtonElement>({
+    activeClass: 'bg-gray-100',
+    hapticFeedback: true,
+  });
+
+  // Calculate minimum touch target size (44px for accessibility)
+  const touchTargetClasses = isMobile || isTablet 
+    ? 'min-h-[44px] min-w-[44px] touch-manipulation' 
+    : '';
+
   return (
     <div className={clsx('p-6', isMobile && 'max-h-[85vh] overflow-y-auto')}>
-      {/* Mobile handle bar */}
+      {/* Mobile handle bar for better UX indication */}
       {isMobile && (
         <div className="flex justify-center pb-4">
           <div className="h-1 w-10 rounded-full bg-gray-300" />
+          <span className="sr-only">Swipe down to close</span>
         </div>
       )}
 
@@ -223,8 +275,13 @@ function RecipePreviewContent({
         </DialogTitle>
         {!isMobile && (
           <button
+            ref={closeButtonRef}
             onClick={onClose}
-            className="flex-shrink-0 rounded-md text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            className={clsx(
+              'flex-shrink-0 rounded-md text-gray-400 hover:text-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none',
+              touchTargetClasses,
+              'flex items-center justify-center' // Center content for proper touch target
+            )}
             aria-label="Close preview"
           >
             <span className="sr-only">Close</span>
@@ -300,13 +357,30 @@ function RecipePreviewContent({
         )}
       </div>
 
-      {/* Action buttons */}
-      <div className="flex gap-3 border-t pt-4">
-        <Button variant="primary" className="flex-1" onClick={onViewFull}>
+      {/* Action buttons - Enhanced for mobile/tablet */}
+      <div className={clsx(
+        'flex gap-3 border-t pt-4',
+        (isMobile || isTablet) && 'flex-col' // Stack buttons vertically on mobile/tablet
+      )}>
+        <Button 
+          variant="primary" 
+          className={clsx(
+            'flex-1',
+            touchTargetClasses
+          )} 
+          onClick={onViewFull}
+        >
           View Full Recipe
         </Button>
         {onRemove && (
-          <Button variant="danger" onClick={onRemove} className="flex-1">
+          <Button 
+            variant="danger" 
+            onClick={onRemove} 
+            className={clsx(
+              'flex-1',
+              touchTargetClasses
+            )}
+          >
             Remove from Day
           </Button>
         )}

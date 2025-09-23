@@ -15,6 +15,26 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Mock window.matchMedia for media query hooks
+const mockMatchMedia = vi.fn();
+beforeEach(() => {
+  mockMatchMedia.mockImplementation((query) => ({
+    matches: false, // Default to desktop/non-mobile
+    media: query,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: mockMatchMedia,
+  });
+});
+
 const mockRecipe: Recipe = {
   id: 'recipe-1',
   title: 'Test Recipe',
