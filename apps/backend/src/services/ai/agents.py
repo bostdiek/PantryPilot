@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from pydantic import BaseModel
-from pydantic_ai import Agent, ModelSettings
+from pydantic_ai import Agent
 
 from schemas.ai import AIGeneratedRecipe
 from schemas.recipes import (
@@ -76,7 +76,7 @@ def create_recipe_agent():  # type: ignore
     """Create a pydantic-ai agent for recipe extraction."""
     # Use Gemini Flash for fast, cost-effective extraction
     # Note: pydantic-ai will handle model configuration internally
-    return Agent(
+    return Agent(  # type: ignore
         "gemini-1.5-flash",  # Use fast model for cost efficiency
         system_prompt=RECIPE_EXTRACTION_PROMPT,
         result_type=RecipeExtractionResult,

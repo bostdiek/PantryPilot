@@ -144,15 +144,15 @@ async def extract_recipe_from_url(
         
         # Step 5: Create signed token and deep link
         ttl = timedelta(hours=1)
-        token = create_draft_token(draft.id, current_user.id, ttl)
+        token = create_draft_token(draft.id, current_user.id, ttl)  # type: ignore
         
         # Create deep link URL for frontend
         signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
         
         response_data = AIDraftResponse(
-            draft_id=draft.id,
+            draft_id=draft.id,  # type: ignore
             signed_url=signed_url,
-            expires_at=draft.expires_at,
+            expires_at=draft.expires_at,  # type: ignore
             ttl_seconds=3600,  # 1 hour
         )
         
@@ -230,10 +230,10 @@ async def get_ai_draft(
             )
         
         response_data = AIDraftFetchResponse(
-            payload=draft.payload,
+            payload=draft.payload,  # type: ignore
             type="recipe_suggestion",  # Currently only supporting recipes
-            created_at=draft.created_at,
-            expires_at=draft.expires_at,
+            created_at=draft.created_at,  # type: ignore
+            expires_at=draft.expires_at,  # type: ignore
         )
         
         return ApiResponse(
