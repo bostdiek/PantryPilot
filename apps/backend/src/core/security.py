@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import UUID
 
 from argon2 import PasswordHasher
 from argon2.exceptions import HashingError, VerifyMismatchError
@@ -95,3 +96,73 @@ def decode_token(token: str) -> TokenData:
         sub=str(sub),
         scopes=list(scopes) if isinstance(scopes, list) else [],
     )
+
+
+def create_draft_token(
+    draft_id: UUID, 
+    user_id: UUID, 
+    exp_delta: timedelta | None = None
+) -> str:
+    """Create a signed JWT token for an AI draft.
+    
+    Args:
+        draft_id: The UUID of the draft
+        user_id: The UUID of the user who owns the draft
+        exp_delta: Optional expiration delta, defaults to 1 hour
+        
+    Returns:
+        Signed JWT token containing draft_id, user_id, and expiration
+    """
+    if exp_delta is None:
+        exp_delta = timedelta(hours=1)
+    
+    expire = datetime.now(UTC) + exp_delta
+    payload = {
+        "draft_id": str(draft_id),
+        "user_id": str(user_id),
+        "type": "draft",
+        "exp": expire,
+    }
+    
+    s = _settings()
+    return jwt.encode(payload, s.SECRET_KEY, algorithm=s.ALGORITHM)
+
+
+def decode_draft_token(token: str) -> dict[str, Any]:
+    """Decode and validate a draft JWT token.
+    
+    Args:
+        token: The JWT token to decode
+        
+    Returns:
+        Dict containing draft_id, user_id, and other claims
+        
+    Raises:
+        HTTPException: 401 if token is invalid or expired
+    """
+    try:
+        s = _settings()
+        payload = jwt.decode(
+            token,
+            s.SECRET_KEY,
+            algorithms=[s.ALGORITHM],
+            options={"verify_aud": False},
+        )
+    except JWTError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired draft token",
+        ) from err
+
+    # Validate required claims
+    draft_id = payload.get("draft_id")
+    user_id = payload.get("user_id")
+    token_type = payload.get("type")
+    
+    if not draft_id or not user_id or token_type != "draft":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Malformed draft token",
+        )
+    
+    return payload
