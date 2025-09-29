@@ -10,6 +10,9 @@ vi.mock('../components/ui/icons/chevron-up-down.svg?react', () => ({
 vi.mock('../components/ui/icons/check.svg?react', () => ({
   default: () => <div data-testid="mock-check-icon" />,
 }));
+vi.mock('../components/ui/icons/trash.svg?react', () => ({
+  default: () => <div data-testid="mock-trash-icon" />,
+}));
 // Mock router navigation
 const navigateMock = vi.fn();
 vi.mock('react-router-dom', async () => ({
@@ -53,11 +56,12 @@ describe('RecipesNewPage', () => {
 
     const addButton = screen.getByText(/add ingredient/i);
     fireEvent.click(addButton);
-    expect(screen.getAllByLabelText(/ingredient/i)).toHaveLength(2);
+    // Check for ingredient name fields by their unique placeholder
+    expect(screen.getAllByPlaceholderText(/e\.g\., Onion/i)).toHaveLength(2);
 
-    const removeButtons = screen.getAllByText(/remove/i);
+    const removeButtons = screen.getAllByLabelText(/remove ingredient/i);
     fireEvent.click(removeButtons[0]);
-    expect(screen.getAllByLabelText(/ingredient/i)).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText(/e\.g\., Onion/i)).toHaveLength(1);
   });
 
   test('adds and removes instruction steps dynamically', () => {
@@ -71,7 +75,7 @@ describe('RecipesNewPage', () => {
     fireEvent.click(addStep);
     expect(screen.getAllByPlaceholderText(/step/i)).toHaveLength(2);
 
-    const removeButtons = screen.getAllByText(/remove/i);
+    const removeButtons = screen.getAllByLabelText(/remove step/i);
     // last remove for instructions
     fireEvent.click(removeButtons[removeButtons.length - 1]);
     expect(screen.getAllByPlaceholderText(/step/i)).toHaveLength(1);

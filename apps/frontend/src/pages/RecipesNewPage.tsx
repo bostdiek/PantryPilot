@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -22,6 +23,7 @@ import {
 } from '../types/Recipe';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
+import TrashIcon from '../components/ui/icons/trash.svg?react';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -445,18 +447,20 @@ const RecipesNewPage: FC = () => {
                   placeholder="small, medium, large"
                 />
                 {ingredients.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      const list = [...ingredients];
-                      list.splice(idx, 1);
-                      setIngredients(list);
-                    }}
-                  >
-                    Remove
-                  </Button>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      onClick={() => {
+                        const list = [...ingredients];
+                        list.splice(idx, 1);
+                        setIngredients(list);
+                      }}
+                      aria-label={`Remove ingredient ${idx + 1}`}
+                    >
+                      <Icon svg={TrashIcon} className="h-5 w-5" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -566,13 +570,12 @@ const RecipesNewPage: FC = () => {
                 </div>
 
                 {instructions.length > 1 && (
-                  <div className="pt-7">
+                  <div className="pt-7 flex justify-end">
                     {' '}
                     {/* Align with textarea top */}
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="sm"
+                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                       onClick={() => {
                         const list = [...instructions];
                         list.splice(idx, 1);
@@ -580,8 +583,8 @@ const RecipesNewPage: FC = () => {
                       }}
                       aria-label={`Remove step ${idx + 1}`}
                     >
-                      Remove
-                    </Button>
+                      <Icon svg={TrashIcon} className="h-5 w-5" />
+                    </button>
                   </div>
                 )}
               </div>

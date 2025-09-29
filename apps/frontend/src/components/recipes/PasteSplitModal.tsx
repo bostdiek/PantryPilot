@@ -1,7 +1,9 @@
 import { useLayoutEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
+import { Icon } from '../ui/Icon';
 import { Textarea } from '../ui/Textarea';
+import TrashIcon from '../ui/icons/trash.svg?react';
 
 interface PasteSplitModalProps {
   isOpen: boolean;
@@ -87,15 +89,14 @@ export function PasteSplitModal({
                   Step {index + 1}
                 </label>
                 {editableSteps.length > 1 && (
-                  <Button
+                  <button
                     type="button"
-                    variant="ghost"
-                    size="sm"
+                    className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                     onClick={() => handleRemoveStep(index)}
                     aria-label={`Remove step ${index + 1}`}
                   >
-                    Remove
-                  </Button>
+                    <Icon svg={TrashIcon} className="h-5 w-5" />
+                  </button>
                 )}
               </div>
               {/* Apply reading width constraint to the textarea preview */}

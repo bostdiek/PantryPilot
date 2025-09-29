@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -25,6 +26,7 @@ import {
   mapIngredientsForApi,
   normalizeIngredientsForForm,
 } from '../utils/ingredients';
+import TrashIcon from '../components/ui/icons/trash.svg?react';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -558,16 +560,18 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                   placeholder="small, medium, large"
                 />
                 {form.ingredients.length > 1 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
-                    }
-                  >
-                    Remove
-                  </Button>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      onClick={() =>
+                        dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
+                      }
+                      aria-label={`Remove ingredient ${idx + 1}`}
+                    >
+                      <Icon svg={TrashIcon} className="h-5 w-5" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -660,20 +664,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                 </div>
 
                 {form.instructions.length > 1 && (
-                  <div className="pt-7">
+                  <div className="pt-7 flex justify-end">
                     {' '}
                     {/* Align with textarea top */}
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="sm"
+                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
                       onClick={() =>
                         dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
                       }
                       aria-label={`Remove step ${idx + 1}`}
                     >
-                      Remove
-                    </Button>
+                      <Icon svg={TrashIcon} className="h-5 w-5" />
+                    </button>
                   </div>
                 )}
               </div>
