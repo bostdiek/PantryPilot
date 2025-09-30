@@ -488,90 +488,90 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Ingredients</h2>
             {form.ingredients.map((ing, idx) => (
-              <div key={idx} className="grid grid-cols-6 items-end gap-2">
-                <Input
-                  label={`Ingredient ${idx + 1}`}
-                  className="col-span-2"
-                  value={ing.name}
-                  onChange={(v) =>
-                    dispatch({
-                      type: 'SET_INGREDIENT',
-                      index: idx,
-                      value: { name: v },
-                    })
-                  }
-                  placeholder={`e.g., Onion`}
-                />
-                <Input
-                  label="Qty"
-                  type="number"
-                  className="col-span-1"
-                  value={ing.quantity_value?.toString() ?? ''}
-                  onChange={(v) =>
-                    dispatch({
-                      type: 'SET_INGREDIENT',
-                      index: idx,
-                      value: {
-                        quantity_value: v === '' ? undefined : Number(v),
-                      },
-                    })
-                  }
-                  placeholder="1"
-                />
-                <Input
-                  label="Unit"
-                  className="col-span-1"
-                  value={ing.quantity_unit ?? ''}
-                  onChange={(v) =>
-                    dispatch({
-                      type: 'SET_INGREDIENT',
-                      index: idx,
-                      value: { quantity_unit: v },
-                    })
-                  }
-                  placeholder="count, cup, g"
-                />
-                <Input
-                  label="Method"
-                  className="col-span-1"
-                  value={ing.prep?.method ?? ''}
-                  onChange={(v) =>
-                    dispatch({
-                      type: 'SET_INGREDIENT',
-                      index: idx,
-                      value: { prep: { ...(ing.prep || {}), method: v } },
-                    })
-                  }
-                  placeholder="chopped, sliced"
-                />
-                <Input
-                  label="Size"
-                  className="col-span-1"
-                  value={ing.prep?.size_descriptor ?? ''}
-                  onChange={(v) =>
-                    dispatch({
-                      type: 'SET_INGREDIENT',
-                      index: idx,
-                      value: {
-                        prep: { ...(ing.prep || {}), size_descriptor: v },
-                      },
-                    })
-                  }
-                  placeholder="small, medium, large"
-                />
+              <div key={idx} className="flex items-end justify-between gap-4">
+                <div className="grid grid-cols-6 items-end gap-2 flex-1">
+                  <Input
+                    label={`Ingredient ${idx + 1}`}
+                    className="col-span-2"
+                    value={ing.name}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'SET_INGREDIENT',
+                        index: idx,
+                        value: { name: v },
+                      })
+                    }
+                    placeholder={`e.g., Onion`}
+                  />
+                  <Input
+                    label="Qty"
+                    type="number"
+                    className="col-span-1"
+                    value={ing.quantity_value?.toString() ?? ''}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'SET_INGREDIENT',
+                        index: idx,
+                        value: {
+                          quantity_value: v === '' ? undefined : Number(v),
+                        },
+                      })
+                    }
+                    placeholder="1"
+                  />
+                  <Input
+                    label="Unit"
+                    className="col-span-1"
+                    value={ing.quantity_unit ?? ''}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'SET_INGREDIENT',
+                        index: idx,
+                        value: { quantity_unit: v },
+                      })
+                    }
+                    placeholder="count, cup, g"
+                  />
+                  <Input
+                    label="Method"
+                    className="col-span-1"
+                    value={ing.prep?.method ?? ''}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'SET_INGREDIENT',
+                        index: idx,
+                        value: { prep: { ...(ing.prep || {}), method: v } },
+                      })
+                    }
+                    placeholder="chopped, sliced"
+                  />
+                  <Input
+                    label="Size"
+                    className="col-span-1"
+                    value={ing.prep?.size_descriptor ?? ''}
+                    onChange={(v) =>
+                      dispatch({
+                        type: 'SET_INGREDIENT',
+                        index: idx,
+                        value: {
+                          prep: { ...(ing.prep || {}), size_descriptor: v },
+                        },
+                      })
+                    }
+                    placeholder="small, medium, large"
+                  />
+                </div>
                 {form.ingredients.length > 1 && (
-                  <div className="flex justify-end">
-                    <button
-                      type="button"
-                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                      onClick={() =>
-                        dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
-                      }
-                      aria-label={`Remove ingredient ${idx + 1}`}
-                    >
-                      <Icon svg={TrashIcon} className="h-5 w-5" />
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                    onClick={() =>
+                      dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
+                    }
+                    aria-label={`Remove ingredient ${idx + 1}`}
+                  >
+                    <Icon svg={TrashIcon} className="h-5 w-5" />
+                  </button>
                 )}
               </div>
             ))}
