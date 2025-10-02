@@ -5,7 +5,6 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
-import { Icon } from '../components/ui/Icon';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -562,16 +561,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                   />
                 </div>
                 {form.ingredients.length > 1 && (
-                  <button
+                  <Button
                     type="button"
-                    className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors flex-shrink-0"
+                    variant="ghost"
+                    size="sm"
+                    className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
                     onClick={() =>
                       dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
                     }
                     aria-label={`Remove ingredient ${idx + 1}`}
+                    leftIconSvg={TrashIcon}
                   >
-                    <Icon svg={TrashIcon} className="h-5 w-5" />
-                  </button>
+                    <span className="sr-only">Remove</span>
+                  </Button>
                 )}
               </div>
             ))}
@@ -667,16 +669,19 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                   <div className="pt-7 flex justify-end">
                     {' '}
                     {/* Align with textarea top */}
-                    <button
+                    <Button
                       type="button"
-                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                      variant="ghost"
+                      size="sm"
+                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50"
                       onClick={() =>
                         dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })
                       }
                       aria-label={`Remove step ${idx + 1}`}
+                      leftIconSvg={TrashIcon}
                     >
-                      <Icon svg={TrashIcon} className="h-5 w-5" />
-                    </button>
+                      <span className="sr-only">Remove</span>
+                    </Button>
                   </div>
                 )}
               </div>
