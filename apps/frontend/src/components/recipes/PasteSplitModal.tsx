@@ -92,6 +92,7 @@ export function PasteSplitModal({
                     type="button"
                     variant="ghost"
                     size="sm"
+                    iconOnly
                     className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50"
                     onClick={() => handleRemoveStep(index)}
                     aria-label={`Remove step ${index + 1}`}

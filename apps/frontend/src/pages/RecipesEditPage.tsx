@@ -565,6 +565,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                     type="button"
                     variant="ghost"
                     size="sm"
+                    iconOnly
                     className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
                     onClick={() =>
                       dispatch({ type: 'REMOVE_INGREDIENT', index: idx })
@@ -673,6 +674,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
                       type="button"
                       variant="ghost"
                       size="sm"
+                      iconOnly
                       className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50"
                       onClick={() =>
                         dispatch({ type: 'REMOVE_INSTRUCTION', index: idx })

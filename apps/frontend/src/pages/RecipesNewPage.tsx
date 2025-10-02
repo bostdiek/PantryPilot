@@ -452,6 +452,7 @@ const RecipesNewPage: FC = () => {
                     type="button"
                     variant="ghost"
                     size="sm"
+                    iconOnly
                     className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
                     onClick={() => {
                       const list = [...ingredients];
@@ -579,6 +580,7 @@ const RecipesNewPage: FC = () => {
                       type="button"
                       variant="ghost"
                       size="sm"
+                      iconOnly
                       className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50"
                       onClick={() => {
                         const list = [...instructions];
