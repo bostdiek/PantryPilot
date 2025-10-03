@@ -1,12 +1,12 @@
 """AI agents and services for recipe extraction."""
 
 import logging
+from collections.abc import Mapping
 from typing import Any
 
-from pydantic import BaseModel
 from pydantic_ai import Agent
 
-from schemas.ai import AIGeneratedRecipe
+from schemas.ai import AIGeneratedRecipe, ExtractionNotFound, RecipeExtractionResult
 from schemas.recipes import (
     IngredientIn,
     IngredientPrepIn,
@@ -17,25 +17,6 @@ from schemas.recipes import (
 
 
 logger = logging.getLogger(__name__)
-
-
-class RecipeExtractionResult(BaseModel):
-    """Result from AI recipe extraction."""
-
-    title: str
-    description: str | None = None
-    ingredients: list[dict[str, Any]]
-    instructions: list[str]
-    prep_time_minutes: int
-    cook_time_minutes: int
-    serving_min: int
-    serving_max: int | None = None
-    difficulty: str = "medium"
-    category: str = "dinner"
-    ethnicity: str | None = None
-    oven_temperature_f: int | None = None
-    user_notes: str | None = None
-    confidence_score: float = 0.8
 
 
 # System prompt for recipe extraction
@@ -72,14 +53,18 @@ artifacts or advertisements.
 """
 
 
-def create_recipe_agent():  # type: ignore
+def create_recipe_agent() -> Agent:
     """Create a pydantic-ai agent for recipe extraction."""
     # Use Gemini Flash for fast, cost-effective extraction
     # Note: pydantic-ai will handle model configuration internally
-    return Agent(  # type: ignore
-        "gemini-1.5-flash",  # Use fast model for cost efficiency
+    # Register both the normal extraction result and a simple failure model
+    # as possible output types. This maps to Pydantic AI's tool-output pattern
+    # where the model can explicitly choose the failure output when no recipe
+    # is found on the page.
+    return Agent(
+        "gemini-2.5-flash",
         system_prompt=RECIPE_EXTRACTION_PROMPT,
-        result_type=RecipeExtractionResult,
+        output_type=[RecipeExtractionResult, ExtractionNotFound],
     )
 
 
@@ -88,22 +73,36 @@ def convert_to_recipe_create(
 ) -> AIGeneratedRecipe:
     """Convert extraction result to RecipeCreate schema with validation."""
 
-    # Convert ingredients to proper schema
+    # Convert ingredients to proper schema. The agent may return ingredients
+    # as plain mappings (dict) or as Pydantic models. Handle both cases.
     ingredients: list[IngredientIn] = []
+
+    def _val(obj: object, key: str) -> Any:
+        if isinstance(obj, Mapping):
+            return obj.get(key)
+        return getattr(obj, key, None)
+
     for ing_data in extraction_result.ingredients:
-        prep = None
-        if ing_data.get("prep_method") or ing_data.get("prep_size"):
+        prep_method = _val(ing_data, "prep_method")
+        prep_size = _val(ing_data, "prep_size")
+
+        prep: IngredientPrepIn | None = None
+        if prep_method or prep_size:
             prep = IngredientPrepIn(
-                method=ing_data.get("prep_method"),
-                size_descriptor=ing_data.get("prep_size"),
+                method=prep_method,
+                size_descriptor=prep_size,
             )
 
+        name = _val(ing_data, "name")
+        if name is None:
+            raise ValueError("Ingredient entry missing required 'name' field")
+
         ingredient = IngredientIn(
-            name=ing_data["name"],
-            quantity_value=ing_data.get("quantity_value"),
-            quantity_unit=ing_data.get("quantity_unit"),
+            name=name,
+            quantity_value=_val(ing_data, "quantity_value"),
+            quantity_unit=_val(ing_data, "quantity_unit"),
             prep=prep,
-            is_optional=ing_data.get("is_optional", False),
+            is_optional=_val(ing_data, "is_optional") or False,
         )
         ingredients.append(ingredient)
 

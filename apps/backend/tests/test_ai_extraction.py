@@ -207,7 +207,17 @@ async def test_get_ai_draft_success(no_auth_client, async_db_session) -> None:
 
     token = create_draft_token(draft.id, test_user.id)
 
+    # Debug: log token and draft info to help diagnose 401 mismatches
+    print("DEBUG: draft.id type=", type(draft.id), "value=", draft.id)
+    print("DEBUG: test_user.id type=", type(test_user.id), "value=", test_user.id)
+    print("DEBUG: token=", token)
+
     response = await no_auth_client.get(f"/api/v1/ai/drafts/{draft.id}?token={token}")
+    print("DEBUG: response.status_code=", response.status_code)
+    try:
+        print("DEBUG: response.json()=", response.json())
+    except Exception:
+        print("DEBUG: response.text=", response.text)
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
@@ -259,9 +269,26 @@ async def test_get_ai_draft_expired(no_auth_client, async_db_session) -> None:
 
     token = create_draft_token(expired_draft.id, test_user.id)
 
+    # Debug: log token and draft info for expired draft
+    print(
+        "DEBUG(EXPIRED): expired_draft.id type=",
+        type(expired_draft.id),
+        "value=",
+        expired_draft.id,
+    )
+    print(
+        "DEBUG(EXPIRED): test_user.id type=", type(test_user.id), "value=", test_user.id
+    )
+    print("DEBUG(EXPIRED): token=", token)
+
     response = await no_auth_client.get(
         f"/api/v1/ai/drafts/{expired_draft.id}?token={token}"
     )
+    print("DEBUG(EXPIRED): response.status_code=", response.status_code)
+    try:
+        print("DEBUG(EXPIRED): response.json()=", response.json())
+    except Exception:
+        print("DEBUG(EXPIRED): response.text=", response.text)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 

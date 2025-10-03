@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 
 from dependencies.auth import get_current_user
 
-from .ai import router as ai_router
+from .ai import public_router as ai_public_router, router as ai_router
 from .auth import router as auth_router
 from .grocery_lists import router as grocery_lists_router
 from .health import router as health_router
@@ -24,6 +24,9 @@ api_router.include_router(auth_router)
 # surface the OAuth2 security scheme in OpenAPI as well.
 protected_deps = [Depends(get_current_user)]
 api_router.include_router(ai_router, dependencies=protected_deps)
+# Public AI routes (e.g., signed draft fetch) should be available without
+# the global authentication dependency applied above.
+api_router.include_router(ai_public_router)
 api_router.include_router(recipes_router, dependencies=protected_deps)
 api_router.include_router(mealplans_router, dependencies=protected_deps)
 api_router.include_router(meals_router, dependencies=protected_deps)

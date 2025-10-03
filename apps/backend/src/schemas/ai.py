@@ -1,4 +1,10 @@
-"""AI-related schemas for recipe extraction and suggestions."""
+"""AI-related schemas for recipe extraction and suggestions.
+
+This module defines the structured Pydantic models used by the AI agent and
+the API layers. It includes models for successful extraction as well as
+structured failure outputs the agent can return (see Pydantic AI output
+functions documentation for the pattern).
+"""
 
 from datetime import datetime
 from typing import Any, Literal
@@ -7,6 +13,35 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from .recipes import RecipeCreate
+
+
+class ExtractionNotFound(BaseModel):
+    """Agent output: no extractable recipe was found on the page.
+
+    This is intended to be registered as one of the agent `output_type`
+    alternatives (a simple Pydantic model with a single `reason` field).
+    """
+
+    reason: str = Field(..., description="Why extraction failed (e.g. no recipe found)")
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExtractionFailureResponse(BaseModel):
+    """Requester-facing output describing an extraction failure.
+
+    This is the schema the API (or router agents) can use when returning
+    a structured failure back to the caller. It includes the attempted URL
+    and optional details to aid debugging or display.
+    """
+
+    reason: str = Field(..., description="Why extraction failed (e.g. no recipe found)")
+    source_url: str = Field(..., description="URL attempted for extraction")
+    details: dict[str, Any] | None = Field(
+        default=None, description="Optional extra details about the failure"
+    )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class AIRecipeFromUrlRequest(BaseModel):
@@ -68,3 +103,23 @@ class AIGeneratedRecipe(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+class RecipeExtractionResult(RecipeCreate):
+    """Result from AI recipe extraction, extends RecipeCreate with AI metadata."""
+
+    confidence_score: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="AI confidence in the extraction (0-1)",
+    )
+    extraction_notes: str | None = Field(
+        default=None, description="Notes about the extraction process or issues"
+    )
+    # Optionally override link_source for extraction
+    link_source: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Original source link, if applicable",
+    )

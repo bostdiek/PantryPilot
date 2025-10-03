@@ -223,3 +223,59 @@ async def auth_client() -> AsyncGenerator[tuple[AsyncClient, AsyncSession], None
             yield c, session
     app.dependency_overrides.pop(get_db, None)
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def async_db_session() -> AsyncGenerator[AsyncSession, None]:
+    """Create an in-memory SQLite DB with the minimal tables required for
+    AI draft tests and provide a session fixture.
+
+    This fixture intentionally does not modify auth overrides so that the
+    existing `async_client` fixture's auth behavior remains unchanged.
+    """
+    engine: AsyncEngine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:", future=True
+    )
+
+    # Create minimal required tables: users, ai_drafts, meal (used elsewhere)
+    async with engine.begin() as conn:
+        # Some table definitions use Postgres-specific column types (UUID, JSON)
+        # which SQLite cannot create via SQLAlchemy metadata.create_all. Create a
+        # compatible ai_drafts table using raw SQL and then create the remaining
+        # tables normally.
+        await conn.exec_driver_sql(
+            """
+            CREATE TABLE IF NOT EXISTS ai_drafts (
+                id BLOB PRIMARY KEY,
+                user_id BLOB NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                payload TEXT NOT NULL,
+                source_url TEXT,
+                prompt_used TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        await conn.run_sync(
+            lambda sync_conn: Base.metadata.create_all(
+                sync_conn, tables=[User.__table__, Meal.__table__]
+            )
+        )
+
+    SessionLocal = async_sessionmaker(
+        engine, expire_on_commit=False, class_=AsyncSession
+    )
+
+    async def _override_get_db():
+        async with SessionLocal() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        async with SessionLocal() as session:
+            yield session
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        await engine.dispose()

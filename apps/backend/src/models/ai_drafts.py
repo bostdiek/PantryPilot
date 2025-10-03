@@ -2,10 +2,11 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
 
@@ -19,31 +20,33 @@ class AIDraft(Base):
 
     __tablename__ = "ai_drafts"
 
-    id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    type = Column(
+    type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
         comment="Type of draft: recipe_suggestion, mealplan_suggestion, etc.",
     )
-    payload = Column(
+    payload: Mapped[Any] = mapped_column(
         JSON, nullable=False, comment="JSON payload containing the AI-generated content"
     )
-    source_url = Column(
+    source_url: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="Original URL if extracted from web content"
     )
-    prompt_used = Column(
+    prompt_used: Mapped[str | None] = mapped_column(
         Text, nullable=True, comment="The prompt used for AI generation"
     )
-    created_at = Column(
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC)
     )
-    expires_at = Column(
+    expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         default=lambda: datetime.now(UTC) + timedelta(hours=1),
