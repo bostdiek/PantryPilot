@@ -124,7 +124,7 @@ beforeEach(() => {
 describe('MealPlanPage', () => {
   it('renders a planned entry and marks it cooked', async () => {
     const user = userEvent.setup();
-    // Spy on markCooked so we reuse store wiring but avoid real network calls
+    // Mock markCooked to update the store state instead of making network calls
     const markSpy = vi
       .spyOn(useMealPlanStore.getState(), 'markCooked')
       .mockImplementation(async (id: string) => {
@@ -153,10 +153,23 @@ describe('MealPlanPage', () => {
       const cookedBtn = within(entryItem).getByLabelText(
         /Mark Planned item as cooked/i
       );
+
+      // Before clicking, entry should not be cooked
+      expect(
+        useMealPlanStore.getState().currentWeek?.days[0].entries[0].wasCooked
+      ).toBe(false);
+
       await user.click(cookedBtn);
 
-      await waitFor(() => expect(markSpy).toHaveBeenCalledTimes(1));
-      expect(markSpy.mock.calls[0][0]).toBe('m1');
+      // Wait for the state to update (more reliable than spy timing)
+      await waitFor(() => {
+        const entry =
+          useMealPlanStore.getState().currentWeek?.days[0].entries[0];
+        expect(entry?.wasCooked).toBe(true);
+      });
+
+      // Verify the spy was called with correct ID
+      expect(markSpy).toHaveBeenCalledWith('m1');
     } finally {
       markSpy.mockRestore();
     }
