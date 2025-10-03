@@ -382,7 +382,7 @@ const RecipesNewPage: FC = () => {
             <h2 className="text-lg font-semibold">Ingredients</h2>
             {ingredients.map((ing, idx) => (
               <div key={idx} className="flex items-end justify-between gap-4">
-                <div className="grid grid-cols-6 items-end gap-2 flex-1">
+                <div className="grid flex-1 grid-cols-6 items-end gap-2">
                   <Input
                     label={`Ingredient ${idx + 1}`}
                     className="col-span-2"
@@ -453,7 +453,7 @@ const RecipesNewPage: FC = () => {
                     variant="ghost"
                     size="sm"
                     iconOnly
-                    className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50 flex-shrink-0"
+                    className="min-h-[44px] min-w-[44px] flex-shrink-0 p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                     onClick={() => {
                       const list = [...ingredients];
                       list.splice(idx, 1);
@@ -573,7 +573,7 @@ const RecipesNewPage: FC = () => {
                 </div>
 
                 {instructions.length > 1 && (
-                  <div className="pt-7 flex justify-end">
+                  <div className="flex justify-end pt-7">
                     {' '}
                     {/* Align with textarea top */}
                     <Button
@@ -581,7 +581,7 @@ const RecipesNewPage: FC = () => {
                       variant="ghost"
                       size="sm"
                       iconOnly
-                      className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                      className="min-h-[44px] min-w-[44px] p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                       onClick={() => {
                         const list = [...instructions];
                         list.splice(idx, 1);

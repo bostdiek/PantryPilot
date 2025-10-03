@@ -49,10 +49,10 @@ describe('PasteSplitModal', () => {
     // Test that we can remove a step using the trash icon
     const removeButtons = screen.getAllByLabelText(/remove step/i);
     expect(removeButtons).toHaveLength(2); // Should have remove buttons for both steps
-    
+
     // Remove the first step
     fireEvent.click(removeButtons[0]);
-    
+
     // Should now only have one step (what was Step 2 becomes Step 1)
     expect(screen.getAllByLabelText(/^Step \d+$/)).toHaveLength(1);
     expect(screen.getByLabelText('Step 1')).toHaveValue('Step B'); // Step B becomes the new Step 1

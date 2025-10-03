@@ -93,7 +93,7 @@ export function PasteSplitModal({
                     variant="ghost"
                     size="sm"
                     iconOnly
-                    className="min-w-[44px] min-h-[44px] p-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+                    className="min-h-[44px] min-w-[44px] p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                     onClick={() => handleRemoveStep(index)}
                     aria-label={`Remove step ${index + 1}`}
                     leftIconSvg={TrashIcon}
