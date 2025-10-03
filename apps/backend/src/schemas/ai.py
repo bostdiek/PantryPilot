@@ -14,9 +14,9 @@ class AIRecipeFromUrlRequest(BaseModel):
 
     source_url: HttpUrl = Field(..., description="Recipe page URL to extract from")
     prompt_override: str | None = Field(
-        default=None, 
+        default=None,
         max_length=1000,
-        description="Optional custom prompt to override default extraction prompt"
+        description="Optional custom prompt to override default extraction prompt",
     )
 
     model_config = ConfigDict(extra="forbid")
@@ -61,8 +61,7 @@ class AIGeneratedRecipe(BaseModel):
         ..., ge=0.0, le=1.0, description="AI confidence in the extraction (0-1)"
     )
     extraction_notes: str | None = Field(
-        default=None, 
-        description="Notes about the extraction process or issues"
+        default=None, description="Notes about the extraction process or issues"
     )
     source_url: str = Field(
         ..., description="Original URL the recipe was extracted from"

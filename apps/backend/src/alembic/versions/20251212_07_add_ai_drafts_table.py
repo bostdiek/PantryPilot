@@ -27,56 +27,53 @@ def upgrade() -> None:
         "ai_drafts",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column(
-            "user_id", 
-            postgresql.UUID(as_uuid=True), 
+            "user_id",
+            postgresql.UUID(as_uuid=True),
             nullable=False,
-            comment="User who owns this draft"
+            comment="User who owns this draft",
         ),
         sa.Column(
-            "type", 
-            sa.String(length=50), 
+            "type",
+            sa.String(length=50),
             nullable=False,
-            comment="Type of draft: recipe_suggestion, mealplan_suggestion, etc."
+            comment="Type of draft: recipe_suggestion, mealplan_suggestion, etc.",
         ),
         sa.Column(
-            "payload", 
-            postgresql.JSON(astext_type=sa.Text()), 
+            "payload",
+            postgresql.JSON(astext_type=sa.Text()),
             nullable=False,
-            comment="JSON payload containing the AI-generated content"
+            comment="JSON payload containing the AI-generated content",
         ),
         sa.Column(
-            "source_url", 
-            sa.Text(), 
+            "source_url",
+            sa.Text(),
             nullable=True,
-            comment="Original URL if extracted from web content"
+            comment="Original URL if extracted from web content",
         ),
         sa.Column(
-            "prompt_used", 
-            sa.Text(), 
+            "prompt_used",
+            sa.Text(),
             nullable=True,
-            comment="The prompt used for AI generation"
+            comment="The prompt used for AI generation",
         ),
         sa.Column(
-            "created_at", 
-            sa.DateTime(timezone=True), 
+            "created_at",
+            sa.DateTime(timezone=True),
             nullable=False,
-            server_default=sa.text("now()")
+            server_default=sa.text("now()"),
         ),
         sa.Column(
-            "expires_at", 
-            sa.DateTime(timezone=True), 
+            "expires_at",
+            sa.DateTime(timezone=True),
             nullable=False,
-            comment="When this draft expires and should be deleted"
+            comment="When this draft expires and should be deleted",
         ),
         sa.PrimaryKeyConstraint("id"),
         sa.ForeignKeyConstraint(
-            ["user_id"], 
-            ["users.id"], 
-            name="fk_ai_drafts_user_id",
-            ondelete="CASCADE"
+            ["user_id"], ["users.id"], name="fk_ai_drafts_user_id", ondelete="CASCADE"
         ),
     )
-    
+
     # Add indexes for performance
     op.create_index("ix_ai_drafts_user_id", "ai_drafts", ["user_id"])
     op.create_index("ix_ai_drafts_expires_at", "ai_drafts", ["expires_at"])

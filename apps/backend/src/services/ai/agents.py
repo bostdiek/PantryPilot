@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class RecipeExtractionResult(BaseModel):
     """Result from AI recipe extraction."""
-    
+
     title: str
     description: str | None = None
     ingredients: list[dict[str, Any]]
@@ -40,7 +40,7 @@ class RecipeExtractionResult(BaseModel):
 
 # System prompt for recipe extraction
 RECIPE_EXTRACTION_PROMPT = """
-You are a skilled recipe extraction AI. Extract structured recipe information 
+You are a skilled recipe extraction AI. Extract structured recipe information
 from the provided HTML content.
 
 Your task is to identify and extract:
@@ -63,11 +63,11 @@ For ingredients, extract:
 - preparation method and size if mentioned (like "chopped", "diced", optional)
 - whether ingredient is optional (default: false)
 
-Return a confidence score (0.0-1.0) indicating how confident you are in the 
+Return a confidence score (0.0-1.0) indicating how confident you are in the
 extraction quality.
 
-Be conservative with time estimates and serving sizes. If unclear, make 
-reasonable assumptions. Focus on extracting clean, readable text without HTML 
+Be conservative with time estimates and serving sizes. If unclear, make
+reasonable assumptions. Focus on extracting clean, readable text without HTML
 artifacts or advertisements.
 """
 
@@ -84,11 +84,10 @@ def create_recipe_agent():  # type: ignore
 
 
 def convert_to_recipe_create(
-    extraction_result: RecipeExtractionResult, 
-    source_url: str
+    extraction_result: RecipeExtractionResult, source_url: str
 ) -> AIGeneratedRecipe:
     """Convert extraction result to RecipeCreate schema with validation."""
-    
+
     # Convert ingredients to proper schema
     ingredients: list[IngredientIn] = []
     for ing_data in extraction_result.ingredients:
@@ -96,29 +95,29 @@ def convert_to_recipe_create(
         if ing_data.get("prep_method") or ing_data.get("prep_size"):
             prep = IngredientPrepIn(
                 method=ing_data.get("prep_method"),
-                size_descriptor=ing_data.get("prep_size")
+                size_descriptor=ing_data.get("prep_size"),
             )
-        
+
         ingredient = IngredientIn(
             name=ing_data["name"],
             quantity_value=ing_data.get("quantity_value"),
             quantity_unit=ing_data.get("quantity_unit"),
             prep=prep,
-            is_optional=ing_data.get("is_optional", False)
+            is_optional=ing_data.get("is_optional", False),
         )
         ingredients.append(ingredient)
-    
+
     # Validate and convert enums
     try:
         difficulty = RecipeDifficulty(extraction_result.difficulty.lower())
     except ValueError:
         difficulty = RecipeDifficulty.MEDIUM
-        
+
     try:
         category = RecipeCategory(extraction_result.category.lower())
     except ValueError:
         category = RecipeCategory.DINNER
-    
+
     # Create the recipe data
     recipe_data = RecipeCreate(
         title=extraction_result.title,
@@ -136,10 +135,10 @@ def convert_to_recipe_create(
         link_source=source_url,  # Store original URL
         ingredients=ingredients,
     )
-    
+
     return AIGeneratedRecipe(
         recipe_data=recipe_data,
         confidence_score=extraction_result.confidence_score,
         extraction_notes=None,
-        source_url=source_url
+        source_url=source_url,
     )

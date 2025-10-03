@@ -6,6 +6,6 @@ from .html_extractor import HTMLExtractionService
 
 __all__ = [
     "create_recipe_agent",
-    "convert_to_recipe_create", 
+    "convert_to_recipe_create",
     "HTMLExtractionService",
 ]

@@ -41,24 +41,24 @@ async def extract_recipe_from_url(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[AIDraftResponse]:
     """Extract recipe from URL using AI and create a signed deep link.
-    
+
     This endpoint:
     1. Validates and fetches HTML from the provided URL
     2. Sanitizes the HTML content to remove ads/scripts/trackers
     3. Uses AI to extract structured recipe data
     4. Creates a temporary AIDraft with the extracted data
     5. Returns a signed deep link for the frontend to load the draft
-    
+
     Requires authentication via JWT Bearer token.
-    
+
     Args:
         request: Contains source URL and optional prompt override
         db: Database session
         current_user: Authenticated user from JWT
-        
+
     Returns:
         ApiResponse containing draft_id, signed_url, and expiration info
-        
+
     Raises:
         HTTPException: 422 for invalid URL, 500 for AI/processing failures
     """
@@ -66,34 +66,34 @@ async def extract_recipe_from_url(
         # Step 1: Fetch and sanitize HTML
         logger.info(f"Fetching recipe from URL: {request.source_url}")
         sanitized_html = await html_service.fetch_and_sanitize(str(request.source_url))
-        
+
         if not sanitized_html.strip():
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="No usable content found at the provided URL"
+                detail="No usable content found at the provided URL",
             )
-        
+
         # Step 2: Create AI agent and extract recipe
         logger.info("Extracting recipe using AI agent")
         agent = create_recipe_agent()
-        
+
         # Use custom prompt if provided, otherwise use default
         prompt = (
-            request.prompt_override 
+            request.prompt_override
             or "Extract the recipe information from this HTML content:"
         )
         full_prompt = f"{prompt}\n\nHTML Content:\n{sanitized_html}"
-        
+
         try:
             # Run AI extraction
             result = await agent.run(full_prompt)
             extraction_result = result.data
-            
+
             logger.info(
                 f"AI extraction completed with confidence: "
                 f"{extraction_result.confidence_score}"
             )
-            
+
         except AgentRunError as e:
             logger.error(f"AI agent failed: {e}")
             raise HTTPException(
@@ -101,15 +101,15 @@ async def extract_recipe_from_url(
                 detail=(
                     "Failed to extract recipe using AI. "
                     "The content may not contain a valid recipe."
-                )
+                ),
             ) from e
         except Exception as e:
             logger.error(f"Unexpected AI error: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="AI processing failed"
+                detail="AI processing failed",
             ) from e
-        
+
         # Step 3: Convert to standard recipe schema
         try:
             generated_recipe = convert_to_recipe_create(
@@ -119,9 +119,9 @@ async def extract_recipe_from_url(
             logger.error(f"Schema conversion failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to process extracted recipe data"
+                detail="Failed to process extracted recipe data",
             ) from e
-        
+
         # Step 4: Create draft with extracted data
         draft_payload = {
             "generated_recipe": generated_recipe.model_dump(),
@@ -129,9 +129,9 @@ async def extract_recipe_from_url(
                 "confidence_score": generated_recipe.confidence_score,
                 "source_url": str(request.source_url),
                 "extracted_at": datetime.now(UTC).isoformat(),
-            }
+            },
         }
-        
+
         draft = await create_draft(
             db=db,
             user_id=current_user.id,
@@ -141,31 +141,29 @@ async def extract_recipe_from_url(
             prompt_used=request.prompt_override,
             ttl_hours=1,
         )
-        
+
         # Step 5: Create signed token and deep link
         ttl = timedelta(hours=1)
         token = create_draft_token(draft.id, current_user.id, ttl)  # type: ignore
-        
+
         # Create deep link URL for frontend
         signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
-        
+
         response_data = AIDraftResponse(
             draft_id=draft.id,  # type: ignore
             signed_url=signed_url,
             expires_at=draft.expires_at,  # type: ignore
             ttl_seconds=3600,  # 1 hour
         )
-        
+
         logger.info(
             f"Successfully created AI draft {draft.id} for user {current_user.id}"
         )
-        
+
         return ApiResponse(
-            success=True,
-            data=response_data,
-            message="Recipe extracted successfully"
+            success=True, data=response_data, message="Recipe extracted successfully"
         )
-        
+
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
@@ -173,7 +171,7 @@ async def extract_recipe_from_url(
         logger.error(f"Unexpected error in recipe extraction: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during recipe extraction"
+            detail="An unexpected error occurred during recipe extraction",
         ) from e
 
 
@@ -184,69 +182,66 @@ async def get_ai_draft(
     db: DbSession,
 ) -> ApiResponse[AIDraftFetchResponse]:
     """Fetch an AI draft using a signed token.
-    
+
     This endpoint validates the signed token and returns the draft payload
     if the token is valid and not expired.
-    
+
     Args:
         draft_id: UUID of the draft to fetch
         token: Signed JWT token for authorization
         db: Database session
-        
+
     Returns:
         ApiResponse containing the draft payload and metadata
-        
+
     Raises:
         HTTPException: 401 for invalid/expired token, 404 for draft not found
     """
     try:
         # Decode and validate the token
         from core.security import decode_draft_token
+
         token_payload = decode_draft_token(token)
-        
+
         # Verify the draft_id matches the token
         if str(draft_id) != token_payload.get("draft_id"):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token does not match draft ID"
+                detail="Token does not match draft ID",
             )
-        
+
         # Get user_id from token for ownership check
         user_id = UUID(token_payload["user_id"])
-        
+
         # Fetch the draft
         draft = await get_draft_by_id(db, draft_id, user_id)
         if not draft:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Draft not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found"
             )
-        
+
         # Check if draft has expired
         if datetime.now(UTC) >= draft.expires_at:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Draft has expired"
+                status_code=status.HTTP_404_NOT_FOUND, detail="Draft has expired"
             )
-        
+
         response_data = AIDraftFetchResponse(
             payload=draft.payload,  # type: ignore
             type="recipe_suggestion",  # Currently only supporting recipes
             created_at=draft.created_at,  # type: ignore
             expires_at=draft.expires_at,  # type: ignore
         )
-        
+
         return ApiResponse(
-            success=True,
-            data=response_data,
-            message="Draft retrieved successfully"
+            success=True, data=response_data, message="Draft retrieved successfully"
         )
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error fetching draft {draft_id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve draft"
+            detail="Failed to retrieve draft",
         ) from e
