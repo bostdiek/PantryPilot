@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as mealPlansApi from '../../api/endpoints/mealPlans';
 import { useMealPlanStore } from '../../stores/useMealPlanStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import MealPlanPage from '../MealPlanPage';
@@ -124,25 +125,22 @@ beforeEach(() => {
 describe('MealPlanPage', () => {
   it('renders a planned entry and marks it cooked', async () => {
     const user = userEvent.setup();
-    // Mock markCooked to update the store state instead of making network calls
-    const markSpy = vi
-      .spyOn(useMealPlanStore.getState(), 'markCooked')
+
+    // Mock the API function to return a cooked entry
+    const markMealCookedSpy = vi
+      .spyOn(mealPlansApi, 'markMealCooked')
       .mockImplementation(async (id: string) => {
-        const state = useMealPlanStore.getState();
-        const week = state.currentWeek;
-        if (!week) return;
-        for (const d of week.days) {
-          const idx = d.entries.findIndex((e) => e.id === id);
-          if (idx !== -1) {
-            d.entries[idx] = {
-              ...d.entries[idx],
-              wasCooked: true,
-              cookedAt: new Date().toISOString(),
-            } as any;
-            break;
-          }
-        }
-        useMealPlanStore.setState({ currentWeek: { ...week } } as any);
+        // Return the entry with wasCooked: true
+        return {
+          id,
+          plannedForDate: '2025-01-13',
+          mealType: 'dinner',
+          isLeftover: false,
+          isEatingOut: false,
+          orderIndex: 0,
+          wasCooked: true,
+          cookedAt: new Date().toISOString(),
+        } as any;
       });
 
     try {
@@ -161,17 +159,17 @@ describe('MealPlanPage', () => {
 
       await user.click(cookedBtn);
 
-      // Wait for the state to update (more reliable than spy timing)
+      // Wait for the state to update (the store will update with the mocked API response)
       await waitFor(() => {
         const entry =
           useMealPlanStore.getState().currentWeek?.days[0].entries[0];
         expect(entry?.wasCooked).toBe(true);
       });
 
-      // Verify the spy was called with correct ID
-      expect(markSpy).toHaveBeenCalledWith('m1');
+      // Verify the API was called with correct ID
+      expect(markMealCookedSpy).toHaveBeenCalledWith('m1', undefined);
     } finally {
-      markSpy.mockRestore();
+      markMealCookedSpy.mockRestore();
     }
 
     // no restore needed; state reset by test beforeEach
