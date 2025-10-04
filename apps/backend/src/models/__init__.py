@@ -5,6 +5,7 @@ These re-exports are intentional so callers can import from
 unused-import warnings for the explicit re-exports.
 """
 
+from .ai_drafts import AIDraft  # noqa: F401
 from .ingredient_names import Ingredient  # noqa: F401
 from .meal_history import Meal  # noqa: F401
 from .recipe_ingredients import RecipeIngredient  # noqa: F401

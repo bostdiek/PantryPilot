@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
+    from .ai_drafts import AIDraft
     from .ingredient_names import Ingredient
     from .meal_history import Meal
     from .recipes_names import Recipe
@@ -53,4 +54,7 @@ class User(Base):
     recipes: Mapped[list[Recipe]] = relationship("Recipe", back_populates="user")
     ingredients: Mapped[list[Ingredient]] = relationship(
         "Ingredient", back_populates="user"
+    )
+    ai_drafts: Mapped[list[AIDraft]] = relationship(
+        "AIDraft", back_populates="user", cascade="all, delete-orphan"
     )

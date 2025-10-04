@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     ]
     ALLOW_CREDENTIALS: bool = True
 
+    # AI / LLM provider configuration
+    # GEMINI_API_KEY is optional; prefer storing secrets in .env.dev/.env.prod
+    GEMINI_API_KEY: str | None = None
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: object) -> list[str]:
