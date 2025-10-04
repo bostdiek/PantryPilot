@@ -421,10 +421,10 @@ async def build_extraction_stream(  # noqa: C901 - generator with multiple stage
                 payload=failure_payload,
                 source_url=str(source_url),
                 prompt_used=prompt_override,
-                ttl_hours=1,
+                ttl_hours=DRAFT_TTL_HOURS,
             )
             token = create_draft_token(
-                failure_draft.id, current_user.id, timedelta(hours=1)
+                failure_draft.id, current_user.id, timedelta(hours=DRAFT_TTL_HOURS)
             )
             signed_url = f"/recipes/new?ai=1&draftId={failure_draft.id}&token={token}"
             yield sse(
@@ -486,9 +486,11 @@ async def build_extraction_stream(  # noqa: C901 - generator with multiple stage
             payload=draft_payload,
             source_url=str(source_url),
             prompt_used=prompt_override,
-            ttl_hours=1,
+            ttl_hours=DRAFT_TTL_HOURS,
         )
-        token = create_draft_token(draft.id, current_user.id, timedelta(hours=1))
+        token = create_draft_token(
+            draft.id, current_user.id, timedelta(hours=DRAFT_TTL_HOURS)
+        )
         signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
         yield sse(
             {
