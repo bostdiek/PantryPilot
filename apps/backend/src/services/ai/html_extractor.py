@@ -5,7 +5,8 @@ import re
 from urllib.parse import urljoin, urlparse
 
 import httpx
-from bs4 import BeautifulSoup, Comment
+from bs4 import BeautifulSoup
+from bs4.element import Comment, NavigableString
 from fastapi import HTTPException, status
 
 
@@ -270,10 +271,18 @@ class HTMLExtractionService:
         for selector in self.RECIPE_SELECTORS:
             elements = soup.select(selector)
             if elements:
-                # Return the first matching element
-                recipe_soup = BeautifulSoup("", "html.parser")
-                recipe_soup.append(elements[0])
-                return recipe_soup
+                # Return a new BeautifulSoup fragment created from the string
+                # representation of the matched element. This avoids trying to
+                # move an element from one tree to another which can raise
+                # "element is not part of a tree" errors when the element
+                # already belongs to a parsed document.
+                try:
+                    fragment = BeautifulSoup(str(elements[0]), "html.parser")
+                    return fragment
+                except Exception:
+                    # Fallback to returning None so the caller will use the
+                    # full document instead of a broken fragment.
+                    return None
 
         return None
 
@@ -300,12 +309,37 @@ class HTMLExtractionService:
         Args:
             soup: BeautifulSoup object to clean
         """
-        # Remove excessive whitespace
-        for element in soup.descendants:
-            if hasattr(element, "string") and element.string:
-                cleaned = re.sub(r"\s+", " ", element.string).strip()
-                if cleaned != element.string:
-                    element.string.replace_with(cleaned)
+        # Remove excessive whitespace. Operate only on NavigableString nodes
+        # that are still attached to the parse tree to avoid errors like
+        # "Cannot replace one element with another when the element to be
+        # replaced is not part of a tree."
+
+        for node in list(soup.descendants):
+            # We only care about text nodes
+            if not isinstance(node, NavigableString):
+                continue
+
+            text = node.string
+            if not text:
+                continue
+
+            cleaned = re.sub(r"\s+", " ", text).strip()
+            if cleaned == text:
+                continue
+
+            # Ensure the node still has a parent (is in the tree) before
+            # attempting to replace it. Some fragments or extracted nodes may
+            # not be attached, and replace_with would raise in that case.
+            parent = getattr(node, "parent", None)
+            if parent is None:
+                # Skip orphaned text nodes
+                continue
+
+            try:
+                node.replace_with(cleaned)
+            except Exception as e:
+                # Log and skip any node we can't replace safely
+                logger.debug("Skipping text node replacement due to: %s", e)
 
     def _resolve_urls(self, soup: BeautifulSoup, base_url: str) -> None:
         """Convert relative URLs to absolute URLs.
