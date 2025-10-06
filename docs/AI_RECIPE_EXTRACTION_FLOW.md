@@ -143,7 +143,13 @@ A draft is still created so the frontend has a uniform deep-link mechanism. The 
 
 ## Draft Retrieval
 
-Endpoint: `GET /api/v1/ai/drafts/{draft_id}?token=<jwt>`
+Endpoint (public, deep-link): `GET /api/v1/ai/drafts/{draft_id}?token=<jwt>`
+
+Owner-only endpoint (authenticated): `GET /api/v1/ai/drafts/{draft_id}/me`
+
+Notes:
+- The public route above is the deep-link flow and requires the signed token returned by the non-streaming `POST /api/v1/ai/extract-recipe-from-url` response (`data.signed_url` contains `token=...`). Use this when you want unauthenticated recipients to open the draft.
+- The new owner-only endpoint (`/me`) is protected and accepts a Bearer access token (same auth used for streaming and the POST endpoint). Use this route when the same authenticated user that initiated extraction (for example via SSE) wants to fetch the draft without extracting/using the signed token.
 
 On success (HTTP 200):
 
@@ -191,6 +197,20 @@ payload = {
   }
 }
 ```
+
+### Failure details and new agent failure type
+
+The agent can explicitly indicate no recipe is present using a failure output type. Newer agents may return a failure type named `NoFoodOrDrinkRecipe` (or the legacy `ExtractionNotFound`). When this happens the draft payload will include an `extraction_metadata.failure.reason` string with a stable error code such as:
+
+- `no_recipe_found` — the agent explicitly determined the page contains no food/drink recipe
+- `model_declined` — the model chose not to extract (e.g., ambiguous content)
+- `heuristics_failed` — optional later heuristic validator rejected the candidate
+
+Frontend handling:
+
+- If `extraction_metadata.failure` is present, show a friendly failure banner and offer Retry / Edit Manually actions.
+- Log the failure.reason for analytics and user feedback.
+
 
 ## Frontend Handling Logic
 
