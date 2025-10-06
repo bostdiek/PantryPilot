@@ -212,7 +212,7 @@ describe('AI Drafts API endpoints', () => {
       };
 
       // Mock EventSource constructor
-      global.EventSource = vi.fn(
+      (globalThis as any).EventSource = vi.fn(
         () => eventSourceMock
       ) as unknown as typeof EventSource;
     });
@@ -230,7 +230,7 @@ describe('AI Drafts API endpoints', () => {
         onError
       );
 
-      expect(global.EventSource).toHaveBeenCalledWith(
+      expect((globalThis as any).EventSource).toHaveBeenCalledWith(
         '/api/v1/ai/extract-recipe-stream?source_url=https%3A%2F%2Fexample.com%2Frecipe',
         { withCredentials: true }
       );
@@ -250,7 +250,7 @@ describe('AI Drafts API endpoints', () => {
       );
 
       // URLSearchParams uses + for spaces, not %20
-      expect(global.EventSource).toHaveBeenCalledWith(
+      expect((globalThis as any).EventSource).toHaveBeenCalledWith(
         '/api/v1/ai/extract-recipe-stream?source_url=https%3A%2F%2Fexample.com%2Frecipe&prompt_override=custom+prompt',
         { withCredentials: true }
       );
