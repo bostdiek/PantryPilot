@@ -35,6 +35,20 @@ from schemas.ai import ExtractionNotFound
 logger = logging.getLogger(__name__)
 
 
+class _FailureDraftStub:
+    """Small test-friendly stub used only as a defensive fallback when the
+    real DB-backed draft creation path is unavailable (kept minimal).
+
+    Tests should prefer injecting a DraftServiceProtocol implementation;
+    this stub exists only to avoid retaining unittest.mock in production code.
+    """
+
+    def __init__(self, id: UUID, payload: dict[str, Any], expires_at: datetime) -> None:
+        self.id: UUID = id
+        self.payload: dict[str, Any] = payload
+        self.expires_at: datetime = expires_at
+
+
 async def _maybe_call(fn: Callable[..., Any] | None, *args: Any, **kwargs: Any) -> Any:
     """Call fn which may be sync or async; await if necessary.
 
@@ -75,16 +89,20 @@ async def create_success_draft(
         )
         draft = cast(AIDraft, draft_any)
     except AttributeError as exc:  # pragma: no cover - defensive
-        from unittest.mock import Mock
         from uuid import uuid4
 
         logger.debug(
-            "create_success_draft: limited DB session, returning Mock draft: %s", exc
+            "create_success_draft: limited DB session, returning stub draft: %s",
+            exc,
         )
-        draft = Mock()
-        draft.id = uuid4()
-        draft.payload = payload
-        draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
+        draft = cast(
+            AIDraft,
+            _FailureDraftStub(
+                id=uuid4(),
+                payload=payload,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            ),
+        )
     logger.debug(
         "create_success_draft: created draft id=%s", getattr(draft, "id", None)
     )
@@ -123,15 +141,20 @@ async def create_failure_draft(
         )
         draft = cast(AIDraft, draft_any)
     except AttributeError as exc:  # pragma: no cover - defensive
-        from unittest.mock import Mock
         from uuid import uuid4
 
         logger.debug(
-            "create_failure_draft: limited DB session, returning Mock draft: %s", exc
+            "create_failure_draft: limited DB session, returning stub draft: %s",
+            exc,
         )
-        draft = Mock()
-        draft.id = uuid4()
-        draft.payload = payload
+        draft = cast(
+            AIDraft,
+            _FailureDraftStub(
+                id=uuid4(),
+                payload=payload,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            ),
+        )
     # Keep an expires_at attribute for tests; set to now+1h
     draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
     logger.debug(

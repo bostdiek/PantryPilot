@@ -120,7 +120,6 @@ class AIExtractionService(ABC):
         ...
 
     @abstractmethod
-    @abstractmethod
     def stream_extraction_progress(
         self,
         source_url: str,

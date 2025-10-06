@@ -1,7 +1,7 @@
 """Tests for ingredient preparation normalization in AI extraction conversion."""
 
-from schemas.ai import RecipeExtractionResult
-from services.ai.agents import convert_to_recipe_create
+from src.schemas.ai import RecipeExtractionResult
+from src.services.ai.agents import convert_to_recipe_create
 
 
 def test_sliced_black_olives_normalization() -> None:

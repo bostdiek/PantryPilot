@@ -71,14 +71,13 @@ def create_recipe_agent() -> Agent:
     """Create a pydantic-ai agent for recipe extraction."""
     # Use Gemini Flash for fast, cost-effective extraction
     # Note: pydantic-ai will handle model configuration internally
-    # Register both the normal extraction result and a simple failure model
-    # as possible output types. This maps to Pydantic AI's tool-output pattern
-    # where the model can explicitly choose the failure output when no recipe
-    # is found on the page.
-    # Register both the normal extraction result and two explicit
-    # failure models (legacy ExtractionNotFound plus NoFoodOrDrinkRecipe)
-    # so the agent can choose a clear failure tool if it detects non-food
-    # documentation pages.
+    # Register three output types:
+    # 1. RecipeExtractionResult (normal extraction result)
+    # 2. ExtractionNotFound (explicit failure: no recipe found)
+    # 3. NoFoodOrDrinkRecipe (explicit failure: page is not a food or drink recipe)
+    # This maps to Pydantic AI's tool-output pattern, allowing the model to
+    # choose a clear failure output when no recipe is found or when the page
+    # is not a food/drink recipe (e.g., documentation pages).
     from schemas.ai import NoFoodOrDrinkRecipe
 
     return Agent(

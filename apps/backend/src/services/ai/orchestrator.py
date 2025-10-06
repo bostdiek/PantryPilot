@@ -284,6 +284,7 @@ class Orchestrator(AIExtractionService):
             )
             return
 
+        # Local import to avoid import cycles at module import time
         from schemas.ai import ExtractionNotFound  # noqa: PLC0415 (local import)
 
         if isinstance(extraction_result, ExtractionNotFound):
