@@ -27,6 +27,20 @@ class ExtractionNotFound(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# Alias/subclass for clearer tool name when the agent decides no food/drink
+# recipe is present on the page. Keep ExtractionNotFound for backwards
+# compatibility in tests and other code; the agent may return either.
+class NoFoodOrDrinkRecipe(ExtractionNotFound):
+    """Explicit model indicating the page does not contain a food or drink recipe.
+
+    This subclass exists primarily to provide a clearer tool name for the
+    agent output type registry (e.g. pydantic-ai Agent output_type). It has the
+    same fields as ExtractionNotFound and the same validation behavior.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ExtractionFailureResponse(BaseModel):
     """Requester-facing output describing an extraction failure.
 

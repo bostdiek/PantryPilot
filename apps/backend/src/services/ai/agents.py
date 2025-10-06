@@ -75,10 +75,16 @@ def create_recipe_agent() -> Agent:
     # as possible output types. This maps to Pydantic AI's tool-output pattern
     # where the model can explicitly choose the failure output when no recipe
     # is found on the page.
+    # Register both the normal extraction result and two explicit
+    # failure models (legacy ExtractionNotFound plus NoFoodOrDrinkRecipe)
+    # so the agent can choose a clear failure tool if it detects non-food
+    # documentation pages.
+    from schemas.ai import NoFoodOrDrinkRecipe
+
     return Agent(
         "gemini-2.5-flash-lite",
         system_prompt=RECIPE_EXTRACTION_PROMPT,
-        output_type=[RecipeExtractionResult, ExtractionNotFound],
+        output_type=[RecipeExtractionResult, ExtractionNotFound, NoFoodOrDrinkRecipe],
     )
 
 
