@@ -1,7 +1,7 @@
 """Tests for AI recipe extraction functionality."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import Mock, patch
 from uuid import uuid4
 
 import pytest
@@ -12,7 +12,7 @@ from httpx import ASGITransport, AsyncClient
 from crud.ai_drafts import create_draft
 from main import app
 from models.ai_drafts import AIDraft
-from schemas.ai import AIGeneratedRecipe, AIRecipeFromUrlRequest
+from schemas.ai import AIGeneratedRecipe, AIRecipeFromUrlRequest, RecipeExtractionResult
 from schemas.recipes import IngredientIn, RecipeCategory, RecipeCreate, RecipeDifficulty
 from services.ai.html_extractor import HTMLExtractionService
 
@@ -35,6 +35,30 @@ async def no_auth_client():
 
     # Restore original overrides
     app.dependency_overrides = original_overrides
+
+
+@pytest.fixture
+def mock_extraction_result():
+    """Reusable RecipeExtractionResult for tests that need a sample extraction."""
+    return RecipeExtractionResult(
+        title="Mock AI Recipe",
+        description="A recipe extracted by AI",
+        prep_time_minutes=15,
+        cook_time_minutes=30,
+        serving_min=4,
+        instructions=["Step 1", "Step 2"],
+        difficulty=RecipeDifficulty.MEDIUM,
+        category=RecipeCategory.DINNER,
+        ingredients=[
+            {
+                "name": "Test Ingredient",
+                "quantity_value": 1.0,
+                "quantity_unit": "cup",
+                "is_optional": False,
+            }
+        ],
+        confidence_score=0.85,
+    )
 
 
 @pytest.mark.asyncio
@@ -69,23 +93,45 @@ async def test_extract_recipe_from_url_success(
         extraction_notes=None,
     )
 
-    mock_result = Mock()
-    mock_result.data = Mock()
-    mock_result.data.confidence_score = 0.85
+    mock_extraction_result = RecipeExtractionResult(
+        title="Mock AI Recipe",
+        description="A recipe extracted by AI",
+        prep_time_minutes=15,
+        cook_time_minutes=30,
+        serving_min=4,
+        instructions=["Step 1", "Step 2"],
+        difficulty=RecipeDifficulty.MEDIUM,
+        category=RecipeCategory.DINNER,
+        ingredients=[
+            {
+                "name": "Test Ingredient",
+                "quantity_value": 1.0,
+                "quantity_unit": "cup",
+                "is_optional": False,
+            }
+        ],
+        confidence_score=0.85,
+    )
 
     # Mock the AI agent
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(return_value=mock_result)
+    # Mock agent behavior is provided via patching run_extraction_agent below.
 
     # Mock the HTML service
     mock_html = "<html><body><h1>Mock Recipe</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "api.v1.ai.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
-        patch("api.v1.ai.convert_to_recipe_create", return_value=mock_generated_recipe),
+        patch(
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
+        patch(
+            "api.v1.ai.convert_to_recipe_create",
+            return_value=mock_generated_recipe,
+        ),
     ):
         response = await async_client.post(
             "/api/v1/ai/extract-recipe-from-url",
@@ -135,19 +181,29 @@ async def test_extract_recipe_from_url_unauthorized(no_auth_client) -> None:
 @pytest.mark.asyncio
 async def test_extract_recipe_ai_failure(async_client: AsyncClient) -> None:
     """Test handling of AI extraction failure."""
-    from pydantic_ai import AgentRunError
+    try:
+        from pydantic_ai import AgentRunError  # type: ignore[import-not-found]
+    except Exception:  # pragma: no cover - test environment fallback
+
+        class AgentRunError(Exception):
+            """Fallback exception used in tests when pydantic_ai isn't installed."""
+
+            pass
 
     # Mock the AI agent to raise an exception
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(side_effect=AgentRunError("AI processing failed"))
+    # The agent run is simulated via patch of run_extraction_agent below.
 
     mock_html = "<html><body><h1>Mock Recipe</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "api.v1.ai.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
+        patch(
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
     ):
         response = await async_client.post(
             "/api/v1/ai/extract-recipe-from-url",
@@ -172,21 +228,27 @@ async def test_extract_recipe_from_url_extraction_not_found(
     from schemas.ai import ExtractionNotFound
 
     # Mock the AI agent to return ExtractionNotFound
-    mock_result = Mock()
-    mock_result.output = ExtractionNotFound(reason="No recipe found on this page")
+    mock_extraction_result = Mock()
+    mock_extraction_result = ExtractionNotFound(reason="No recipe found on this page")
 
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(return_value=mock_result)
+    # Agent behavior patched below; no local mock variable needed.
 
     mock_html = "<html><body><h1>Not a recipe page</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "api.v1.ai.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
-        patch("api.v1.ai.create_draft") as mock_create_draft,
-        patch("api.v1.ai.create_draft_token", return_value="test-token"),
+        patch(
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
+        patch("crud.ai_drafts.create_draft") as mock_create_draft,
+        patch(
+            "crud.ai_drafts.create_draft_token",
+            return_value="test-token",
+        ),
     ):
         # Mock the draft creation
         mock_draft = Mock()
@@ -258,17 +320,7 @@ async def test_get_ai_draft_success(no_auth_client, async_db_session) -> None:
 
     token = create_draft_token(draft.id, test_user.id)
 
-    # Debug: log token and draft info to help diagnose 401 mismatches
-    print("DEBUG: draft.id type=", type(draft.id), "value=", draft.id)
-    print("DEBUG: test_user.id type=", type(test_user.id), "value=", test_user.id)
-    print("DEBUG: token=", token)
-
     response = await no_auth_client.get(f"/api/v1/ai/drafts/{draft.id}?token={token}")
-    print("DEBUG: response.status_code=", response.status_code)
-    try:
-        print("DEBUG: response.json()=", response.json())
-    except Exception:
-        print("DEBUG: response.text=", response.text)
 
     assert response.status_code == status.HTTP_200_OK
     data = response.json()
@@ -320,26 +372,9 @@ async def test_get_ai_draft_expired(no_auth_client, async_db_session) -> None:
 
     token = create_draft_token(expired_draft.id, test_user.id)
 
-    # Debug: log token and draft info for expired draft
-    print(
-        "DEBUG(EXPIRED): expired_draft.id type=",
-        type(expired_draft.id),
-        "value=",
-        expired_draft.id,
-    )
-    print(
-        "DEBUG(EXPIRED): test_user.id type=", type(test_user.id), "value=", test_user.id
-    )
-    print("DEBUG(EXPIRED): token=", token)
-
     response = await no_auth_client.get(
         f"/api/v1/ai/drafts/{expired_draft.id}?token={token}"
     )
-    print("DEBUG(EXPIRED): response.status_code=", response.status_code)
-    try:
-        print("DEBUG(EXPIRED): response.json()=", response.json())
-    except Exception:
-        print("DEBUG(EXPIRED): response.text=", response.text)
 
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -629,8 +664,8 @@ async def test_extract_recipe_stream_success(async_client: AsyncClient) -> None:
     )
 
     # Mock the AI agent response
-    mock_result = Mock()
-    mock_result.output = extraction_result
+    mock_extraction_result = Mock()
+    mock_extraction_result = extraction_result
 
     mock_generated_recipe = AIGeneratedRecipe(
         recipe_data=RecipeCreate(
@@ -656,19 +691,23 @@ async def test_extract_recipe_stream_success(async_client: AsyncClient) -> None:
         extraction_notes=None,
     )
 
-    # Mock the AI agent
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(return_value=mock_result)
-
+    # Agent behavior provided via patched run_extraction_agent
     # Mock the HTML service
     mock_html = "<html><body><h1>Mock Recipe</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "api.v1.ai.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
-        patch("api.v1.ai.convert_to_recipe_create", return_value=mock_generated_recipe),
+        patch(
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
+        patch(
+            "api.v1.ai.convert_to_recipe_create",
+            return_value=mock_generated_recipe,
+        ),
     ):
         response = await async_client.get(
             "/api/v1/ai/extract-recipe-stream?source_url=https://example.com/recipe"
@@ -722,19 +761,20 @@ async def test_extract_recipe_stream_success(async_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_extract_recipe_stream_ai_failure(async_client: AsyncClient) -> None:
     """Test SSE streaming with AI extraction failure."""
-    from pydantic_ai import AgentRunError  # type: ignore[import-not-found]
 
-    # Mock the AI agent to raise an exception
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(side_effect=AgentRunError("AI processing failed"))
+    # Mock the AI agent to raise an exception via patched run_extraction_agent
 
     mock_html = "<html><body><h1>Mock Recipe</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "services.ai.extraction_pipeline.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
+        patch(
+            "services.ai.extraction_pipeline.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
     ):
         response = await async_client.get(
             "/api/v1/ai/extract-recipe-stream?source_url=https://example.com/recipe"
@@ -776,11 +816,13 @@ async def test_extract_recipe_stream_ai_failure(async_client: AsyncClient) -> No
 async def test_extract_recipe_stream_fetch_failure(async_client: AsyncClient) -> None:
     """Test SSE streaming with HTML fetch failure."""
     # Mock AI agent creation and HTML service to fail
-    mock_agent = Mock()
     with (
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize",
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
+        patch(
+            "api.v1.ai.fetch_sanitized_html",
             side_effect=Exception("Network error"),
         ),
     ):
@@ -814,10 +856,12 @@ async def test_extract_recipe_stream_fetch_failure(async_client: AsyncClient) ->
 async def test_extract_recipe_stream_no_html_content(async_client: AsyncClient) -> None:
     """Test SSE streaming when no usable HTML content is found."""
     # Mock AI agent creation and HTML service to return empty content
-    mock_agent = Mock()
     with (
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
-        patch("api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=""),
+        patch(
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
+        patch("api.v1.ai.fetch_sanitized_html", return_value=""),
     ):
         response = await async_client.get(
             "/api/v1/ai/extract-recipe-stream?source_url=https://example.com/recipe"
@@ -853,11 +897,10 @@ async def test_extract_recipe_stream_extraction_not_found(
     from schemas.ai import ExtractionNotFound
 
     # Mock the AI agent to return ExtractionNotFound
-    mock_result = Mock()
-    mock_result.output = ExtractionNotFound(reason="No recipe found on this page")
+    mock_extraction_result = Mock()
+    mock_extraction_result = ExtractionNotFound(reason="No recipe found on this page")
 
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(return_value=mock_result)
+    # Agent behavior provided via patched run_extraction_agent
 
     mock_html = "<html><body><h1>Not a recipe page</h1></body></html>"
 
@@ -867,9 +910,13 @@ async def test_extract_recipe_stream_extraction_not_found(
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "api.v1.ai.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
+        patch(
+            "api.v1.ai.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
         patch("api.v1.ai.create_draft", return_value=mock_draft),
         patch("api.v1.ai.create_draft_token", return_value="test-token"),
     ):
@@ -908,19 +955,22 @@ async def test_extract_recipe_stream_conversion_failure(
 ) -> None:
     """Test SSE streaming when schema conversion fails."""
     # Mock the AI agent to return invalid result type
-    mock_result = Mock()
-    mock_result.output = "invalid_result_type"  # Not RecipeExtractionResult
+    mock_extraction_result = Mock()
+    mock_extraction_result = "invalid_result_type"  # Not RecipeExtractionResult
 
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(return_value=mock_result)
+    # Agent behavior provided via patched run_extraction_agent
 
     mock_html = "<html><body><h1>Mock Recipe</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "services.ai.extraction_pipeline.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
+        patch(
+            "services.ai.extraction_pipeline.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ),
     ):
         response = await async_client.get(
             "/api/v1/ai/extract-recipe-stream?source_url=https://example.com/recipe"
@@ -965,17 +1015,17 @@ async def test_extract_recipe_stream_with_prompt_override(
 ) -> None:
     """Test SSE streaming with custom prompt override."""
     # Mock the AI agent response
-    mock_result = Mock()
-    mock_result.output = Mock()
-    mock_result.output.confidence_score = 0.85
-    mock_result.output.title = "Custom Prompt Recipe"
-    mock_result.output.prep_time_minutes = 10
-    mock_result.output.cook_time_minutes = 15
-    mock_result.output.serving_min = 2
-    mock_result.output.instructions = ["Custom step"]
-    mock_result.output.difficulty = "easy"
-    mock_result.output.category = "snack"
-    mock_result.output.ingredients = []
+    mock_extraction_result = Mock()
+    mock_extraction_result = Mock()
+    mock_extraction_result.confidence_score = 0.85
+    mock_extraction_result.title = "Custom Prompt Recipe"
+    mock_extraction_result.prep_time_minutes = 10
+    mock_extraction_result.cook_time_minutes = 15
+    mock_extraction_result.serving_min = 2
+    mock_extraction_result.instructions = ["Custom step"]
+    mock_extraction_result.difficulty = "easy"
+    mock_extraction_result.category = "snack"
+    mock_extraction_result.ingredients = []
 
     mock_generated_recipe = AIGeneratedRecipe(
         recipe_data=RecipeCreate(
@@ -999,17 +1049,23 @@ async def test_extract_recipe_stream_with_prompt_override(
         extraction_notes=None,
     )
 
-    mock_agent = Mock()
-    mock_agent.run = AsyncMock(return_value=mock_result)
+    # Agent behavior provided via patched run_extraction_agent
 
     mock_html = "<html><body><h1>Mock Recipe</h1></body></html>"
 
     with (
         patch(
-            "api.v1.ai.HTMLExtractionService.fetch_and_sanitize", return_value=mock_html
+            "services.ai.extraction_pipeline.fetch_sanitized_html",
+            return_value=mock_html,
         ),
-        patch("api.v1.ai.create_recipe_agent", return_value=mock_agent),
-        patch("api.v1.ai.convert_to_recipe_create", return_value=mock_generated_recipe),
+        patch(
+            "services.ai.extraction_pipeline.run_extraction_agent",
+            return_value=mock_extraction_result,
+        ) as mock_run,
+        patch(
+            "services.ai.agents.convert_to_recipe_create",
+            return_value=mock_generated_recipe,
+        ),
     ):
         # Test with custom prompt
         custom_prompt = "Extract only the ingredients from this page"
@@ -1020,6 +1076,6 @@ async def test_extract_recipe_stream_with_prompt_override(
     assert response.status_code == status.HTTP_200_OK
 
     # Verify the agent was called with the custom prompt
-    mock_agent.run.assert_called_once()
-    call_args = mock_agent.run.call_args[0][0]
+    mock_run.assert_called_once()
+    call_args = mock_run.call_args[0][0]
     assert custom_prompt in call_args

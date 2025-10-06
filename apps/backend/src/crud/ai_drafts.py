@@ -7,7 +7,16 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.security import create_draft_token
+
+# Publicly expose create_draft_token here by importing from core.security.
+# Tests often patch `crud.ai_drafts.create_draft_token`, so keeping the
+# symbol at module level is important for test patchability.
 from models.ai_drafts import AIDraft
+
+
+# Re-export for test patchability: tests patch `crud.ai_drafts.create_draft_token`.
+create_draft_token = create_draft_token
 
 
 async def create_draft(
