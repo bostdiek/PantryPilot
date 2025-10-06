@@ -210,9 +210,11 @@ export async function extractRecipeStreamFetch(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const API_BASE_URL = getApiBaseUrl();
+  
   try {
     const response = await fetch(
-      `/api/v1/ai/extract-recipe-stream?${params.toString()}`,
+      `${API_BASE_URL}/api/v1/ai/extract-recipe-stream?${params.toString()}`,
       {
         method: 'GET',
         headers,

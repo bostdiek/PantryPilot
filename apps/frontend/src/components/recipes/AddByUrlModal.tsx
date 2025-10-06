@@ -5,7 +5,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { ErrorMessage } from '../ui/ErrorMessage';
 import {
-  extractRecipeStream,
+  extractRecipeStreamFetch,
   extractRecipeFromUrl,
 } from '../../api/endpoints/aiDrafts';
 import { ApiErrorImpl } from '../../types/api';
@@ -23,13 +23,13 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
   const [useStreaming] = useState(true);
-  const [eventSource, setEventSource] = useState<EventSource | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   const handleClose = () => {
-    // Cancel any ongoing SSE connection
-    if (eventSource) {
-      eventSource.close();
-      setEventSource(null);
+    // Cancel any ongoing stream
+    if (abortController) {
+      abortController.abort();
+      setAbortController(null);
     }
     setUrl('');
     setError(null);
@@ -58,10 +58,10 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
 
     setIsLoading(true);
 
-    // Try streaming first
+    // Try streaming first using fetch-based approach (supports auth headers)
     if (useStreaming) {
       try {
-        const es = extractRecipeStream(
+        const controller = await extractRecipeStreamFetch(
           url,
           undefined,
           (event: SSEEvent) => {
@@ -77,8 +77,8 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
             handleClose();
           },
           (err: ApiErrorImpl) => {
-            // SSE failed, try fallback to POST
-            console.warn('SSE failed, falling back to POST:', err);
+            // Streaming failed, try fallback to POST
+            console.warn('Streaming failed, falling back to POST:', err);
             setProgressMessages((prev) => [
               ...prev,
               'Switching to fallback method...',
@@ -86,9 +86,9 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
             fallbackToPost();
           }
         );
-        setEventSource(es);
+        setAbortController(controller);
       } catch (err) {
-        console.error('Failed to establish SSE connection:', err);
+        console.error('Failed to establish streaming connection:', err);
         fallbackToPost();
       }
     } else {

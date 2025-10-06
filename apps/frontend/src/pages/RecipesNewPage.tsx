@@ -1,4 +1,4 @@
-import { useState, useEffect, type FC, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
@@ -141,9 +141,13 @@ const RecipesNewPage: FC = () => {
   const apiUnavailable = !isApiOnline;
 
   // Prefill form from AI suggestion when available
+  // Use a ref to track if we've already prefilled to avoid clearing prematurely
+  const hasPrefilledRef = useRef(false);
+  
   useEffect(() => {
-    if (formSuggestion) {
+    if (formSuggestion && !hasPrefilledRef.current) {
       console.log('Prefilling form from AI suggestion:', formSuggestion);
+      hasPrefilledRef.current = true;
 
       // Prefill all fields
       setTitle(formSuggestion.title || '');
@@ -173,13 +177,16 @@ const RecipesNewPage: FC = () => {
       if (formSuggestion.instructions && formSuggestion.instructions.length > 0) {
         setInstructions(formSuggestion.instructions);
       }
-
-      // Clear the suggestion after prefilling to avoid re-running
-      // Use setTimeout to ensure state updates have been processed
-      setTimeout(() => {
-        clearFormSuggestion();
-      }, 0);
     }
+  }, [formSuggestion]);
+  
+  // Clean up suggestion when component unmounts
+  useEffect(() => {
+    return () => {
+      if (formSuggestion) {
+        clearFormSuggestion();
+      }
+    };
   }, [formSuggestion, clearFormSuggestion]);
 
   // Check if there are unsaved changes
