@@ -275,6 +275,8 @@ export async function extractRecipeStreamFetch(
           if (data.status === 'complete') {
             if (data.signed_url && data.draft_id) {
               onComplete(data.signed_url, data.draft_id);
+              // Close the reader to stop processing further messages
+              reader.cancel();
             } else {
               onError(
                 new ApiErrorImpl(
@@ -293,6 +295,7 @@ export async function extractRecipeStreamFetch(
                 data.error_code
               )
             );
+            reader.cancel();
             break;
           }
         } catch (err) {

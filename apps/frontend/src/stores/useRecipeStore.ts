@@ -469,16 +469,28 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   },
 
   // AI suggestion actions
-  setFormFromSuggestion: (payload: AIDraftPayload) => {
-    // Extract recipe data from the AI draft payload
-    if (payload.generated_recipe) {
-      const recipeData = payload.generated_recipe.recipe_data;
+  setFormFromSuggestion: (payload: any) => {
+    // The backend returns payload directly as AIGeneratedRecipe, not wrapped
+    // Check if payload has recipe_data (success case) or if it's the old nested format
+    let recipeData = null;
+    
+    if (payload.recipe_data) {
+      // Direct format: payload IS the generated recipe
+      recipeData = payload.recipe_data;
+    } else if (payload.generated_recipe?.recipe_data) {
+      // Nested format (for backward compatibility)
+      recipeData = payload.generated_recipe.recipe_data;
+    }
+    
+    if (recipeData) {
+      console.log('Setting form suggestion with recipe data:', recipeData);
       set({
         formSuggestion: recipeData,
         isAISuggestion: true,
       });
     } else {
       // If extraction failed, clear the suggestion
+      console.log('No recipe data found in payload, clearing suggestion');
       set({
         formSuggestion: null,
         isAISuggestion: true, // Keep flag to show AI panel
