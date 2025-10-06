@@ -2,6 +2,7 @@ import { useLayoutEffect, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { Textarea } from '../ui/Textarea';
+import TrashIcon from '../ui/icons/trash.svg?react';
 
 interface PasteSplitModalProps {
   isOpen: boolean;
@@ -91,10 +92,13 @@ export function PasteSplitModal({
                     type="button"
                     variant="ghost"
                     size="sm"
+                    iconOnly
+                    className="min-h-[44px] min-w-[44px] p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                     onClick={() => handleRemoveStep(index)}
                     aria-label={`Remove step ${index + 1}`}
+                    leftIconSvg={TrashIcon}
                   >
-                    Remove
+                    <span className="sr-only">Remove</span>
                   </Button>
                 )}
               </div>

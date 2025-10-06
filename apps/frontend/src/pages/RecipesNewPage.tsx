@@ -22,6 +22,7 @@ import {
 } from '../types/Recipe';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
+import TrashIcon from '../components/ui/icons/trash.svg?react';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -380,82 +381,88 @@ const RecipesNewPage: FC = () => {
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">Ingredients</h2>
             {ingredients.map((ing, idx) => (
-              <div key={idx} className="grid grid-cols-6 items-end gap-2">
-                <Input
-                  label={`Ingredient ${idx + 1}`}
-                  className="col-span-2"
-                  value={ing.name}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = { ...list[idx], name: v };
-                    setIngredients(list);
-                  }}
-                  placeholder={`e.g., Onion`}
-                />
-                <Input
-                  label="Qty"
-                  type="number"
-                  className="col-span-1"
-                  value={ing.quantity_value?.toString() ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    const val = v === '' ? undefined : Number(v);
-                    list[idx] = { ...list[idx], quantity_value: val };
-                    setIngredients(list);
-                  }}
-                  placeholder="1"
-                />
-                <Input
-                  label="Unit"
-                  className="col-span-1"
-                  value={ing.quantity_unit ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = { ...list[idx], quantity_unit: v };
-                    setIngredients(list);
-                  }}
-                  placeholder="count, cup, g"
-                />
-                <Input
-                  label="Method"
-                  className="col-span-1"
-                  value={ing.prep?.method ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = {
-                      ...list[idx],
-                      prep: { ...(list[idx].prep || {}), method: v },
-                    };
-                    setIngredients(list);
-                  }}
-                  placeholder="chopped, sliced"
-                />
-                <Input
-                  label="Size"
-                  className="col-span-1"
-                  value={ing.prep?.size_descriptor ?? ''}
-                  onChange={(v) => {
-                    const list = [...ingredients];
-                    list[idx] = {
-                      ...list[idx],
-                      prep: { ...(list[idx].prep || {}), size_descriptor: v },
-                    };
-                    setIngredients(list);
-                  }}
-                  placeholder="small, medium, large"
-                />
+              <div key={idx} className="flex items-end justify-between gap-4">
+                <div className="grid flex-1 grid-cols-6 items-end gap-2">
+                  <Input
+                    label={`Ingredient ${idx + 1}`}
+                    className="col-span-2"
+                    value={ing.name}
+                    onChange={(v) => {
+                      const list = [...ingredients];
+                      list[idx] = { ...list[idx], name: v };
+                      setIngredients(list);
+                    }}
+                    placeholder={`e.g., Onion`}
+                  />
+                  <Input
+                    label="Qty"
+                    type="number"
+                    className="col-span-1"
+                    value={ing.quantity_value?.toString() ?? ''}
+                    onChange={(v) => {
+                      const list = [...ingredients];
+                      const val = v === '' ? undefined : Number(v);
+                      list[idx] = { ...list[idx], quantity_value: val };
+                      setIngredients(list);
+                    }}
+                    placeholder="1"
+                  />
+                  <Input
+                    label="Unit"
+                    className="col-span-1"
+                    value={ing.quantity_unit ?? ''}
+                    onChange={(v) => {
+                      const list = [...ingredients];
+                      list[idx] = { ...list[idx], quantity_unit: v };
+                      setIngredients(list);
+                    }}
+                    placeholder="count, cup, g"
+                  />
+                  <Input
+                    label="Method"
+                    className="col-span-1"
+                    value={ing.prep?.method ?? ''}
+                    onChange={(v) => {
+                      const list = [...ingredients];
+                      list[idx] = {
+                        ...list[idx],
+                        prep: { ...(list[idx].prep || {}), method: v },
+                      };
+                      setIngredients(list);
+                    }}
+                    placeholder="chopped, sliced"
+                  />
+                  <Input
+                    label="Size"
+                    className="col-span-1"
+                    value={ing.prep?.size_descriptor ?? ''}
+                    onChange={(v) => {
+                      const list = [...ingredients];
+                      list[idx] = {
+                        ...list[idx],
+                        prep: { ...(list[idx].prep || {}), size_descriptor: v },
+                      };
+                      setIngredients(list);
+                    }}
+                    placeholder="small, medium, large"
+                  />
+                </div>
                 {ingredients.length > 1 && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
+                    iconOnly
+                    className="min-h-[44px] min-w-[44px] flex-shrink-0 p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                     onClick={() => {
                       const list = [...ingredients];
                       list.splice(idx, 1);
                       setIngredients(list);
                     }}
+                    aria-label={`Remove ingredient ${idx + 1}`}
+                    leftIconSvg={TrashIcon}
                   >
-                    Remove
+                    <span className="sr-only">Remove</span>
                   </Button>
                 )}
               </div>
@@ -566,21 +573,24 @@ const RecipesNewPage: FC = () => {
                 </div>
 
                 {instructions.length > 1 && (
-                  <div className="pt-7">
+                  <div className="flex justify-end pt-7">
                     {' '}
                     {/* Align with textarea top */}
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      iconOnly
+                      className="min-h-[44px] min-w-[44px] p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                       onClick={() => {
                         const list = [...instructions];
                         list.splice(idx, 1);
                         setInstructions(list);
                       }}
                       aria-label={`Remove step ${idx + 1}`}
+                      leftIconSvg={TrashIcon}
                     >
-                      Remove
+                      <span className="sr-only">Remove</span>
                     </Button>
                   </div>
                 )}

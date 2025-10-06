@@ -76,6 +76,12 @@ export interface ButtonProps
   rightIconSvg?: ComponentType<SVGProps<SVGSVGElement>>;
 
   /**
+   * Icon-only button (removes margin between icon and text)
+   * @default false
+   */
+  iconOnly?: boolean;
+
+  /**
    * Additional CSS classes
    */
   className?: string;
@@ -104,6 +110,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       rightIcon,
       leftIconSvg,
       rightIconSvg,
+      iconOnly = false,
       className = '',
       type = 'button',
       ...props
@@ -189,17 +196,29 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading && <LoadingSpinner />}
         {!loading && leftIcon && (
-          <Icon src={leftIcon} className={clsx('mr-2', iconSize[size])} />
+          <Icon
+            src={leftIcon}
+            className={clsx(!iconOnly && 'mr-2', iconSize[size])}
+          />
         )}
         {!loading && leftIconSvg && (
-          <Icon svg={leftIconSvg} className={clsx('mr-2', iconSize[size])} />
+          <Icon
+            svg={leftIconSvg}
+            className={clsx(!iconOnly && 'mr-2', iconSize[size])}
+          />
         )}
         {children}
         {!loading && rightIcon && (
-          <Icon src={rightIcon} className={clsx('ml-2', iconSize[size])} />
+          <Icon
+            src={rightIcon}
+            className={clsx(!iconOnly && 'ml-2', iconSize[size])}
+          />
         )}
         {!loading && rightIconSvg && (
-          <Icon svg={rightIconSvg} className={clsx('ml-2', iconSize[size])} />
+          <Icon
+            svg={rightIconSvg}
+            className={clsx(!iconOnly && 'ml-2', iconSize[size])}
+          />
         )}
       </button>
     );
