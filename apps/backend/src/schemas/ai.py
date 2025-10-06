@@ -123,3 +123,66 @@ class RecipeExtractionResult(RecipeCreate):
         max_length=255,
         description="Original source link, if applicable",
     )
+
+
+class SSEEvent(BaseModel):
+    """Structured Server-Sent Event payload for extraction streaming.
+
+    Centralizes schema for all SSE messages so the orchestrator cannot drift.
+    Fields are optional except `status` and `step`. The `to_sse` helper renders
+    the wire format. Terminal helpers produce standardized final events.
+    """
+
+    status: str = Field(
+        ..., description="High-level event type e.g. started, error, complete"
+    )
+    step: str = Field(..., description="Pipeline step identifier")
+    progress: float | None = Field(
+        None, ge=0.0, le=1.0, description="Fractional progress (0.0–1.0)"
+    )
+    detail: str | None = Field(
+        None, description="Optional human-readable detail or error message"
+    )
+    draft_id: Any | None = Field(
+        None, description="Draft identifier when available (UUID)"
+    )
+    success: bool | None = Field(
+        None, description="Final success indicator for terminal events"
+    )
+    error_code: str | None = Field(
+        None, description="Stable machine readable error code for analytics"
+    )
+
+    def to_sse(self) -> str:  # pragma: no cover - trivial
+        return f"data: {self.model_dump_json()}\n\n"
+
+    @classmethod
+    def terminal_success(cls, draft_id: Any, success: bool) -> "SSEEvent":  # noqa: D401
+        # Use model_validate to avoid mypy/Pydantic __init__ positional/keyword
+        # signature issues when instantiating the model in typed contexts.
+        return cls.model_validate(
+            {
+                "status": "complete",
+                "step": "complete",
+                "draft_id": draft_id,
+                "success": success,
+                "progress": 1.0,
+            }
+        )
+
+    @classmethod
+    def terminal_error(
+        cls, step: str, detail: str, error_code: str | None = None
+    ) -> "SSEEvent":  # noqa: D401
+        # Use model_validate to avoid mypy/Pydantic __init__ positional/keyword
+        # signature issues when instantiating the model in typed contexts.
+        return cls.model_validate(
+            {
+                "status": "error",
+                "step": step,
+                "detail": detail,
+                "error_code": error_code,
+                "progress": 1.0,
+                "success": False,
+            }
+        )

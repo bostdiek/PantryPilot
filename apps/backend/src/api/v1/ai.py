@@ -1,51 +1,35 @@
-"""AI-powered recipe extraction and suggestion endpoints."""
+"""AI-powered recipe extraction and suggestion endpoints.
+
+Phase 1 Refactor:
+Removed legacy thin wrapper functions (`fetch_sanitized_html`, `run_extraction_agent`,
+`convert_to_recipe_create`, draft/token helpers, and streaming stage adapters) that
+previously proxied to service/orchestrator internals for test patching. Tests will
+now override the FastAPI dependency `get_ai_extraction_service` directly instead
+of monkey-patching module-level symbols. This keeps the API layer slim and focused
+only on request validation, calling the orchestrator service, and shaping responses.
+"""
 
 from __future__ import annotations
 
-import json
 import logging
-from collections.abc import AsyncGenerator, Awaitable, Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 from uuid import UUID
 
-import crud.ai_drafts as crud_ai_drafts
-from core.security import create_draft_token as core_create_draft_token
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse, StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from crud.ai_drafts import get_draft_by_id
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse, StreamingResponse
 from models.ai_drafts import AIDraft
 from models.users import User
-from schemas.ai import (
-    AIDraftFetchResponse,
-    AIDraftResponse,
-    AIRecipeFromUrlRequest,
-    ExtractionNotFound,
-    RecipeExtractionResult,
-)
+from schemas.ai import AIDraftFetchResponse, AIDraftResponse, AIRecipeFromUrlRequest
 from schemas.api import ApiResponse
-from services.ai import convert_to_recipe_create
-from services.ai.extraction_pipeline import (
-    create_failure_draft,
-    create_success_draft,
-    fetch_sanitized_html,
-    run_extraction_agent,
-    stream_stage_convert,
-    stream_stage_failure_draft,
-    stream_stage_success_draft,
-)
-from sqlalchemy.ext.asyncio import AsyncSession
-
-# ruff: noqa: I001  # Import order intentionally arranged to expose symbols for tests
-
-
-__all__ = [
-    "extract_recipe_from_url",
-    "extract_recipe_stream",
-    "get_ai_draft",
-]
+from services.ai.interfaces import AIExtractionService
+from services.ai.models import DraftOutcome
+from services.ai.orchestrator import get_ai_extraction_service
 
 
 logger = logging.getLogger(__name__)
@@ -59,38 +43,7 @@ DRAFT_TTL_HOURS: int = 1
 DRAFT_TTL_SECONDS: int = DRAFT_TTL_HOURS * 3600
 
 
-# Provide thin wrappers that delegate to the CRUD module at call time so
-# tests can patch either `api.v1.ai.create_draft` or
-# `crud.ai_drafts.create_draft` and the runtime will resolve the patched
-# function correctly.
-async def create_draft(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    user_id: UUID,
-    draft_type: str,
-    payload: dict[str, Any],
-    source_url: str | None = None,
-    prompt_used: str | None = None,
-    ttl_hours: int = 1,
-) -> AIDraft:
-    draft_fn = crud_ai_drafts.create_draft
-    return await draft_fn(
-        db=db,
-        user_id=user_id,
-        draft_type=draft_type,
-        payload=payload,
-        source_url=source_url,
-        prompt_used=prompt_used,
-        ttl_hours=ttl_hours,
-    )
-
-
-def create_draft_token(
-    draft_id: UUID, user_id: UUID, exp_delta: timedelta | None = None
-) -> str:
-    token_fn = getattr(crud_ai_drafts, "create_draft_token", core_create_draft_token)
-    if exp_delta is None:
-        return token_fn(draft_id, user_id)
-    return token_fn(draft_id, user_id, exp_delta)
+## Legacy wrappers removed: tests should now inject fakes via dependency overrides.
 
 
 # --- Helper utilities used by AI endpoints ---------------------------------
@@ -141,128 +94,44 @@ async def extract_recipe_from_url(
     request: AIRecipeFromUrlRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    ai_service: Annotated[AIExtractionService, Depends(get_ai_extraction_service)],
 ) -> Any:
-    """Extract recipe from URL using AI and create a signed deep link.
+    """Extract recipe from URL using injected service and return signed deep link.
 
-    This endpoint:
-    1. Validates and fetches HTML from the provided URL
-    2. Sanitizes the HTML content to remove ads/scripts/trackers
-    3. Uses AI to extract structured recipe data
-    4. Creates a temporary AIDraft with the extracted data
-    5. Returns a signed deep link for the frontend to load the draft
-
-    Requires authentication via JWT Bearer token.
+    Delegates orchestration to the injected service (no module-level wrappers).
     """
     try:
         logger.debug(
             "extract_recipe_from_url: received request: %s",
             request.model_dump(),
         )
-        # 1. Fetch + sanitize
-        sanitized_html = await fetch_sanitized_html(str(request.source_url))
-        logger.debug(
-            "extract_recipe_from_url: fetched sanitized_html length=%s for url=%s",
-            len(sanitized_html) if sanitized_html is not None else 0,
-            request.source_url,
-        )
 
-        # 2. Run agent
-        extraction_result = await run_extraction_agent(
-            sanitized_html, request.prompt_override
+        outcome: DraftOutcome[AIDraft] = await ai_service.extract_recipe_from_url(
+            str(request.source_url), db, current_user, request.prompt_override
         )
-        logger.debug(
-            "extract_recipe_from_url: agent returned result type=%s",
-            type(extraction_result),
-        )
+        draft, token, success = outcome.draft, outcome.token, outcome.success
 
-        # No sentinel handling needed now; HTTPException from agent will be caught below
-
-        # 3. Failure vs success draft creation
-        if isinstance(extraction_result, ExtractionNotFound):
-            failure_draft, msg = await create_failure_draft(
-                db=db,
-                current_user=current_user,
-                source_url=str(request.source_url),
-                extraction_not_found=extraction_result,
-                prompt_override=request.prompt_override,
-            )
-            # Resolve token creator from crud module so tests that patch
-            # crud.ai_drafts.create_draft_token are effective at call time.
-            token_creator = getattr(
-                crud_ai_drafts, "create_draft_token", create_draft_token
-            )
-            token = token_creator(
-                failure_draft.id,
-                current_user.id,
-                timedelta(hours=DRAFT_TTL_HOURS),
-            )
-            logger.debug(
-                "extract_recipe_from_url: created failure draft id=%s token=%s",
-                failure_draft.id,
-                token,
-            )
-            signed_url = f"/recipes/new?ai=1&draftId={failure_draft.id}&token={token}"
-            response_data = AIDraftResponse(
-                draft_id=failure_draft.id,
-                signed_url=signed_url,
-                expires_at=failure_draft.expires_at,
-                ttl_seconds=DRAFT_TTL_SECONDS,
-            )
-            return ApiResponse(success=False, data=response_data, message=msg)
-
-        # 4. Convert + success draft
-        if not isinstance(
-            extraction_result, RecipeExtractionResult
-        ):  # pragma: no cover - fallback
-            logger.warning(
-                (
-                    "Extraction result not RecipeExtractionResult (type=%s); "
-                    "proceeding with best-effort conversion."
-                ),
-                type(extraction_result),
-            )
-        try:
-            generated_recipe = convert_to_recipe_create(
-                extraction_result, str(request.source_url)
-            )
-            logger.debug(
-                "extract_recipe_from_url: converted to generated_recipe type=%s",
-                type(generated_recipe),
-            )
-        except Exception as e:  # pragma: no cover - conversion error
-            logger.error("Schema conversion failed: %s", e)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to process extracted recipe data",
-            ) from e
-
-        draft = await create_success_draft(
-            db=db,
-            current_user=current_user,
-            source_url=str(request.source_url),
-            generated_recipe=generated_recipe,
-            prompt_override=request.prompt_override,
-        )
-        token_creator = getattr(
-            crud_ai_drafts, "create_draft_token", create_draft_token
-        )
-        token = token_creator(
-            draft.id, current_user.id, timedelta(hours=DRAFT_TTL_HOURS)
-        )
-        logger.debug(
-            "extract_recipe_from_url: created success draft id=%s token=%s",
-            draft.id,
-            token,
-        )
         signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
+        # Ensure expires_at is a timezone-aware datetime for the response model
+        expires = getattr(draft, "expires_at", None)
+        if expires is None:
+            # If draft has no expiry, treat as expired for safety
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Draft has expired",
+            )
+        expires_dt = _ensure_aware_utc_or_404(expires)
+
         response_data = AIDraftResponse(
             draft_id=draft.id,
             signed_url=signed_url,
-            expires_at=draft.expires_at,
+            expires_at=expires_dt,
             ttl_seconds=DRAFT_TTL_SECONDS,
         )
         return ApiResponse(
-            success=True, data=response_data, message="Recipe extracted successfully"
+            success=bool(success),
+            data=response_data,
+            message="Recipe extracted successfully" if success else "Recipe not found",
         )
     except HTTPException as e:
         logger.debug(
@@ -270,8 +139,6 @@ async def extract_recipe_from_url(
             e.status_code,
             getattr(e, "detail", None),
         )
-        # For any internal server error raised here, return a structured
-        # ApiResponse body (tests expect a JSON body with `success` key).
         if e.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
             message = e.detail if isinstance(e.detail, str) else "Internal AI error"
             return JSONResponse(
@@ -293,228 +160,9 @@ async def extract_recipe_from_url(
 
 
 # --- Streaming (SSE) extraction endpoint ------------------------------------
-def sse(obj: dict[str, Any]) -> str:
-    """Serialize an object as a Server-Sent Event data payload."""
-    return f"data: {json.dumps(obj)}\n\n"
 
 
-async def _stage_fetch(source_url: str) -> tuple[str | None, dict[str, Any] | None]:
-    """Wrapper around pipeline.fetch to keep async generator logic simple."""
-    # Some tests patch the pipeline function (services.ai.extraction_pipeline)
-    # while others patch the symbol imported into this module (api.v1.ai).
-    # Prefer the pipeline-level function if it differs from our local import,
-    # otherwise call the local `fetch_sanitized_html` which may have been
-    # patched by tests targeting this module.
-    try:
-        import services.ai.extraction_pipeline as _pipeline
-
-        pipeline_fetch = getattr(_pipeline, "fetch_sanitized_html", None)
-    except Exception:
-        pipeline_fetch = None
-
-    # Prefer a patched Mock/AsyncMock when present. Tests patch either the
-    # pipeline module or this module and the patched value will typically be
-    # a Mock object. Prefer that. Otherwise if only one side differs, prefer
-    # the pipeline function (so patches on services.ai.extraction_pipeline are
-    # honored). Fall back to the local import.
-    from unittest.mock import Mock
-
-    if pipeline_fetch is not None and isinstance(pipeline_fetch, Mock):
-        selected_fetch = pipeline_fetch
-    elif isinstance(fetch_sanitized_html, Mock):
-        selected_fetch = fetch_sanitized_html
-    elif pipeline_fetch is not None and pipeline_fetch is not fetch_sanitized_html:
-        selected_fetch = pipeline_fetch
-    else:
-        selected_fetch = fetch_sanitized_html
-
-    try:
-        html = await selected_fetch(source_url)
-        # Treat an empty/falsy HTML response as a fetch failure so tests
-        # that patch the local fetch function to return an empty string
-        # produce the expected "No usable HTML content" error.
-        if not html:
-            return None, {
-                "status": "error",
-                "step": "fetch_html",
-                "detail": "No usable HTML content",
-                "progress": 1.0,
-            }
-        return html, None
-    except HTTPException as e:  # expected fetch/sanitize problems
-        detail = getattr(e, "detail", str(e))
-        if "No usable content" in str(detail):
-            final_detail = "No usable HTML content"
-        else:
-            final_detail = f"Fetch failed: {detail}"
-        return None, {
-            "status": "error",
-            "step": "fetch_html",
-            "detail": final_detail,
-            "progress": 1.0,
-        }
-    except Exception as e:  # pragma: no cover - defensive
-        return None, {
-            "status": "error",
-            "step": "fetch_html",
-            "detail": f"Fetch failed: {e}",
-            "progress": 1.0,
-        }
-
-
-async def _stage_agent(
-    sanitized_html: str | None, prompt_override: str | None
-) -> tuple[Any | None, dict[str, Any] | None]:
-    """Call the agent stage; return an error dict if input html is missing."""
-    # Early return for missing HTML keeps the function simple and avoids
-    # nesting that contributes to cyclomatic complexity.
-    if sanitized_html is None:
-        return None, {
-            "status": "error",
-            "step": "ai_call",
-            "detail": "No HTML available for AI processing",
-            "progress": 1.0,
-        }
-    # Build the full prompt the agent expects. Tests may patch either the
-    # local symbol (`api.v1.ai.run_extraction_agent`) or the pipeline module
-    # (`services.ai.extraction_pipeline.run_extraction_agent`). Prefer the
-    # pipeline-level function if it's been patched (i.e., differs from our
-    # local import), otherwise call the local symbol. Support both possible
-    # function signatures (full_prompt) or (sanitized_html, prompt_override).
-    prompt = prompt_override or "Extract the recipe information from this HTML content:"
-    full_prompt = f"{prompt}\n\nHTML Content:\n{sanitized_html}"
-
-    # Resolve pipeline run function if available
-    try:
-        import services.ai.extraction_pipeline as _pipeline
-
-        pipeline_run = getattr(_pipeline, "run_extraction_agent", None)
-    except Exception:
-        pipeline_run = None
-
-    selected_run = _choose_run_extraction_agent(pipeline_run)
-    return await _invoke_run_extraction_agent(
-        selected_run,
-        pipeline_run,
-        sanitized_html,
-        prompt_override,
-        full_prompt,
-    )
-
-
-def _stage_convert(
-    extraction_result: Any, source_url: str
-) -> tuple[Any | None, dict[str, Any] | None]:
-    """Wrapper for conversion stage to keep generator logic linear."""
-    return stream_stage_convert(extraction_result, source_url)
-
-
-def _choose_run_extraction_agent(pipeline_candidate: object) -> object:
-    """Choose which run_extraction_agent implementation to call.
-
-    Preference order:
-    - If pipeline_candidate is a Mock, prefer it (tests patch it directly).
-    - If local `run_extraction_agent` is a Mock, prefer it.
-    - If pipeline_candidate exists and differs from our local symbol,
-      prefer the pipeline candidate (honor patches on that module).
-    - Otherwise fall back to local `run_extraction_agent`.
-    """
-    from unittest.mock import Mock
-
-    if pipeline_candidate is not None and isinstance(pipeline_candidate, Mock):
-        return pipeline_candidate
-    if isinstance(run_extraction_agent, Mock):
-        return run_extraction_agent
-    if (
-        pipeline_candidate is not None
-        and pipeline_candidate is not run_extraction_agent
-    ):
-        return pipeline_candidate
-    return run_extraction_agent
-
-
-async def _invoke_run_extraction_agent(
-    selected: object,
-    pipeline_candidate: object,
-    html: str,
-    prompt: str | None,
-    full_prompt_str: str,
-) -> tuple[Any | None, dict[str, Any] | None]:
-    """Invoke the selected agent implementation with the correct signature.
-
-    Returns (result, None) on success or (None, error_dict) on failure.
-    """
-    try:
-        # If we've selected the pipeline candidate, prefer the single-arg
-        # full_prompt signature; otherwise prefer the two-arg signature.
-        if selected is pipeline_candidate:
-            try:
-                result = await cast(Callable[[str], Awaitable[object]], selected)(
-                    full_prompt_str
-                )
-            except TypeError:
-                result = await cast(
-                    Callable[[str, str | None], Awaitable[object]], selected
-                )(html, prompt)
-        else:
-            try:
-                result = await cast(
-                    Callable[[str, str | None], Awaitable[object]], selected
-                )(html, prompt)
-            except TypeError:
-                result = await cast(Callable[[str], Awaitable[object]], selected)(
-                    full_prompt_str
-                )
-
-        # Treat callable results (e.g., fixture functions) as AI failures
-        if callable(result):
-            return None, {
-                "status": "error",
-                "step": "ai_call",
-                "detail": "AI agent failure: invalid response",
-                "progress": 1.0,
-            }
-
-        return result, None
-    except HTTPException as e:
-        detail = getattr(e, "detail", str(e))
-        return None, {
-            "status": "error",
-            "step": "ai_call",
-            "detail": f"AI agent failure: {detail}",
-            "progress": 1.0,
-        }
-    except Exception as e:  # pragma: no cover - defensive
-        return None, {
-            "status": "error",
-            "step": "ai_call",
-            "detail": f"Unexpected AI error: {e}",
-            "progress": 1.0,
-        }
-
-
-async def _stage_failure_draft(
-    extraction_not_found: ExtractionNotFound,
-    source_url: str,
-    db: AsyncSession,
-    current_user: User,
-    prompt_override: str | None,
-) -> dict[str, Any]:
-    return await stream_stage_failure_draft(
-        extraction_not_found, source_url, db, current_user, prompt_override
-    )
-
-
-async def _stage_success_draft(
-    generated_recipe: Any,
-    source_url: str,
-    db: AsyncSession,
-    current_user: User,
-    prompt_override: str | None,
-) -> dict[str, Any]:
-    return await stream_stage_success_draft(
-        generated_recipe, source_url, db, current_user, prompt_override
-    )
+# Legacy streaming stage helpers removed; orchestrator now encapsulates all stages.
 
 
 @router.get(
@@ -525,80 +173,22 @@ async def extract_recipe_stream(
     source_url: str,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    ai_service: Annotated[AIExtractionService, Depends(get_ai_extraction_service)],
     prompt_override: str | None = None,
 ) -> StreamingResponse:
-    """Stream extraction process (optional alternative to POST endpoint).
-
-    Event JSON schema (sent in `data:` lines):
-      status: started|fetching|sanitizing|ai_call|converting|complete|error
-      step: short label for UI state machine
-      detail: optional human-readable message
-      progress: coarse float 0.0–1.0 (nullable)
-      draft_id: present in final success/failure
-      signed_url: deep-link to open draft (success or failure draft)
-      success: boolean only in final event
-    """
+    """Stream extraction process by delegating to the injected orchestrator service."""
+    # ai_service.stream_extraction_progress returns an AsyncGenerator[str, None]
+    # which is acceptable to StreamingResponse as an async iterable.
     return StreamingResponse(
-        build_extraction_stream(
-            source_url=source_url,
-            db=db,
-            current_user=current_user,
-            prompt_override=prompt_override,
+        ai_service.stream_extraction_progress(
+            source_url, db, current_user, prompt_override
         ),
         media_type="text/event-stream",
     )
 
 
-async def build_extraction_stream(
-    source_url: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: User,
-    prompt_override: str | None,
-) -> AsyncGenerator[str, None]:
-    """Orchestrate streaming extraction with small helper stages.
-
-    Refactored to reduce McCabe complexity: each stage is delegated to a
-    narrowly-scoped helper that yields at most one error event.
-    """
-    # Use module-level SSE helper to keep complexity low
-    yield sse({"status": "started", "step": "started", "progress": 0.0})
-    # Explicit fetching event (tests expect this sequence)
-    yield sse({"status": "fetching", "step": "fetch_html", "progress": 0.1})
-
-    # Stage 1: fetch
-    sanitized_html, fetch_error = await _stage_fetch(source_url)
-    if fetch_error:
-        yield sse(fetch_error)
-        return
-    yield sse({"status": "sanitizing", "step": "sanitize_html", "progress": 0.25})
-
-    # Stage 2: agent
-    yield sse({"status": "ai_call", "step": "ai_call", "progress": 0.5})
-    extraction_result, agent_error = await _stage_agent(sanitized_html, prompt_override)
-    if agent_error:
-        yield sse(agent_error)
-        return
-
-    # Stage 3: failure draft path
-    if isinstance(extraction_result, ExtractionNotFound):
-        event = await _stage_failure_draft(
-            extraction_result, source_url, db, current_user, prompt_override
-        )
-        yield sse(event)
-        return
-
-    # Stage 4: convert
-    generated_recipe, convert_error = _stage_convert(extraction_result, source_url)
-    if convert_error:
-        yield sse(convert_error)
-        return
-    yield sse({"status": "converting", "step": "convert_schema", "progress": 0.75})
-
-    # Stage 5: success draft
-    success_event = await _stage_success_draft(
-        generated_recipe, source_url, db, current_user, prompt_override
-    )
-    yield sse(success_event)
+# build_extraction_stream removed. Streaming delegated to injected service via
+# `extract_recipe_stream` calling orchestrator's `stream_extraction_progress`.
 
 
 # --- Streaming helper stage functions (return data + optional error dict) ---
