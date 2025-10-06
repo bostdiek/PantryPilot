@@ -1,6 +1,7 @@
 import { useState, useEffect, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
+import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -69,6 +70,7 @@ const RecipesNewPage: FC = () => {
   const [instructions, setInstructions] = useState(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
 
   // Shared paste handling hook
   const {
@@ -173,7 +175,10 @@ const RecipesNewPage: FC = () => {
       }
 
       // Clear the suggestion after prefilling to avoid re-running
-      clearFormSuggestion();
+      // Use setTimeout to ensure state updates have been processed
+      setTimeout(() => {
+        clearFormSuggestion();
+      }, 0);
     }
   }, [formSuggestion, clearFormSuggestion]);
 
@@ -349,7 +354,17 @@ const RecipesNewPage: FC = () => {
         </div>
       )}
       <Card variant="default" className="mt-6 p-6">
-        <h1 className="mb-4 text-2xl font-bold">Create New Recipe</h1>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Create New Recipe</h1>
+          {!isAISuggestion && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsAddByUrlModalOpen(true)}
+            >
+              Add by URL
+            </Button>
+          )}
+        </div>
 
         {apiUnavailable && (
           <div className="mb-4">
@@ -712,6 +727,12 @@ const RecipesNewPage: FC = () => {
           onPasteAsSingle={handlePasteAsSingle}
           candidateSteps={pasteSplitModal.candidateSteps}
           originalContent={pasteSplitModal.originalContent}
+        />
+
+        {/* Add by URL Modal */}
+        <AddByUrlModal
+          isOpen={isAddByUrlModalOpen}
+          onClose={() => setIsAddByUrlModalOpen(false)}
         />
       </Card>
     </Container>

@@ -1,4 +1,4 @@
-import { apiClient } from '../client';
+import { apiClient, getApiBaseUrl } from '../client';
 import type {
   AIDraftFetchResponse,
   AIDraftResponse,
@@ -42,7 +42,9 @@ export function extractRecipeStream(
   // For SSE with EventSource, we need to include credentials
   // Note: EventSource doesn't support custom headers, so we rely on cookie-based auth
   // or the backend accepts Bearer token in query params (check backend implementation)
-  const url = `/api/v1/ai/extract-recipe-stream?${params.toString()}`;
+  // Use full URL from apiClient base URL
+  const API_BASE_URL = getApiBaseUrl();
+  const url = `${API_BASE_URL}/api/v1/ai/extract-recipe-stream?${params.toString()}`;
 
   const eventSource = new EventSource(url, { withCredentials: true });
 
