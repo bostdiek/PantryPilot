@@ -292,3 +292,44 @@ async def get_ai_draft(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve draft",
         ) from exc
+
+
+# Owner-only draft fetch: allow the authenticated owner to retrieve their draft
+@router.get("/drafts/{draft_id}/me", response_model=ApiResponse[AIDraftFetchResponse])
+async def get_my_draft(
+    draft_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> ApiResponse[AIDraftFetchResponse]:
+    """Return an AI draft payload to the authenticated owner.
+
+    This route is protected by the router-level dependency so it only
+    returns drafts owned by the current authenticated user.
+    """
+    try:
+        draft = await get_draft_by_id(db, draft_id, current_user.id)
+        if not draft:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found"
+            )
+
+        response_data = AIDraftFetchResponse(
+            payload=cast(dict[str, object], draft.payload),
+            type="recipe_suggestion",
+            created_at=draft.created_at,
+            expires_at=draft.expires_at,
+        )
+
+        return ApiResponse(
+            success=True,
+            data=response_data,
+            message="Draft retrieved successfully",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:  # pragma: no cover - unexpected
+        logger.error("Error retrieving draft for owner %s: %s", draft_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve draft",
+        ) from exc
