@@ -14,6 +14,7 @@ import type {
   RecipeDifficulty,
   RecipeUpdate,
 } from '../types/Recipe';
+import type { AIDraftPayload } from '../types/AIDraft';
 
 // Sort options for recipes
 export type RecipeSortOption =
@@ -54,6 +55,10 @@ interface RecipeState {
   sortBy: RecipeSortOption;
   pagination: RecipePagination;
 
+  // AI suggestion state for form prefilling
+  formSuggestion: RecipeCreate | null;
+  isAISuggestion: boolean;
+
   // Actions
   fetchRecipes: () => Promise<void>;
   fetchRecipeById: (id: string) => Promise<Recipe | null>;
@@ -71,6 +76,10 @@ interface RecipeState {
   setPage: (page: number) => void;
   clearFilters: () => void;
   applyFiltersAndSort: () => void;
+
+  // AI suggestion actions
+  setFormFromSuggestion: (payload: AIDraftPayload) => void;
+  clearFormSuggestion: () => void;
 }
 
 // Helper functions for filtering and sorting
@@ -186,6 +195,8 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   filters: defaultFilters,
   sortBy: 'relevance',
   pagination: defaultPagination,
+  formSuggestion: null,
+  isAISuggestion: false,
 
   fetchRecipes: async () => {
     set({ isLoading: true, error: null });
@@ -454,6 +465,31 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
         ...state.pagination,
         total: sorted.length,
       },
+    });
+  },
+
+  // AI suggestion actions
+  setFormFromSuggestion: (payload: AIDraftPayload) => {
+    // Extract recipe data from the AI draft payload
+    if (payload.generated_recipe) {
+      const recipeData = payload.generated_recipe.recipe_data;
+      set({
+        formSuggestion: recipeData,
+        isAISuggestion: true,
+      });
+    } else {
+      // If extraction failed, clear the suggestion
+      set({
+        formSuggestion: null,
+        isAISuggestion: true, // Keep flag to show AI panel
+      });
+    }
+  },
+
+  clearFormSuggestion: () => {
+    set({
+      formSuggestion: null,
+      isAISuggestion: false,
     });
   },
 }));

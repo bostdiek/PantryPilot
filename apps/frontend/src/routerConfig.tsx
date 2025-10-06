@@ -1,11 +1,13 @@
 import { lazy, Suspense } from 'react';
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, redirect } from 'react-router-dom';
 import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
+import { useAuthStore } from './stores/useAuthStore';
+import { getDraftById } from './api/endpoints/aiDrafts';
 // Lazy loaded pages for code-splitting (use top-level `lazy` import)
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -51,6 +53,44 @@ const recipesLoader = async () => {
   } catch (error) {
     console.error('Recipes loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
+  }
+
+  return null;
+};
+
+const newRecipeLoader = async ({ request }: { request: Request }) => {
+  const url = new URL(request.url);
+  const ai = url.searchParams.get('ai');
+  const draftId = url.searchParams.get('draftId');
+  const token = url.searchParams.get('token');
+
+  // Check if this is an AI draft deep link
+  if (ai === '1' && draftId && token) {
+    console.log('New recipe loader: AI draft deep link detected');
+
+    // Check authentication - redirect to login if not authenticated
+    const { token: authToken } = useAuthStore.getState();
+    if (!authToken) {
+      console.log('New recipe loader: User not authenticated, redirecting to login');
+      // Preserve the full URL as the next parameter
+      return redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`);
+    }
+
+    try {
+      // Fetch the draft
+      const draftResponse = await getDraftById(draftId, token);
+      console.log('New recipe loader: Draft fetched successfully', draftResponse);
+
+      // Set the form from the suggestion
+      const { setFormFromSuggestion } = useRecipeStore.getState();
+      setFormFromSuggestion(draftResponse.payload);
+
+      console.log('New recipe loader: Form prefilled from AI suggestion');
+    } catch (error) {
+      console.error('New recipe loader: Failed to load draft', error);
+      // Don't throw - let the component handle the error state
+      // The component can check for the error and show a friendly message
+    }
   }
 
   return null;
@@ -159,6 +199,7 @@ export const router = createBrowserRouter([
                 <NewRecipePage />
               </Suspense>
             ),
+            loader: newRecipeLoader,
           },
           {
             path: 'recipes/:id',

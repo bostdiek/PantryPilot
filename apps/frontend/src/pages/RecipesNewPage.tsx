@@ -1,4 +1,4 @@
-import { useState, type FC, type FormEvent } from 'react';
+import { useState, useEffect, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
@@ -38,6 +38,8 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
 const RecipesNewPage: FC = () => {
   const navigate = useNavigate();
   const { success } = useToast();
+  const { addRecipe, formSuggestion, isAISuggestion, clearFormSuggestion } =
+    useRecipeStore();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<SelectOption>(
@@ -67,7 +69,6 @@ const RecipesNewPage: FC = () => {
   const [instructions, setInstructions] = useState(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { addRecipe } = useRecipeStore();
 
   // Shared paste handling hook
   const {
@@ -136,6 +137,45 @@ const RecipesNewPage: FC = () => {
   // Use the custom hook instead of direct useEffect
   const { isApiOnline } = useApiHealth();
   const apiUnavailable = !isApiOnline;
+
+  // Prefill form from AI suggestion when available
+  useEffect(() => {
+    if (formSuggestion) {
+      console.log('Prefilling form from AI suggestion:', formSuggestion);
+
+      // Prefill all fields
+      setTitle(formSuggestion.title || '');
+      setDescription(formSuggestion.description || '');
+      setCategory(
+        categoryOptions.find((c) => c.id === formSuggestion.category) ||
+          categoryOptions[0]
+      );
+      setDifficulty(
+        difficultyOptions.find((d) => d.id === formSuggestion.difficulty) ||
+          difficultyOptions[0]
+      );
+      setPrepTime(formSuggestion.prep_time_minutes || 0);
+      setCookTime(formSuggestion.cook_time_minutes || 0);
+      setServingMin(formSuggestion.serving_min || 1);
+      setServingMax(formSuggestion.serving_max);
+      setEthnicity(formSuggestion.ethnicity || '');
+      setOvenTemperatureF(formSuggestion.oven_temperature_f);
+      setUserNotes(formSuggestion.user_notes || '');
+
+      // Prefill ingredients
+      if (formSuggestion.ingredients && formSuggestion.ingredients.length > 0) {
+        setIngredients(formSuggestion.ingredients);
+      }
+
+      // Prefill instructions
+      if (formSuggestion.instructions && formSuggestion.instructions.length > 0) {
+        setInstructions(formSuggestion.instructions);
+      }
+
+      // Clear the suggestion after prefilling to avoid re-running
+      clearFormSuggestion();
+    }
+  }, [formSuggestion, clearFormSuggestion]);
 
   // Check if there are unsaved changes
   const hasUnsavedChanges =
@@ -279,6 +319,35 @@ const RecipesNewPage: FC = () => {
 
   return (
     <Container size="md">
+      {/* AI Suggestion Indicator */}
+      {isAISuggestion && (
+        <div className="mt-6 rounded-lg bg-blue-50 p-4 border border-blue-200">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg
+                className="h-5 w-5 text-blue-400"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-blue-900">
+                AI-Generated Recipe
+              </h3>
+              <p className="mt-1 text-sm text-blue-700">
+                This recipe was extracted from a URL. Please review and edit as
+                needed before saving.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <Card variant="default" className="mt-6 p-6">
         <h1 className="mb-4 text-2xl font-bold">Create New Recipe</h1>
 
