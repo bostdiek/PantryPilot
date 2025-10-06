@@ -84,9 +84,17 @@ def get_settings() -> Settings:
     else:
         env_file = ".env.prod"
     # pydantic-settings supports _env_file at runtime; mypy doesn't type it.
-    # Provide safe fallbacks for tests if env file is absent.
+    # For production, fail fast if SECRET_KEY is not provided.
     if not os.path.exists(env_file):  # pragma: no cover - defensive
-        os.environ.setdefault("SECRET_KEY", "dev-test-secret")
+        # Only provide a dev fallback in non-production environments
+        if env == "development":
+            os.environ.setdefault("SECRET_KEY", "dev-test-secret")
+    # If we're in production, ensure SECRET_KEY is set and not the dev default
+    if env == "production":
+        sec = os.getenv("SECRET_KEY")
+        if not sec or sec == "dev-test-secret":
+            raise RuntimeError("SECRET_KEY must be set to a secure value in production")
+
     # The Settings initializer accepts a runtime-only `_env_file` kwarg used by
     # pydantic-settings; mypy's stub doesn't allow this call argument. The
     # ignore is scoped to the specific `call-arg` error to avoid hiding other

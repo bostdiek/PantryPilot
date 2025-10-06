@@ -1,7 +1,9 @@
 """HTML extraction and sanitization service."""
 
+import ipaddress
 import logging
 import re
+import socket
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -129,19 +131,41 @@ class HTMLExtractionService:
                 detail="URL must use HTTP or HTTPS protocol",
             )
 
-        # Block localhost and private IPs for security
-        if parsed.hostname in ("localhost", "127.0.0.1") or (
-            parsed.hostname
-            and (
-                parsed.hostname.startswith("192.168.")
-                or parsed.hostname.startswith("10.")
-                or parsed.hostname.startswith("172.")
-            )
-        ):
+        # Resolve hostname to IPs and ensure none are private/reserved.
+        hostname = parsed.hostname
+        if not hostname:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Cannot fetch from localhost or private IP addresses",
+                detail="URL must include a hostname",
             )
+
+        try:
+            infos = socket.getaddrinfo(hostname, None)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Failed to resolve hostname: {e}",
+            ) from e
+
+        resolved_ips = set()
+        for _fam, _, _, _, sockaddr in infos:
+            ip = sockaddr[0]
+            resolved_ips.add(ip)
+
+        for ip in resolved_ips:
+            try:
+                parsed_ip = ipaddress.ip_address(ip)
+            except ValueError:
+                # Skip non-IP results
+                continue
+
+            if parsed_ip.is_private or parsed_ip.is_loopback or parsed_ip.is_reserved:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Cannot fetch from localhost, private, or reserved IP addresses"
+                    ),
+                )
 
     async def _fetch_html(self, url: str) -> str:
         """Fetch HTML content from the URL.
@@ -168,12 +192,30 @@ class HTMLExtractionService:
         }
 
         try:
+            # Disable automatic redirects so we can inspect each location for SSRF
             async with httpx.AsyncClient(
                 timeout=self.timeout,
-                follow_redirects=True,
+                follow_redirects=False,
                 limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             ) as client:
                 response = await client.get(url, headers=headers)
+
+                # If redirect, validate the Location header and follow manually
+                # up to a small limit
+                redirects_remaining = 5
+                while response.is_redirect and redirects_remaining > 0:
+                    loc = response.headers.get("location")
+                    if not loc:
+                        break
+
+                    # Resolve relative locations
+                    next_url = urljoin(str(response.url), loc)
+                    # Validate the next_url before fetching
+                    self._validate_url(next_url)
+
+                    response = await client.get(next_url, headers=headers)
+                    redirects_remaining -= 1
+
                 response.raise_for_status()
 
                 # Check content length
@@ -293,12 +335,32 @@ class HTMLExtractionService:
             soup: BeautifulSoup object to clean
         """
         for tag in soup.find_all():
-            # Keep only safe attributes
+            # Keep only safe attributes and filter unsafe URI schemes
             attrs_to_keep = {}
             for attr, value in tag.attrs.items():
-                # Keep href for links, src for images, alt for images
-                if attr.lower() in ("href", "src", "alt", "title"):
-                    attrs_to_keep[attr] = value
+                name = attr.lower()
+                if name not in ("href", "src", "alt", "title"):
+                    continue
+
+                # Only handle string values (skip lists/dicts)
+                if not isinstance(value, str):
+                    continue
+
+                # Parse scheme and reject unsafe ones
+                parsed = urlparse(value)
+                scheme = (parsed.scheme or "").lower()
+                if scheme in ("javascript", "vbscript", "file"):
+                    # drop attribute entirely
+                    continue
+
+                if scheme == "data":
+                    # Limit data: URIs to images only and small size (naive check)
+                    # Example: data:image/png;base64,...
+                    if not parsed.path.startswith("image/"):
+                        continue
+
+                # Accept http/https, data:image/* and schemeless (relative) URLs
+                attrs_to_keep[attr] = value
 
             tag.attrs.clear()
             tag.attrs.update(attrs_to_keep)
@@ -352,10 +414,19 @@ class HTMLExtractionService:
         for link in soup.find_all("a", href=True):
             href = link["href"]
             if isinstance(href, str):
-                link["href"] = urljoin(base_url, href)
+                new = urljoin(base_url, href)
+                # Reject javascript/vbscript/file schemes if they slipped through
+                if urlparse(new).scheme.lower() in ("javascript", "vbscript", "file"):
+                    del link["href"]
+                else:
+                    link["href"] = new
 
         # Resolve src attributes (images, etc.)
         for element in soup.find_all(src=True):
             src = element["src"]
             if isinstance(src, str):
-                element["src"] = urljoin(base_url, src)
+                new = urljoin(base_url, src)
+                if urlparse(new).scheme.lower() in ("javascript", "vbscript", "file"):
+                    del element["src"]
+                else:
+                    element["src"] = new
