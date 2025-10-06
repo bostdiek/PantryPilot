@@ -22,43 +22,49 @@ Event JSON schema (keys omitted when not applicable):
 ```jsonc
 {
   "status": "started|fetching|sanitizing|ai_call|converting|complete|error",
-  "step": "<string>",            // machine friendly step id
-  "detail": "<string|null>",     // human readable message (optional)
-  "progress": 0.0,                // coarse progress (0.0–1.0) or null
-  "draft_id": "<uuid>",          // only in final complete/error when a draft was persisted
+  "step": "<string>", // machine friendly step id
+  "detail": "<string|null>", // human readable message (optional)
+  "progress": 0.0, // coarse progress (0.0–1.0) or null
+  "draft_id": "<uuid>", // only in final complete/error when a draft was persisted
   "signed_url": "/recipes/new?...", // deep link (complete event only)
-  "success": true,                // only on final event (true|false)
-  "confidence_score": 0.82        // only on success
+  "success": true, // only on final event (true|false)
+  "confidence_score": 0.82 // only on success
 }
 ```
 
 Example frontend usage:
 
 ```ts
-const es = new EventSource(`/api/v1/ai/extract-recipe-stream?source_url=${encodeURIComponent(url)}`);
+const es = new EventSource(
+  `/api/v1/ai/extract-recipe-stream?source_url=${encodeURIComponent(url)}`
+);
 es.onmessage = (evt) => {
   const data = JSON.parse(evt.data);
   switch (data.status) {
-    case 'started': /* init UI */ break;
-    case 'fetching': /* show network fetch */ break;
-    case 'ai_call': /* show model running */ break;
-    case 'converting': /* show assembling result */ break;
-    case 'complete': {
+    case "started":
+      /* init UI */ break;
+    case "fetching":
+      /* show network fetch */ break;
+    case "ai_call":
+      /* show model running */ break;
+    case "converting":
+      /* show assembling result */ break;
+    case "complete": {
       es.close();
       // Navigate immediately using signed_url regardless of success flag
       if (data.signed_url) router.push(data.signed_url);
       break;
     }
-    case 'error': {
+    case "error": {
       es.close();
-      toast.error(data.detail || 'Extraction failed');
+      toast.error(data.detail || "Extraction failed");
       break;
     }
   }
 };
 es.onerror = () => {
   es.close();
-  toast.error('Connection lost during extraction');
+  toast.error("Connection lost during extraction");
 };
 ```
 
@@ -71,13 +77,13 @@ Recommended UX pattern:
 
 Choosing between POST vs. SSE:
 
-| Criterion                | POST (existing)            | SSE (new)                             |
-|--------------------------|----------------------------|---------------------------------------|
-| Implementation effort    | Already done               | Slightly more (stream parsing)        |
-| User feedback            | Spinner only               | Step-by-step progress                 |
-| Network compatibility    | Broad                      | Broad (HTTP/1.1 keep-alive)           |
-| Cancellation             | Hard (must abort request)  | Close EventSource to cancel early     |
-| Future extensibility     | Limited                    | Can add retries / incremental events  |
+| Criterion             | POST (existing)           | SSE (new)                            |
+| --------------------- | ------------------------- | ------------------------------------ |
+| Implementation effort | Already done              | Slightly more (stream parsing)       |
+| User feedback         | Spinner only              | Step-by-step progress                |
+| Network compatibility | Broad                     | Broad (HTTP/1.1 keep-alive)          |
+| Cancellation          | Hard (must abort request) | Close EventSource to cancel early    |
+| Future extensibility  | Limited                   | Can add retries / incremental events |
 
 Both endpoints end with a draft + deep link; frontend handling post-navigation stays identical.
 
@@ -148,6 +154,7 @@ Endpoint (public, deep-link): `GET /api/v1/ai/drafts/{draft_id}?token=<jwt>`
 Owner-only endpoint (authenticated): `GET /api/v1/ai/drafts/{draft_id}/me`
 
 Notes:
+
 - The public route above is the deep-link flow and requires the signed token returned by the non-streaming `POST /api/v1/ai/extract-recipe-from-url` response (`data.signed_url` contains `token=...`). Use this when you want unauthenticated recipients to open the draft.
 - The new owner-only endpoint (`/me`) is protected and accepts a Bearer access token (same auth used for streaming and the POST endpoint). Use this route when the same authenticated user that initiated extraction (for example via SSE) wants to fetch the draft without extracting/using the signed token.
 
@@ -210,7 +217,6 @@ Frontend handling:
 
 - If `extraction_metadata.failure` is present, show a friendly failure banner and offer Retry / Edit Manually actions.
 - Log the failure.reason for analytics and user feedback.
-
 
 ## Frontend Handling Logic
 
