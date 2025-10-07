@@ -9,6 +9,7 @@ import {
   LoadingSpinner,
   Select,
 } from '../components/ui';
+import { logger } from '../lib/logger';
 import { useAuthStore, useDisplayName } from '../stores/useAuthStore';
 import { useUserPreferencesStore } from '../stores/useUserPreferencesStore';
 import {
@@ -74,7 +75,7 @@ function UserProfilePage() {
           username: profile.username,
         });
       } catch (error) {
-        console.error('Failed to load profile:', error);
+        logger.error('Failed to load profile:', error);
         // Don't show error to user, just use local data
       } finally {
         setLoading(false);
@@ -187,7 +188,7 @@ function UserProfilePage() {
 
       setIsEditing(false);
     } catch (error) {
-      console.error('Failed to save profile:', error);
+      logger.error('Failed to save profile:', error);
       setErrors({ general: 'Failed to save changes. Please try again.' });
       // TODO: Show error toast when toast system is available
     } finally {

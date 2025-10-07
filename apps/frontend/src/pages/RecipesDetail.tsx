@@ -5,6 +5,7 @@ import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Dialog, DialogFooter } from '../components/ui/Dialog';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe } from '../types/Recipe';
 
@@ -45,7 +46,7 @@ const RecipesDetail: FC = () => {
         navigate('/recipes', { replace: true });
       }
     } catch (error) {
-      console.error('Failed to delete recipe:', error);
+      logger.error('Failed to delete recipe:', error);
     } finally {
       setIsDeleting(false);
       setIsDeleteModalOpen(false);
@@ -63,7 +64,7 @@ const RecipesDetail: FC = () => {
         navigate(`/recipes/${duplicatedRecipe.id}`, { replace: true });
       }
     } catch (error) {
-      console.error('Failed to duplicate recipe:', error);
+      logger.error('Failed to duplicate recipe:', error);
     } finally {
       setIsDuplicating(false);
     }

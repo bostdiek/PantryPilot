@@ -1,17 +1,18 @@
 import { useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Dialog } from '../ui/Dialog';
-import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
-import { ErrorMessage } from '../ui/ErrorMessage';
 import {
-  extractRecipeStreamFetch,
   extractRecipeFromUrl,
+  extractRecipeStreamFetch,
   getDraftByIdOwner,
 } from '../../api/endpoints/aiDrafts';
-import { ApiErrorImpl } from '../../types/api';
-import type { SSEEvent } from '../../types/AIDraft';
+import { logger } from '../../lib/logger';
 import { useRecipeStore } from '../../stores/useRecipeStore';
+import type { SSEEvent } from '../../types/AIDraft';
+import { ApiErrorImpl } from '../../types/api';
+import { Button } from '../ui/Button';
+import { Dialog } from '../ui/Dialog';
+import { ErrorMessage } from '../ui/ErrorMessage';
+import { Input } from '../ui/Input';
 
 interface AddByUrlModalProps {
   isOpen: boolean;
@@ -25,7 +26,8 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
   const [useStreaming] = useState(true);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [abortController, setAbortController] =
+    useState<AbortController | null>(null);
 
   const handleClose = () => {
     // Cancel any ongoing stream
@@ -89,7 +91,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
                 // Navigate to new recipe page with AI flag
                 navigate('/recipes/new?ai=1');
               } catch (err) {
-                console.error('Failed to fetch draft after streaming:', err);
+                logger.error('Failed to fetch draft after streaming:', err);
                 setError('Failed to load extracted recipe. Please try again.');
                 setIsLoading(false);
                 return;
@@ -99,7 +101,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
           },
           (err: ApiErrorImpl) => {
             // Streaming failed, try fallback to POST
-            console.warn('Streaming failed, falling back to POST:', err);
+            logger.warn('Streaming failed, falling back to POST:', err);
             setProgressMessages((prev) => [
               ...prev,
               'Switching to fallback method...',
@@ -109,7 +111,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
         );
         setAbortController(controller);
       } catch (err) {
-        console.error('Failed to establish streaming connection:', err);
+        logger.error('Failed to establish streaming connection:', err);
         fallbackToPost();
       }
     } else {
@@ -126,7 +128,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
       navigate(response.signed_url);
       handleClose();
     } catch (err) {
-      console.error('POST extraction failed:', err);
+      logger.error('POST extraction failed:', err);
       const apiError = err as ApiErrorImpl;
       setError(
         apiError.message || 'Failed to extract recipe. Please try again.'

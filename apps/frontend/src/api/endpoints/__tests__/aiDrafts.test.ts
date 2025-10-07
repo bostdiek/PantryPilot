@@ -75,10 +75,7 @@ describe('AI Drafts API endpoints', () => {
 
       (apiClient.request as any).mockResolvedValueOnce(mockResponse);
 
-      await extractRecipeFromUrl(
-        'https://example.com/recipe',
-        'custom prompt'
-      );
+      await extractRecipeFromUrl('https://example.com/recipe', 'custom prompt');
 
       expect(apiClient.request).toHaveBeenCalledWith(
         '/api/v1/ai/extract-recipe-from-url',
@@ -93,11 +90,7 @@ describe('AI Drafts API endpoints', () => {
     });
 
     it('handles API errors', async () => {
-      const apiError = new ApiErrorImpl(
-        'Invalid URL',
-        422,
-        'validation_error'
-      );
+      const apiError = new ApiErrorImpl('Invalid URL', 422, 'validation_error');
 
       (apiClient.request as any).mockRejectedValueOnce(apiError);
 

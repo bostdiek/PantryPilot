@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
 import { userProfileApi } from '../api/endpoints/userProfile';
+import { logger } from '../lib/logger';
+import { useAuthStore, useIsAuthenticated } from '../stores/useAuthStore';
 import type { AuthUser } from '../types/auth';
 
 const ProtectedRoute: React.FC = () => {
@@ -27,7 +28,7 @@ const ProtectedRoute: React.FC = () => {
 
           setUser(authUser);
         } catch (error) {
-          console.error('Failed to fetch user profile:', error);
+          logger.error('Failed to fetch user profile:', error);
           // If profile fetch fails, the token might be invalid
           // Clear the auth state to force re-login
           logout('expired');

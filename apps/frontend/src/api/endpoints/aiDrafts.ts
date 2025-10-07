@@ -1,11 +1,12 @@
-import { apiClient, getApiBaseUrl } from '../client';
+import { logger } from '../../lib/logger';
+import { useAuthStore } from '../../stores/useAuthStore';
 import type {
   AIDraftFetchResponse,
   AIDraftResponse,
   SSEEvent,
 } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
-import { useAuthStore } from '../../stores/useAuthStore';
+import { apiClient, getApiBaseUrl } from '../client';
 
 /**
  * AI Drafts API endpoints
@@ -80,7 +81,7 @@ export function extractRecipeStream(
         eventSource.close();
       }
     } catch (err) {
-      console.error('Failed to parse SSE message:', err);
+      logger.error('Failed to parse SSE message:', err);
       onError(
         new ApiErrorImpl(
           'Failed to parse server message',
@@ -95,7 +96,7 @@ export function extractRecipeStream(
   };
 
   eventSource.onerror = (evt) => {
-    console.error('SSE connection error:', evt);
+    logger.error('SSE connection error:', evt);
     onError(
       new ApiErrorImpl(
         'Connection to server lost',
@@ -211,7 +212,7 @@ export async function extractRecipeStreamFetch(
   }
 
   const API_BASE_URL = getApiBaseUrl();
-  
+
   try {
     const response = await fetch(
       `${API_BASE_URL}/api/v1/ai/extract-recipe-stream?${params.toString()}`,
@@ -235,9 +236,7 @@ export async function extractRecipeStreamFetch(
     }
 
     if (!response.body) {
-      onError(
-        new ApiErrorImpl('No response body', undefined, 'no_body')
-      );
+      onError(new ApiErrorImpl('No response body', undefined, 'no_body'));
       return abortController;
     }
 
@@ -303,7 +302,7 @@ export async function extractRecipeStreamFetch(
             break;
           }
         } catch (err) {
-          console.error('Failed to parse SSE message:', err);
+          logger.error('Failed to parse SSE message:', err);
         }
       }
     }

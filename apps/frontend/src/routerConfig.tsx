@@ -1,13 +1,14 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, redirect } from 'react-router-dom';
+import { getDraftById } from './api/endpoints/aiDrafts';
 import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
 import { LoadingSpinner } from './components/ui/LoadingSpinner';
+import { logger } from './lib/logger';
+import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
-import { useAuthStore } from './stores/useAuthStore';
-import { getDraftById } from './api/endpoints/aiDrafts';
 // Lazy loaded pages for code-splitting (use top-level `lazy` import)
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -23,18 +24,18 @@ const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 
 // Loader functions for protected routes
 const homeLoader = async () => {
-  console.log('Home loader executing...');
+  logger.debug('Home loader executing...');
 
   const { fetchRecipes } = useRecipeStore.getState();
   const { loadWeek } = useMealPlanStore.getState();
 
   try {
     // Start both fetches in parallel
-    console.log('Starting parallel data fetching for home page');
+    logger.debug('Starting parallel data fetching for home page');
     await Promise.all([fetchRecipes(), loadWeek()]);
-    console.log('Home loader completed');
+    logger.debug('Home loader completed');
   } catch (error) {
-    console.error('Home loader: failed to load data', error);
+    logger.error('Home loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
 
@@ -51,7 +52,7 @@ const recipesLoader = async () => {
       await fetchRecipes();
     }
   } catch (error) {
-    console.error('Recipes loader: failed to load data', error);
+    logger.error('Recipes loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
 
@@ -66,28 +67,35 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
 
   // Check if this is an AI draft deep link
   if (ai === '1' && draftId && token) {
-    console.log('New recipe loader: AI draft deep link detected');
+    logger.debug('New recipe loader: AI draft deep link detected');
 
     // Check authentication - redirect to login if not authenticated
     const { token: authToken } = useAuthStore.getState();
     if (!authToken) {
-      console.log('New recipe loader: User not authenticated, redirecting to login');
+      logger.debug(
+        'New recipe loader: User not authenticated, redirecting to login'
+      );
       // Preserve the full URL as the next parameter
-      return redirect(`/login?next=${encodeURIComponent(url.pathname + url.search)}`);
+      return redirect(
+        `/login?next=${encodeURIComponent(url.pathname + url.search)}`
+      );
     }
 
     try {
       // Fetch the draft
       const draftResponse = await getDraftById(draftId, token);
-      console.log('New recipe loader: Draft fetched successfully', draftResponse);
+      logger.debug(
+        'New recipe loader: Draft fetched successfully',
+        draftResponse
+      );
 
       // Set the form from the suggestion
       const { setFormFromSuggestion } = useRecipeStore.getState();
       setFormFromSuggestion(draftResponse.payload);
 
-      console.log('New recipe loader: Form prefilled from AI suggestion');
+      logger.debug('New recipe loader: Form prefilled from AI suggestion');
     } catch (error) {
-      console.error('New recipe loader: Failed to load draft', error);
+      logger.error('New recipe loader: Failed to load draft', error);
       // Don't throw - let the component handle the error state
       // The component can check for the error and show a friendly message
     }
@@ -104,7 +112,7 @@ const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
       return await fetchRecipeById(params.id);
     }
   } catch (error) {
-    console.error('Recipe detail loader: failed to load data', error);
+    logger.error('Recipe detail loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
 
@@ -114,7 +122,7 @@ const recipeDetailLoader = async ({ params }: { params: { id?: string } }) => {
 const mealPlanLoader = async () => {
   // The ProtectedRoute component already handles authentication checks,
   // so we can safely assume the user is authenticated when this loader runs
-  console.log('Meal plan loader: loading data for authenticated user');
+  logger.debug('Meal plan loader: loading data for authenticated user');
 
   const { loadWeek } = useMealPlanStore.getState();
   const { recipes, fetchRecipes } = useRecipeStore.getState();
@@ -124,9 +132,9 @@ const mealPlanLoader = async () => {
       loadWeek(),
       recipes.length === 0 ? fetchRecipes() : Promise.resolve(),
     ]);
-    console.log('Meal plan loader: data loaded successfully');
+    logger.debug('Meal plan loader: data loaded successfully');
   } catch (error) {
-    console.error('Meal plan loader: failed to load data', error);
+    logger.error('Meal plan loader: failed to load data', error);
     // Don't throw here - let the component handle the error state
   }
 

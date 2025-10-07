@@ -131,8 +131,12 @@ describe('useRecipeStore - AI Suggestion', () => {
       expect(result.current.formSuggestion).toEqual(recipeData);
       expect(result.current.formSuggestion?.ethnicity).toBe('Italian');
       expect(result.current.formSuggestion?.oven_temperature_f).toBe(375);
-      expect(result.current.formSuggestion?.user_notes).toBe('From AI extraction');
-      expect(result.current.formSuggestion?.link_source).toBe('https://example.com/recipe');
+      expect(result.current.formSuggestion?.user_notes).toBe(
+        'From AI extraction'
+      );
+      expect(result.current.formSuggestion?.link_source).toBe(
+        'https://example.com/recipe'
+      );
     });
   });
 

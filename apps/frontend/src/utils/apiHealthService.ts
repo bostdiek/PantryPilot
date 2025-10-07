@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger';
 import { hasPendingRecipes, syncPendingRecipes } from './offlineSync';
 
 /**
@@ -94,20 +95,20 @@ class ApiHealthService {
       const newStatus = status < 500; // 1xx-4xx => online (API reachable)
 
       if (!newStatus) {
-        console.warn('Health check indicates server error status:', status);
+        logger.warn('Health check indicates server error status:', status);
       }
 
       // If coming back online, attempt pending sync.
       if (!this.isOnline && newStatus) {
-        console.log('API back online, attempting pending recipe sync');
+        logger.info('API back online, attempting pending recipe sync');
         if (hasPendingRecipes()) {
           try {
             const result = await syncPendingRecipes();
-            console.log(
+            logger.info(
               `Synced ${result.synced} recipes, ${result.failed} failed`
             );
           } catch (err) {
-            console.error('Error syncing recipes:', err);
+            logger.error('Error syncing recipes:', err);
           }
         }
       }
@@ -119,7 +120,7 @@ class ApiHealthService {
     } catch (err) {
       // Network / timeout => offline
       if (this.isOnline) {
-        console.warn('Health check network error -> offline', err);
+        logger.warn('Health check network error -> offline', err);
         this.isOnline = false;
         this.notifyListeners();
       }

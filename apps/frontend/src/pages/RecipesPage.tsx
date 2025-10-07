@@ -32,7 +32,7 @@ const RecipesPage: FC = () => {
 
   // Recipe preview state
   const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null);
-  
+
   // Add by URL modal state
   const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
 

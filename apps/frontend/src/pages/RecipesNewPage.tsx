@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, type FC, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
+import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import TrashIcon from '../components/ui/icons/trash.svg?react';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -13,6 +14,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
 import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
 import {
@@ -23,7 +25,6 @@ import {
 } from '../types/Recipe';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
-import TrashIcon from '../components/ui/icons/trash.svg?react';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -88,7 +89,7 @@ const RecipesNewPage: FC = () => {
     ) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= instructions.length) {
-        console.warn(
+        logger.warn(
           `Invalid target index ${targetIndex}, appending steps instead`
         );
         setInstructions((prev) => [
@@ -121,9 +122,7 @@ const RecipesNewPage: FC = () => {
     onReplaceStep: (targetIndex: number, content: string) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= instructions.length) {
-        console.warn(
-          `Invalid target index ${targetIndex}, cannot replace step`
-        );
+        logger.warn(`Invalid target index ${targetIndex}, cannot replace step`);
         return;
       }
 
@@ -143,10 +142,10 @@ const RecipesNewPage: FC = () => {
   // Prefill form from AI suggestion when available
   // Use a ref to track if we've already prefilled to avoid clearing prematurely
   const hasPrefilledRef = useRef(false);
-  
+
   useEffect(() => {
     if (formSuggestion && !hasPrefilledRef.current) {
-      console.log('Prefilling form from AI suggestion:', formSuggestion);
+      logger.debug('Prefilling form from AI suggestion:', formSuggestion);
       hasPrefilledRef.current = true;
 
       // Prefill all fields
@@ -174,12 +173,15 @@ const RecipesNewPage: FC = () => {
       }
 
       // Prefill instructions
-      if (formSuggestion.instructions && formSuggestion.instructions.length > 0) {
+      if (
+        formSuggestion.instructions &&
+        formSuggestion.instructions.length > 0
+      ) {
         setInstructions(formSuggestion.instructions);
       }
     }
   }, [formSuggestion]);
-  
+
   // Clean up suggestion when component unmounts
   useEffect(() => {
     return () => {
@@ -269,7 +271,7 @@ const RecipesNewPage: FC = () => {
         );
         setTimeout(() => navigate('/recipes'), 3000);
       } catch (err) {
-        console.error('Failed to save recipe locally:', err);
+        logger.error('Failed to save recipe locally:', err);
         setError('Unable to save recipe. Please try again later.');
       } finally {
         setIsSubmitting(false);
@@ -318,7 +320,7 @@ const RecipesNewPage: FC = () => {
         setError('Failed to create recipe. Please try again.');
       }
     } catch (err) {
-      console.error('Failed to create recipe:', err);
+      logger.error('Failed to create recipe:', err);
       setError(
         err instanceof Error
           ? err.message
@@ -333,7 +335,7 @@ const RecipesNewPage: FC = () => {
     <Container size="md">
       {/* AI Suggestion Indicator */}
       {isAISuggestion && (
-        <div className="mt-6 rounded-lg bg-blue-50 p-4 border border-blue-200">
+        <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-start">
             <div className="flex-shrink-0">
               <svg

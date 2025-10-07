@@ -44,6 +44,7 @@ import XIcon from '../components/ui/icons/x.svg?react';
 import { Input } from '../components/ui/Input';
 import { Select, type SelectOption } from '../components/ui/Select';
 import { useIsMobile } from '../hooks/useMediaQuery';
+import { logger } from '../lib/logger';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { DayOption } from '../types/DayOption';
@@ -280,7 +281,7 @@ const MealPlanPage: FC = () => {
         // Close the modal after successful removal
         handleClosePreview();
       } catch (error) {
-        console.error('Failed to remove entry:', error);
+        logger.error('Failed to remove entry:', error);
         // Don't close modal on error so user can try again
       }
     }
@@ -303,7 +304,7 @@ const MealPlanPage: FC = () => {
         orderIndex: nextIndex,
       });
     } catch (error) {
-      console.error('Failed to add recipe to day:', error);
+      logger.error('Failed to add recipe to day:', error);
     }
   }
 
