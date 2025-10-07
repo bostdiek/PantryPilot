@@ -273,14 +273,18 @@ export async function extractRecipeStreamFetch(
           onProgress(data);
 
           if (data.status === 'complete') {
-            if (data.signed_url && data.draft_id) {
-              onComplete(data.signed_url, data.draft_id);
+            // SSE streaming returns draft_id only (not signed_url)
+            // The signed_url is only returned from the POST endpoint
+            if (data.draft_id) {
+              // For streaming, we have the draft_id but no signed_url
+              // Pass empty string for signed_url - the caller will fetch the draft using getDraftByIdOwner
+              onComplete('', data.draft_id);
               // Close the reader to stop processing further messages
               reader.cancel();
             } else {
               onError(
                 new ApiErrorImpl(
-                  'Extraction completed but missing signed_url or draft_id',
+                  'Extraction completed but missing draft_id',
                   undefined,
                   'invalid_response'
                 )

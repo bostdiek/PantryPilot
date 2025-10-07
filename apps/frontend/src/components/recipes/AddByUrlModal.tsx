@@ -7,9 +7,11 @@ import { ErrorMessage } from '../ui/ErrorMessage';
 import {
   extractRecipeStreamFetch,
   extractRecipeFromUrl,
+  getDraftByIdOwner,
 } from '../../api/endpoints/aiDrafts';
 import { ApiErrorImpl } from '../../types/api';
 import type { SSEEvent } from '../../types/AIDraft';
+import { useRecipeStore } from '../../stores/useRecipeStore';
 
 interface AddByUrlModalProps {
   isOpen: boolean;
@@ -71,9 +73,28 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
               setProgressMessages((prev) => [...prev, message]);
             }
           },
-          (signedUrl: string) => {
-            // Success! Navigate to the signed URL
-            navigate(signedUrl);
+          async (signedUrl: string, draftId: string) => {
+            // Streaming returns draft_id only (no signed_url)
+            // POST returns signed_url directly
+            if (signedUrl) {
+              // POST endpoint case - navigate to signed URL
+              navigate(signedUrl);
+            } else if (draftId) {
+              // Streaming endpoint case - fetch draft and navigate to new recipe page
+              try {
+                const draft = await getDraftByIdOwner(draftId);
+                // Set the draft in the store
+                const { setFormFromSuggestion } = useRecipeStore.getState();
+                setFormFromSuggestion(draft.payload);
+                // Navigate to new recipe page with AI flag
+                navigate('/recipes/new?ai=1');
+              } catch (err) {
+                console.error('Failed to fetch draft after streaming:', err);
+                setError('Failed to load extracted recipe. Please try again.');
+                setIsLoading(false);
+                return;
+              }
+            }
             handleClose();
           },
           (err: ApiErrorImpl) => {
