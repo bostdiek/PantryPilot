@@ -14,6 +14,7 @@ import { RecipeSearchFilters } from '../components/recipes/RecipeSearchFilters';
 import { RecipePagination } from '../components/recipes/RecipePagination';
 import { RecipeCard } from '../components/recipes/RecipeCard';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
+import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
 import type { Recipe } from '../types/Recipe';
 
 const RecipesPage: FC = () => {
@@ -31,6 +32,9 @@ const RecipesPage: FC = () => {
 
   // Recipe preview state
   const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null);
+
+  // Add by URL modal state
+  const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
 
   // Fetch recipes on mount
   useEffect(() => {
@@ -82,9 +86,17 @@ const RecipesPage: FC = () => {
             </p>
           )}
         </div>
-        <Link to="/recipes/new">
-          <Button variant="primary">+ Add Recipe</Button>
-        </Link>
+        <div className="flex space-x-3">
+          <Button
+            variant="secondary"
+            onClick={() => setIsAddByUrlModalOpen(true)}
+          >
+            Add by URL
+          </Button>
+          <Link to="/recipes/new">
+            <Button variant="primary">+ Add Recipe</Button>
+          </Link>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -158,6 +170,12 @@ const RecipesPage: FC = () => {
         onClose={handleClosePreview}
         recipe={previewRecipe}
         // No dateContext for search page - no "Remove from Day" functionality
+      />
+
+      {/* Add by URL Modal */}
+      <AddByUrlModal
+        isOpen={isAddByUrlModalOpen}
+        onClose={() => setIsAddByUrlModalOpen(false)}
       />
     </Container>
   );

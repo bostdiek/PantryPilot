@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
 import type { ClipboardEvent } from 'react';
+import { useCallback, useState } from 'react';
+import { logger } from '../lib/logger';
 import { looksMultiStep, splitSteps } from '../utils/pasteHelpers';
 
 interface UsePasteSplitOptions {
@@ -74,9 +75,8 @@ export function usePasteSplit({
     (steps: string[]) => {
       const targetIdx = pasteSplitModal.targetIndex;
 
-      // Guard against invalid targetIndex - delegate to parent for validation
       if (targetIdx < 0) {
-        console.warn(
+        logger.warn(
           `Invalid target index ${targetIdx}, cannot confirm paste split`
         );
         return;
@@ -95,7 +95,7 @@ export function usePasteSplit({
 
       // Guard against invalid targetIndex
       if (targetIdx < 0) {
-        console.warn(
+        logger.warn(
           `Invalid target index ${targetIdx}, cannot paste as single step`
         );
         return;

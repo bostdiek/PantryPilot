@@ -1,10 +1,12 @@
-import { useState, type FC, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import TrashIcon from '../components/ui/icons/trash.svg?react';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -12,6 +14,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
 import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
 import {
@@ -22,7 +25,6 @@ import {
 } from '../types/Recipe';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
-import TrashIcon from '../components/ui/icons/trash.svg?react';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -38,6 +40,8 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
 const RecipesNewPage: FC = () => {
   const navigate = useNavigate();
   const { success } = useToast();
+  const { addRecipe, formSuggestion, isAISuggestion, clearFormSuggestion } =
+    useRecipeStore();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<SelectOption>(
@@ -67,7 +71,7 @@ const RecipesNewPage: FC = () => {
   const [instructions, setInstructions] = useState(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { addRecipe } = useRecipeStore();
+  const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
 
   // Shared paste handling hook
   const {
@@ -85,7 +89,7 @@ const RecipesNewPage: FC = () => {
     ) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= instructions.length) {
-        console.warn(
+        logger.warn(
           `Invalid target index ${targetIndex}, appending steps instead`
         );
         setInstructions((prev) => [
@@ -118,9 +122,7 @@ const RecipesNewPage: FC = () => {
     onReplaceStep: (targetIndex: number, content: string) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= instructions.length) {
-        console.warn(
-          `Invalid target index ${targetIndex}, cannot replace step`
-        );
+        logger.warn(`Invalid target index ${targetIndex}, cannot replace step`);
         return;
       }
 
@@ -136,6 +138,58 @@ const RecipesNewPage: FC = () => {
   // Use the custom hook instead of direct useEffect
   const { isApiOnline } = useApiHealth();
   const apiUnavailable = !isApiOnline;
+
+  // Prefill form from AI suggestion when available
+  // Use a ref to track if we've already prefilled to avoid clearing prematurely
+  const hasPrefilledRef = useRef(false);
+
+  useEffect(() => {
+    if (formSuggestion && !hasPrefilledRef.current) {
+      logger.debug('Prefilling form from AI suggestion:', formSuggestion);
+      hasPrefilledRef.current = true;
+
+      // Prefill all fields
+      setTitle(formSuggestion.title || '');
+      setDescription(formSuggestion.description || '');
+      setCategory(
+        categoryOptions.find((c) => c.id === formSuggestion.category) ||
+          categoryOptions[0]
+      );
+      setDifficulty(
+        difficultyOptions.find((d) => d.id === formSuggestion.difficulty) ||
+          difficultyOptions[0]
+      );
+      setPrepTime(formSuggestion.prep_time_minutes || 0);
+      setCookTime(formSuggestion.cook_time_minutes || 0);
+      setServingMin(formSuggestion.serving_min || 1);
+      setServingMax(formSuggestion.serving_max);
+      setEthnicity(formSuggestion.ethnicity || '');
+      setOvenTemperatureF(formSuggestion.oven_temperature_f);
+      setUserNotes(formSuggestion.user_notes || '');
+
+      // Prefill ingredients
+      if (formSuggestion.ingredients && formSuggestion.ingredients.length > 0) {
+        setIngredients(formSuggestion.ingredients);
+      }
+
+      // Prefill instructions
+      if (
+        formSuggestion.instructions &&
+        formSuggestion.instructions.length > 0
+      ) {
+        setInstructions(formSuggestion.instructions);
+      }
+    }
+  }, [formSuggestion]);
+
+  // Clean up suggestion when component unmounts
+  useEffect(() => {
+    return () => {
+      if (formSuggestion) {
+        clearFormSuggestion();
+      }
+    };
+  }, [formSuggestion, clearFormSuggestion]);
 
   // Check if there are unsaved changes
   const hasUnsavedChanges =
@@ -217,7 +271,7 @@ const RecipesNewPage: FC = () => {
         );
         setTimeout(() => navigate('/recipes'), 3000);
       } catch (err) {
-        console.error('Failed to save recipe locally:', err);
+        logger.error('Failed to save recipe locally:', err);
         setError('Unable to save recipe. Please try again later.');
       } finally {
         setIsSubmitting(false);
@@ -266,7 +320,7 @@ const RecipesNewPage: FC = () => {
         setError('Failed to create recipe. Please try again.');
       }
     } catch (err) {
-      console.error('Failed to create recipe:', err);
+      logger.error('Failed to create recipe:', err);
       setError(
         err instanceof Error
           ? err.message
@@ -279,8 +333,47 @@ const RecipesNewPage: FC = () => {
 
   return (
     <Container size="md">
+      {/* AI Suggestion Indicator */}
+      {isAISuggestion && (
+        <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg
+                className="h-5 w-5 text-blue-400"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </div>
+            <div className="ml-3 flex-1">
+              <h3 className="text-sm font-medium text-blue-900">
+                AI-Generated Recipe
+              </h3>
+              <p className="mt-1 text-sm text-blue-700">
+                This recipe was extracted from a URL. Please review and edit as
+                needed before saving.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
       <Card variant="default" className="mt-6 p-6">
-        <h1 className="mb-4 text-2xl font-bold">Create New Recipe</h1>
+        <div className="mb-4 flex items-center justify-between">
+          <h1 className="text-2xl font-bold">Create New Recipe</h1>
+          {!isAISuggestion && (
+            <Button
+              variant="secondary"
+              onClick={() => setIsAddByUrlModalOpen(true)}
+            >
+              Add by URL
+            </Button>
+          )}
+        </div>
 
         {apiUnavailable && (
           <div className="mb-4">
@@ -643,6 +736,12 @@ const RecipesNewPage: FC = () => {
           onPasteAsSingle={handlePasteAsSingle}
           candidateSteps={pasteSplitModal.candidateSteps}
           originalContent={pasteSplitModal.originalContent}
+        />
+
+        {/* Add by URL Modal */}
+        <AddByUrlModal
+          isOpen={isAddByUrlModalOpen}
+          onClose={() => setIsAddByUrlModalOpen(false)}
         />
       </Card>
     </Container>

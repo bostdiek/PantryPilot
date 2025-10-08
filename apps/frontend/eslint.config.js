@@ -39,7 +39,22 @@ export default [
         sourceType: 'module',
         ecmaFeatures: { jsx: true },
       },
-      globals: globals.browser,
+      // Include both browser and node globals to support test files and
+      // runtime checks that reference `process` or `global` during test runs.
+      globals: { ...globals.browser, ...globals.node },
+    },
+  },
+
+  // Test-specific globals: vitest/jest style names (describe, it, expect, vi, etc.)
+  {
+    files: ['**/__tests__/**/*.{ts,tsx}', '**/*.{test,spec}.{ts,tsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...globals.jest,
+        vi: 'readonly',
+      },
     },
   },
   // Enable projectService for type-checked rules and relax unused-vars to warnings

@@ -6,6 +6,8 @@ import {
   getAllRecipes,
   getRecipeById,
 } from '../api/endpoints/recipes';
+import { logger } from '../lib/logger';
+import type { AIDraftPayload } from '../types/AIDraft';
 import type { ApiError } from '../types/api';
 import type {
   Recipe,
@@ -54,6 +56,10 @@ interface RecipeState {
   sortBy: RecipeSortOption;
   pagination: RecipePagination;
 
+  // AI suggestion state for form prefilling
+  formSuggestion: RecipeCreate | null;
+  isAISuggestion: boolean;
+
   // Actions
   fetchRecipes: () => Promise<void>;
   fetchRecipeById: (id: string) => Promise<Recipe | null>;
@@ -71,6 +77,10 @@ interface RecipeState {
   setPage: (page: number) => void;
   clearFilters: () => void;
   applyFiltersAndSort: () => void;
+
+  // AI suggestion actions
+  setFormFromSuggestion: (payload: AIDraftPayload) => void;
+  clearFormSuggestion: () => void;
 }
 
 // Helper functions for filtering and sorting
@@ -186,13 +196,15 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   filters: defaultFilters,
   sortBy: 'relevance',
   pagination: defaultPagination,
+  formSuggestion: null,
+  isAISuggestion: false,
 
   fetchRecipes: async () => {
     set({ isLoading: true, error: null });
     try {
       const recipes = await getAllRecipes();
 
-      console.log('API response from fetchRecipes:', recipes);
+      logger.debug('API response from fetchRecipes:', recipes);
 
       set({
         recipes,
@@ -202,7 +214,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       // Apply filters after fetching
       get().applyFiltersAndSort();
     } catch (error) {
-      console.error('Error fetching recipes:', error);
+      logger.error('Error fetching recipes:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -223,14 +235,14 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     try {
       const recipe = await getRecipeById(id);
 
-      console.log('API response from fetchRecipeById:', recipe);
+      logger.debug('API response from fetchRecipeById:', recipe);
 
       // No need to update the full recipes list for a single recipe fetch
       set({ isLoading: false });
 
       return recipe;
     } catch (error) {
-      console.error('Error fetching recipe by ID:', error);
+      logger.error('Error fetching recipe by ID:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -251,7 +263,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     try {
       const newRecipe = await apiCreateRecipe(recipe);
 
-      console.log('API response from addRecipe:', newRecipe);
+      logger.debug('API response from addRecipe:', newRecipe);
 
       // Fetch all recipes to ensure we have the complete list
       const allRecipes = await getAllRecipes();
@@ -266,7 +278,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       return newRecipe;
     } catch (error) {
-      console.error('Error adding recipe:', error);
+      logger.error('Error adding recipe:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -286,7 +298,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     try {
       const updatedRecipe = await apiUpdateRecipe(id, recipe);
 
-      console.log('API response from updateRecipe:', updatedRecipe);
+      logger.debug('API response from updateRecipe:', updatedRecipe);
 
       set((state) => ({
         recipes: state.recipes.map((r) => (r.id === id ? updatedRecipe : r)),
@@ -298,7 +310,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       return updatedRecipe;
     } catch (error) {
-      console.error('Error updating recipe:', error);
+      logger.error('Error updating recipe:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -329,7 +341,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       return true;
     } catch (error) {
-      console.error('Error deleting recipe:', error);
+      logger.error('Error deleting recipe:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -398,7 +410,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       return newRecipe;
     } catch (error) {
-      console.error('Error duplicating recipe:', error);
+      logger.error('Error duplicating recipe:', error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -454,6 +466,43 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
         ...state.pagination,
         total: sorted.length,
       },
+    });
+  },
+
+  // AI suggestion actions
+  setFormFromSuggestion: (payload: AIDraftPayload) => {
+    // The backend returns payload directly as AIGeneratedRecipe, not wrapped
+    // Check if payload has recipe_data (success case) or if it's the old nested format
+    let recipeData = null as unknown as any;
+
+    if ((payload as any).recipe_data) {
+      // Direct format: payload IS the generated recipe
+      recipeData = (payload as any).recipe_data;
+    } else if ((payload as any).generated_recipe?.recipe_data) {
+      // Nested format (for backward compatibility)
+      recipeData = (payload as any).generated_recipe.recipe_data;
+    }
+
+    if (recipeData) {
+      logger.debug('Setting form suggestion with recipe data:', recipeData);
+      set({
+        formSuggestion: recipeData,
+        isAISuggestion: true,
+      });
+    } else {
+      // If extraction failed, clear the suggestion
+      logger.debug('No recipe data found in payload, clearing suggestion');
+      set({
+        formSuggestion: null,
+        isAISuggestion: true, // Keep flag to show AI panel
+      });
+    }
+  },
+
+  clearFormSuggestion: () => {
+    set({
+      formSuggestion: null,
+      isAISuggestion: false,
     });
   },
 }));

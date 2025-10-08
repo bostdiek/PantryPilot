@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import TrashIcon from '../components/ui/icons/trash.svg?react';
 import { Input } from '../components/ui/Input';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Select, type SelectOption } from '../components/ui/Select';
@@ -12,6 +13,7 @@ import { Textarea } from '../components/ui/Textarea';
 import { useToast } from '../components/ui/useToast';
 import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
+import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
 import type { Recipe } from '../types/Recipe';
@@ -25,7 +27,6 @@ import {
   mapIngredientsForApi,
   normalizeIngredientsForForm,
 } from '../utils/ingredients';
-import TrashIcon from '../components/ui/icons/trash.svg?react';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -150,7 +151,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
 
         // Guard against invalid index
         if (index < 0 || index >= next.length) {
-          console.warn(
+          logger.warn(
             `Invalid instruction index ${index}, appending steps instead`
           );
           return {
@@ -219,7 +220,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     ) => {
       // Guard against invalid index with bounds checking
       if (targetIndex < 0 || targetIndex >= form.instructions.length) {
-        console.warn(
+        logger.warn(
           `Invalid target index ${targetIndex}, appending steps instead`
         );
         dispatch({
@@ -240,9 +241,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     onReplaceStep: (targetIndex: number, content: string) => {
       // Guard against invalid index
       if (targetIndex < 0 || targetIndex >= form.instructions.length) {
-        console.warn(
-          `Invalid target index ${targetIndex}, cannot replace step`
-        );
+        logger.warn(`Invalid target index ${targetIndex}, cannot replace step`);
         return;
       }
 
@@ -336,7 +335,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
         setError('Failed to update recipe. Please try again.');
       }
     } catch (err) {
-      console.error('Failed to update recipe:', err);
+      logger.error('Failed to update recipe:', err);
       setError(
         err instanceof Error
           ? err.message

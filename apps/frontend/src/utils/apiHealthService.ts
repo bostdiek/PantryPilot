@@ -1,9 +1,10 @@
+import { logger } from '../lib/logger';
 import { hasPendingRecipes, syncPendingRecipes } from './offlineSync';
 
 /**
  * Service to periodically check API health and sync pending data
  */
-class ApiHealthService {
+export class ApiHealthService {
   private checkInterval: number | null = null;
   private healthEndpoint: string;
   private listeners: Array<(isOnline: boolean) => void> = [];
@@ -94,20 +95,20 @@ class ApiHealthService {
       const newStatus = status < 500; // 1xx-4xx => online (API reachable)
 
       if (!newStatus) {
-        console.warn('Health check indicates server error status:', status);
+        logger.warn('Health check indicates server error status:', status);
       }
 
       // If coming back online, attempt pending sync.
       if (!this.isOnline && newStatus) {
-        console.log('API back online, attempting pending recipe sync');
+        logger.info('API back online, attempting pending recipe sync');
         if (hasPendingRecipes()) {
           try {
             const result = await syncPendingRecipes();
-            console.log(
+            logger.info(
               `Synced ${result.synced} recipes, ${result.failed} failed`
             );
           } catch (err) {
-            console.error('Error syncing recipes:', err);
+            logger.error('Error syncing recipes:', err);
           }
         }
       }
@@ -119,7 +120,7 @@ class ApiHealthService {
     } catch (err) {
       // Network / timeout => offline
       if (this.isOnline) {
-        console.warn('Health check network error -> offline', err);
+        logger.warn('Health check network error -> offline', err);
         this.isOnline = false;
         this.notifyListeners();
       }
@@ -136,10 +137,14 @@ class ApiHealthService {
   }
 }
 
-// Export singleton instance
+// Export singleton instance for app usage but avoid auto-start during tests.
 export const apiHealthService = new ApiHealthService();
 
-// Auto-start in browser environments
-if (typeof window !== 'undefined') {
+// Auto-start in browser environments, but skip when running in a test environment
+// where import.meta.env.MODE === 'test' or NODE_ENV === 'test' to allow controlled testing.
+const nodeEnv =
+  typeof process !== 'undefined' ? process.env.NODE_ENV : undefined;
+const isTestMode = import.meta.env?.MODE === 'test' || nodeEnv === 'test';
+if (typeof window !== 'undefined' && !isTestMode) {
   apiHealthService.start();
 }

@@ -8,7 +8,7 @@ import {
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
 
-function getApiBaseUrl(): string {
+export function getApiBaseUrl(): string {
   // 1. Explicit build-time override wins (useful for staging/CDN or dev containers)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;

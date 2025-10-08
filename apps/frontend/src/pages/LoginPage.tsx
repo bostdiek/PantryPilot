@@ -6,8 +6,9 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
+import { logger } from '../lib/logger';
 import { useAuthStore } from '../stores/useAuthStore';
-import type { LoginFormData, AuthUser } from '../types/auth';
+import type { AuthUser, LoginFormData } from '../types/auth';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
 const LoginPage: FC = () => {
@@ -64,7 +65,7 @@ const LoginPage: FC = () => {
         // Store user in auth store
         authStore.setUser(user);
       } catch (profileErr) {
-        console.error('Failed to fetch user profile after login:', profileErr);
+        logger.error('Failed to fetch user profile after login:', profileErr);
         // Continue with navigation even if profile fetch fails
         // The profile will be fetched later by the UserProfilePage
       }

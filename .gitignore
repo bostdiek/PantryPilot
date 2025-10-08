@@ -20,6 +20,8 @@ parts/
 sdist/
 var/
 wheels/
+!apps/frontend/src/lib/
+!apps/frontend/src/lib/logger.ts
 share/python-wheels/
 *.egg-info/
 .installed.cfg

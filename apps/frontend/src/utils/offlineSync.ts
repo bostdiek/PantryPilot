@@ -1,4 +1,5 @@
 import { createRecipe } from '../api/endpoints/recipes';
+import { logger } from '../lib/logger';
 import type { RecipeCreate } from '../types/Recipe';
 
 /**
@@ -38,7 +39,7 @@ export async function syncPendingRecipes(): Promise<SyncResult> {
 
     return { synced, failed };
   } catch (error) {
-    console.error('Error syncing pending recipes:', error);
+    logger.error('Error syncing pending recipes:', error);
     return {
       synced: 0,
       failed: 0,
