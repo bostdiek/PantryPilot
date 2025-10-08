@@ -4,7 +4,7 @@ import { hasPendingRecipes, syncPendingRecipes } from './offlineSync';
 /**
  * Service to periodically check API health and sync pending data
  */
-class ApiHealthService {
+export class ApiHealthService {
   private checkInterval: number | null = null;
   private healthEndpoint: string;
   private listeners: Array<(isOnline: boolean) => void> = [];
@@ -137,10 +137,14 @@ class ApiHealthService {
   }
 }
 
-// Export singleton instance
+// Export singleton instance for app usage but avoid auto-start during tests.
 export const apiHealthService = new ApiHealthService();
 
-// Auto-start in browser environments
-if (typeof window !== 'undefined') {
+// Auto-start in browser environments, but skip when running in a test environment
+// where import.meta.env.MODE === 'test' or NODE_ENV === 'test' to allow controlled testing.
+const nodeEnv =
+  typeof process !== 'undefined' ? process.env.NODE_ENV : undefined;
+const isTestMode = import.meta.env?.MODE === 'test' || nodeEnv === 'test';
+if (typeof window !== 'undefined' && !isTestMode) {
   apiHealthService.start();
 }

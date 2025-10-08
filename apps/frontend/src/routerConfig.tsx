@@ -141,6 +141,15 @@ const mealPlanLoader = async () => {
   return null;
 };
 
+// Export loaders for testing and reuse
+export {
+  homeLoader,
+  mealPlanLoader,
+  newRecipeLoader,
+  recipeDetailLoader,
+  recipesLoader,
+};
+
 // Create router with data loading
 export const router = createBrowserRouter([
   {
