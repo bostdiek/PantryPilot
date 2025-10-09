@@ -47,26 +47,36 @@ async def test_extract_recipe_from_image_success(
     sample_ai_generated_recipe,
 ) -> None:
     """Happy path: upload image and extract recipe successfully."""
+    from datetime import UTC, datetime, timedelta
+    from uuid import uuid4
+
+    from services.ai.models import DraftOutcome
+
     # Create test image
     test_image = create_test_image()
 
-    # Mock the agent and conversion
-    with (
-        patch(
-            "services.ai.agents.create_image_recipe_agent"
-        ) as mock_create_agent,
-        patch(
-            "services.ai.agents.convert_to_recipe_create",
-            return_value=sample_ai_generated_recipe,
-        ),
-    ):
-        # Setup mock agent
-        mock_agent = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.output = sample_extraction_result
-        mock_agent.run = AsyncMock(return_value=mock_result)
-        mock_create_agent.return_value = mock_agent
+    # Create a mock draft
+    mock_draft = AsyncMock()
+    mock_draft.id = uuid4()
+    mock_draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
 
+    # Create a mock service that returns DraftOutcome
+    mock_service = AsyncMock()
+    mock_service.extract_recipe_from_images = AsyncMock(
+        return_value=DraftOutcome(
+            draft=mock_draft,
+            token="test-token",
+            success=True,
+        )
+    )
+
+    # Override the service dependency
+    from dependencies.db import get_db
+    from services.ai.orchestrator import get_ai_extraction_service
+
+    app.dependency_overrides[get_ai_extraction_service] = lambda: mock_service
+
+    try:
         # Make request
         files = {"files": ("recipe.jpg", test_image, "image/jpeg")}
         resp = await async_client.post(
@@ -74,14 +84,17 @@ async def test_extract_recipe_from_image_success(
             files=files,
         )
 
-    assert resp.status_code == status.HTTP_200_OK
-    body = resp.json()
-    assert body["success"] is True
-    data = body["data"]
-    # Stable contract keys
-    for key in ("draft_id", "signed_url", "expires_at", "ttl_seconds"):
-        assert key in data
-    assert data["ttl_seconds"] == 3600
+        assert resp.status_code == status.HTTP_200_OK
+        body = resp.json()
+        assert body["success"] is True
+        data = body["data"]
+        # Stable contract keys
+        for key in ("draft_id", "signed_url", "expires_at", "ttl_seconds"):
+            assert key in data
+        assert data["ttl_seconds"] == 3600
+    finally:
+        # Clean up override
+        app.dependency_overrides.pop(get_ai_extraction_service, None)
 
 
 @pytest.mark.asyncio
@@ -166,30 +179,47 @@ async def test_extract_recipe_from_image_extraction_not_found(
     extraction_not_found,
 ) -> None:
     """Test when AI cannot find recipe in image."""
+    from datetime import UTC, datetime, timedelta
+    from uuid import uuid4
+
+    from services.ai.models import DraftOutcome
+
     test_image = create_test_image()
 
-    with (
-        patch(
-            "services.ai.agents.create_image_recipe_agent"
-        ) as mock_create_agent,
-    ):
-        # Setup mock agent to return not found
-        mock_agent = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.output = extraction_not_found
-        mock_agent.run = AsyncMock(return_value=mock_result)
-        mock_create_agent.return_value = mock_agent
+    # Create a mock draft for failure case
+    mock_draft = AsyncMock()
+    mock_draft.id = uuid4()
+    mock_draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
 
+    # Create a mock service that returns DraftOutcome with success=False
+    mock_service = AsyncMock()
+    mock_service.extract_recipe_from_images = AsyncMock(
+        return_value=DraftOutcome(
+            draft=mock_draft,
+            token="test-token",
+            success=False,
+        )
+    )
+
+    # Override the service dependency
+    from services.ai.orchestrator import get_ai_extraction_service
+
+    app.dependency_overrides[get_ai_extraction_service] = lambda: mock_service
+
+    try:
         files = {"files": ("recipe.jpg", test_image, "image/jpeg")}
         resp = await async_client.post(
             "/api/v1/ai/extract-recipe-from-image",
             files=files,
         )
 
-    assert resp.status_code == status.HTTP_200_OK
-    body = resp.json()
-    assert body["success"] is False
-    assert "No recipe found" in body.get("message", "")
+        assert resp.status_code == status.HTTP_200_OK
+        body = resp.json()
+        assert body["success"] is False
+        assert "No recipe found" in body.get("message", "")
+    finally:
+        # Clean up override
+        app.dependency_overrides.pop(get_ai_extraction_service, None)
 
 
 @pytest.mark.asyncio
@@ -215,24 +245,35 @@ async def test_extract_recipe_from_image_multiple_files(
     sample_ai_generated_recipe,
 ) -> None:
     """Test uploading multiple image files."""
+    from datetime import UTC, datetime, timedelta
+    from uuid import uuid4
+
+    from services.ai.models import DraftOutcome
+
     test_image1 = create_test_image()
     test_image2 = create_test_image(width=1024, height=768)
 
-    with (
-        patch(
-            "services.ai.agents.create_image_recipe_agent"
-        ) as mock_create_agent,
-        patch(
-            "services.ai.agents.convert_to_recipe_create",
-            return_value=sample_ai_generated_recipe,
-        ),
-    ):
-        mock_agent = AsyncMock()
-        mock_result = AsyncMock()
-        mock_result.output = sample_extraction_result
-        mock_agent.run = AsyncMock(return_value=mock_result)
-        mock_create_agent.return_value = mock_agent
+    # Create a mock draft
+    mock_draft = AsyncMock()
+    mock_draft.id = uuid4()
+    mock_draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
 
+    # Create a mock service that returns DraftOutcome
+    mock_service = AsyncMock()
+    mock_service.extract_recipe_from_images = AsyncMock(
+        return_value=DraftOutcome(
+            draft=mock_draft,
+            token="test-token",
+            success=True,
+        )
+    )
+
+    # Override the service dependency
+    from services.ai.orchestrator import get_ai_extraction_service
+
+    app.dependency_overrides[get_ai_extraction_service] = lambda: mock_service
+
+    try:
         files = [
             ("files", ("recipe1.jpg", test_image1, "image/jpeg")),
             ("files", ("recipe2.jpg", test_image2, "image/jpeg")),
@@ -242,6 +283,9 @@ async def test_extract_recipe_from_image_multiple_files(
             files=files,
         )
 
-    assert resp.status_code == status.HTTP_200_OK
-    body = resp.json()
-    assert body["success"] is True
+        assert resp.status_code == status.HTTP_200_OK
+        body = resp.json()
+        assert body["success"] is True
+    finally:
+        # Clean up override
+        app.dependency_overrides.pop(get_ai_extraction_service, None)

@@ -204,6 +204,127 @@ class Orchestrator(AIExtractionService):
         )
         return DraftOutcome(draft, token, True)
 
+    async def extract_recipe_from_images(
+        self,
+        normalized_images: list[bytes],
+        db: AsyncSession,
+        current_user: User,
+        prompt_override: str | None = None,
+    ) -> DraftOutcome[Any]:
+        """Orchestrate image-based extraction flow returning DraftOutcome.
+
+        Args:
+            normalized_images: List of normalized image bytes (JPEG format)
+            db: Database session
+            current_user: Authenticated user
+            prompt_override: Optional custom prompt
+
+        Returns:
+            DraftOutcome containing draft, token, and success status
+        """
+        # 1. Create image recipe agent
+        from services.ai.agents import create_image_recipe_agent
+
+        agent = create_image_recipe_agent()
+
+        # 2. Prepare prompt for multimodal extraction
+        # For now, use a text-only prompt. Full multimodal integration
+        # will be implemented in a future enhancement.
+        import base64
+
+        image_data_urls = []
+        for img_bytes in normalized_images:
+            b64_data = base64.b64encode(img_bytes).decode("utf-8")
+            image_data_urls.append(f"data:image/jpeg;base64,{b64_data}")
+
+        prompt_text = prompt_override or (
+            "Extract the complete recipe information from the provided image(s). "
+            "Include all ingredients, instructions, times, and other details "
+            "visible in the image."
+        )
+
+        # 3. Run AI agent
+        try:
+            result = await agent.run(prompt_text)
+            extraction_result = getattr(result, "output", None) or getattr(
+                result, "data", None
+            )
+        except Exception as e:
+            # If agent fails, create a failure draft
+            from schemas.ai import ExtractionNotFound
+
+            extraction_not_found = ExtractionNotFound(
+                reason=f"AI agent error: {str(e)}"
+            )
+            failure_draft = await self.draft_service.create_failure_draft(
+                db=db,
+                current_user=current_user,
+                source_url="image_upload",
+                extraction_not_found=extraction_not_found,
+                prompt_override=prompt_override,
+            )
+            token = self.draft_service.create_draft_token(
+                failure_draft.id, current_user.id, timedelta(hours=1)
+            )
+            return DraftOutcome(failure_draft, token, False, message="agent_error")
+
+        # Local import to avoid import cycles at module import time
+        from schemas.ai import ExtractionNotFound
+
+        # 4. Check if extraction failed
+        if isinstance(extraction_result, ExtractionNotFound):
+            failure_draft = await self.draft_service.create_failure_draft(
+                db=db,
+                current_user=current_user,
+                source_url="image_upload",
+                extraction_not_found=extraction_result,
+                prompt_override=prompt_override,
+            )
+            token = self.draft_service.create_draft_token(
+                failure_draft.id, current_user.id, timedelta(hours=1)
+            )
+            return DraftOutcome(failure_draft, token, False, message="not_found")
+
+        # 5. Convert to recipe create schema
+        # Type guard: at this point extraction_result is RecipeExtractionResult
+        from schemas.ai import RecipeExtractionResult
+
+        if not isinstance(extraction_result, RecipeExtractionResult):
+            # Unexpected result type, treat as failure
+            extraction_not_found = ExtractionNotFound(
+                reason="AI returned unexpected result type"
+            )
+            failure_draft = await self.draft_service.create_failure_draft(
+                db=db,
+                current_user=current_user,
+                source_url="image_upload",
+                extraction_not_found=extraction_not_found,
+                prompt_override=prompt_override,
+            )
+            token = self.draft_service.create_draft_token(
+                failure_draft.id, current_user.id, timedelta(hours=1)
+            )
+            return DraftOutcome(
+                failure_draft, token, False, message="invalid_result_type"
+            )
+
+        generated_recipe = self.recipe_converter.convert_to_recipe_create(
+            extraction_result, "image_upload"
+        )
+
+        # 6. Create success draft and token
+        draft = await self.draft_service.create_success_draft(
+            db=db,
+            current_user=current_user,
+            source_url="image_upload",
+            generated_recipe=generated_recipe,
+            prompt_override=prompt_override,
+        )
+        token = self.draft_service.create_draft_token(
+            draft.id, current_user.id, timedelta(hours=1)
+        )
+        return DraftOutcome(draft, token, True)
+
     async def stream_extraction_progress(
         self,
         source_url: str,
