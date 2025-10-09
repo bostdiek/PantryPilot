@@ -107,10 +107,83 @@ class ImageOrchestrator(AIExtractionService):
         current_user: User,
         prompt_override: str | None = None,
     ) -> AsyncGenerator[str, None]:
-        # For now, image streaming is not supported here; return an async
-        # generator that yields nothing so callers can iterate/await it.
+        # Provide a minimal staged Server-Sent Events generator for image
+        # extraction so clients can monitor progress similar to URL
+        # extraction. This is intentionally lightweight: the real
+        # normalization/AI work currently happens synchronously in the POST
+        # endpoint; this generator acts as a small replayer of stages and
+        # verifies draft ownership when given a draft UUID as the
+        # `source_url` parameter.
+        from uuid import UUID
+
+        from crud.ai_drafts import get_draft_by_id
+        from schemas.ai import SSEEvent
+
         async def _gen() -> AsyncGenerator[str, None]:
-            for _ in ():
-                yield ""
+            # Interpret source_url as draft id (UUID) for image streaming
+            try:
+                draft_uuid = UUID(str(source_url))
+            except Exception:
+                yield SSEEvent.terminal_error(
+                    step="auth",
+                    detail="Invalid draft id",
+                    error_code="invalid_draft",
+                ).to_sse()
+                return
+
+            # Fetch draft and verify ownership
+            draft = await get_draft_by_id(db, draft_uuid, None)
+            if not draft:
+                yield SSEEvent.terminal_error(
+                    step="fetch",
+                    detail="Draft not found",
+                    error_code="not_found",
+                ).to_sse()
+                return
+
+            draft_user_raw = getattr(draft, "user_id", None)
+            try:
+                draft_user_uuid = UUID(str(draft_user_raw))
+            except Exception:
+                yield SSEEvent.terminal_error(
+                    step="auth",
+                    detail="Draft owner ID is invalid",
+                    error_code="invalid_owner",
+                ).to_sse()
+                return
+
+            if draft_user_uuid != current_user.id:
+                yield SSEEvent.terminal_error(
+                    step="auth",
+                    detail="Draft does not belong to current user",
+                    error_code="unauthorized",
+                ).to_sse()
+                return
+
+            # Emit a small sequence of staged events. These are best-effort
+            # progress markers and do not reflect live AI tokens.
+            yield SSEEvent.model_validate(
+                {"status": "started", "step": "started", "progress": 0.0}
+            ).to_sse()
+
+            yield SSEEvent.model_validate(
+                {"status": "processing", "step": "normalize", "progress": 0.1}
+            ).to_sse()
+
+            yield SSEEvent.model_validate(
+                {"status": "ai_call", "step": "ai_call", "progress": 0.5}
+            ).to_sse()
+
+            yield SSEEvent.model_validate(
+                {"status": "converting", "step": "convert_schema", "progress": 0.75}
+            ).to_sse()
+
+            # Terminal event: success if payload exists on draft, failure otherwise
+            success = bool(getattr(draft, "payload", None))
+            yield (
+                SSEEvent.terminal_success(
+                    draft_id=str(draft_uuid), success=success
+                ).to_sse()
+            )
 
         return _gen()

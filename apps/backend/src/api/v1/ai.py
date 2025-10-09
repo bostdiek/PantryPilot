@@ -12,7 +12,6 @@ only on request validation, calling the orchestrator service, and shaping respon
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 from uuid import UUID
@@ -300,6 +299,7 @@ async def extract_recipe_image_stream(
     draft_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    ai_service: Annotated[AIExtractionService, Depends(get_ai_extraction_service)],
 ) -> StreamingResponse:
     """Stream progress for image-based recipe extraction.
 
@@ -314,40 +314,12 @@ async def extract_recipe_image_stream(
     Returns:
         Server-Sent Events stream with progress updates
     """
-    from schemas.ai import SSEEvent
 
-    async def generate_events() -> AsyncGenerator[str, None]:
-        """Generate SSE events for image extraction progress."""
-        # Verify draft exists and belongs to user
-        draft = await _get_draft_or_404(db, draft_id)
-        draft_user_raw = getattr(draft, "user_id", None)
-        draft_user_uuid = _ensure_uuid_or_401(
-            draft_user_raw, "Draft owner ID is invalid"
-        )
-
-        if draft_user_uuid != current_user.id:
-            yield SSEEvent.terminal_error(
-                step="auth",
-                detail="Draft does not belong to current user",
-                error_code="unauthorized",
-            ).to_sse()
-            return
-
-        # For now, just return a simple completed event since the extraction
-        # happens synchronously in the POST endpoint. In the future, this could
-        # be expanded to support async background processing.
-        yield SSEEvent.model_validate(
-            {
-                "status": "complete",
-                "step": "complete",
-                "draft_id": str(draft_id),
-                "success": True,
-                "progress": 1.0,
-            }
-        ).to_sse()
-
+    # Delegate to orchestrator streaming so ImageOrchestrator can provide
+    # staged SSE events (implemented to accept a draft UUID as the
+    # `source_url` parameter).
     return StreamingResponse(
-        generate_events(),
+        ai_service.stream_extraction_progress(str(draft_id), db, current_user),
         media_type="text/event-stream",
     )
 

@@ -198,15 +198,26 @@ class Orchestrator(AIExtractionService):
         current_user: User,
         prompt_override: str | None = None,
     ) -> AsyncGenerator[str, None]:
-        # Return the async generator produced by the URL orchestrator. This
-        # method intentionally is NOT async so the returned value is an
-        # AsyncGenerator object (matching the protocol) instead of a
-        # coroutine that would need to be awaited.
-        return self._url.stream_extraction_progress(
+        # Route to the appropriate orchestrator based on the form of
+        # `source_url`. If it's a UUID-like draft id, delegate to the
+        # image orchestrator so image-specific staged events are emitted.
+        # Otherwise fall back to the URL orchestrator which implements the
+        # HTML fetch -> AI -> convert -> draft flow.
+        from uuid import UUID
+
+        try:
+            # If source_url parses as UUID, treat as draft id and use image
+            # orchestrator's stream implementation.
+            UUID(str(source_url))
+        except Exception:
+            return self._url.stream_extraction_progress(
+                source_url, db, current_user, prompt_override
+            )
+
+        # It's a draft UUID; route to image orchestrator stream.
+        return self._image.stream_extraction_progress(
             source_url, db, current_user, prompt_override
         )
-
-        # Delegated to the URL orchestrator; no implementation here.
 
 
 # FastAPI DI provider (used by API layer via Depends)
