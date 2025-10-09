@@ -37,6 +37,20 @@ class AIAgentProtocol(Protocol):
         """Run AI agent to extract recipe from HTML content."""
         ...
 
+    async def run_image_extraction_agent(
+        self, images: list[bytes], prompt_override: str | None = None
+    ) -> RecipeExtractionResult | ExtractionNotFound:
+        """Run AI agent to extract recipe from image(s).
+
+        Args:
+            images: List of image bytes (normalized JPEG format)
+            prompt_override: Optional custom extraction prompt
+
+        Returns:
+            RecipeExtractionResult on success or ExtractionNotFound on failure
+        """
+        ...
+
 
 class RecipeConverterProtocol(Protocol):
     """Protocol for converting extraction results to recipe schemas."""

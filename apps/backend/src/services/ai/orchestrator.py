@@ -60,6 +60,7 @@ class AIAgentAdapter(AIAgentProtocol):
         # Tests patch run_extraction_agent; production creates on first use.
         # _agent may be an Agent-like object with an async run method.
         self._agent: Any | None = None
+        self._image_agent: Any | None = None
 
     async def run_extraction_agent(
         self, sanitized_html: str, prompt_override: str | None = None
@@ -71,6 +72,32 @@ class AIAgentAdapter(AIAgentProtocol):
         if self._agent is None:  # Lazy creation
             self._agent = create_recipe_agent()
         result: Any = await self._agent.run(full_prompt)
+        # pydantic-ai returns object with .output or .data; normalize
+        return getattr(result, "output", None) or getattr(result, "data", None)
+
+    async def run_image_extraction_agent(
+        self, images: list[bytes], prompt_override: str | None = None
+    ) -> Any:  # noqa: D401, ANN401 (external lib returns Any)
+        """Run AI agent to extract recipe from image(s) using BinaryContent."""
+        from pydantic_ai.messages import BinaryContent
+
+        from services.ai.agents import create_image_recipe_agent
+
+        prompt_text = prompt_override or (
+            "Extract the complete recipe information from the provided image(s). "
+            "Include all ingredients, instructions, times, and other details "
+            "visible in the image."
+        )
+
+        # Build message list: prompt first, then BinaryContent for each image
+        messages: list[str | BinaryContent] = [prompt_text]
+        for img_bytes in images:
+            messages.append(BinaryContent(data=img_bytes, media_type="image/jpeg"))
+
+        if self._image_agent is None:  # Lazy creation
+            self._image_agent = create_image_recipe_agent()
+
+        result: Any = await self._image_agent.run(messages)
         # pydantic-ai returns object with .output or .data; normalize
         return getattr(result, "output", None) or getattr(result, "data", None)
 
@@ -222,33 +249,10 @@ class Orchestrator(AIExtractionService):
         Returns:
             DraftOutcome containing draft, token, and success status
         """
-        # 1. Create image recipe agent
-        from services.ai.agents import create_image_recipe_agent
-
-        agent = create_image_recipe_agent()
-
-        # 2. Prepare multimodal messages with BinaryContent
-        # Use pydantic-ai's BinaryContent for proper multimodal image handling
-        from pydantic_ai.messages import BinaryContent
-
-        prompt_text = prompt_override or (
-            "Extract the complete recipe information from the provided image(s). "
-            "Include all ingredients, instructions, times, and other details "
-            "visible in the image."
-        )
-
-        # Build message list: prompt first, then BinaryContent for each image
-        messages: list[str | BinaryContent] = [prompt_text]
-        for img_bytes in normalized_images:
-            messages.append(
-                BinaryContent(data=img_bytes, media_type="image/jpeg")
-            )
-
-        # 3. Run AI agent with multimodal messages
+        # 1. Run AI agent via injected protocol (consistent with URL flow)
         try:
-            result = await agent.run(messages)
-            extraction_result = getattr(result, "output", None) or getattr(
-                result, "data", None
+            extraction_result = await self.ai_agent.run_image_extraction_agent(
+                normalized_images, prompt_override
             )
         except Exception as e:
             # If agent fails, create a failure draft
@@ -272,7 +276,7 @@ class Orchestrator(AIExtractionService):
         # Local import to avoid import cycles at module import time
         from schemas.ai import ExtractionNotFound
 
-        # 4. Check if extraction failed
+        # 2. Check if extraction failed
         if isinstance(extraction_result, ExtractionNotFound):
             failure_draft = await self.draft_service.create_failure_draft(
                 db=db,
@@ -286,34 +290,13 @@ class Orchestrator(AIExtractionService):
             )
             return DraftOutcome(failure_draft, token, False, message="not_found")
 
-        # 5. Convert to recipe create schema
-        # Type guard: at this point extraction_result is RecipeExtractionResult
-        from schemas.ai import RecipeExtractionResult
-
-        if not isinstance(extraction_result, RecipeExtractionResult):
-            # Unexpected result type, treat as failure
-            extraction_not_found = ExtractionNotFound(
-                reason="AI returned unexpected result type"
-            )
-            failure_draft = await self.draft_service.create_failure_draft(
-                db=db,
-                current_user=current_user,
-                source_url="image_upload",
-                extraction_not_found=extraction_not_found,
-                prompt_override=prompt_override,
-            )
-            token = self.draft_service.create_draft_token(
-                failure_draft.id, current_user.id, timedelta(hours=1)
-            )
-            return DraftOutcome(
-                failure_draft, token, False, message="invalid_result_type"
-            )
-
+        # 3. Convert to recipe create schema
+        # At this point, extraction_result is RecipeExtractionResult (type narrowed by above check)
         generated_recipe = self.recipe_converter.convert_to_recipe_create(
             extraction_result, "image_upload"
         )
 
-        # 6. Create success draft and token
+        # 4. Create success draft and token
         draft = await self.draft_service.create_success_draft(
             db=db,
             current_user=current_user,

@@ -1,11 +1,10 @@
 """Unit tests for Orchestrator.extract_recipe_from_images method."""
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-from pydantic_ai.messages import BinaryContent
 
 from services.ai.models import DraftOutcome
 from services.ai.orchestrator import Orchestrator
@@ -13,18 +12,14 @@ from services.ai.orchestrator import Orchestrator
 
 @pytest.mark.asyncio
 async def test_extract_recipe_from_images_uses_binary_content() -> None:
-    """Verify that extract_recipe_from_images passes BinaryContent to agent.run."""
+    """Verify that extract_recipe_from_images uses injected ai_agent protocol."""
     from schemas.ai import RecipeExtractionResult
 
     # Create mock components
     mock_html_extractor = MagicMock()
-    mock_ai_agent = MagicMock()
+    mock_ai_agent = AsyncMock()
     mock_converter = MagicMock()
     mock_draft_service = MagicMock()
-
-    # Create a mock agent that we can inspect
-    mock_agent_instance = AsyncMock()
-    mock_result = MagicMock()
     
     # Create a simple extraction result
     extraction_result = RecipeExtractionResult(
@@ -45,8 +40,9 @@ async def test_extract_recipe_from_images_uses_binary_content() -> None:
         ],
         confidence_score=0.9,
     )
-    mock_result.output = extraction_result
-    mock_agent_instance.run = AsyncMock(return_value=mock_result)
+
+    # Mock the ai_agent's run_image_extraction_agent method
+    mock_ai_agent.run_image_extraction_agent = AsyncMock(return_value=extraction_result)
 
     # Create mock draft
     mock_draft = MagicMock()
@@ -74,37 +70,21 @@ async def test_extract_recipe_from_images_uses_binary_content() -> None:
     mock_user = MagicMock()
     mock_user.id = uuid4()
 
-    # Patch the agent creation to return our mock
-    with patch(
-        "services.ai.agents.create_image_recipe_agent",
-        return_value=mock_agent_instance,
-    ):
-        # Call the method
-        outcome = await orchestrator.extract_recipe_from_images(
-            normalized_images=normalized_images,
-            db=mock_db,
-            current_user=mock_user,
-            prompt_override=None,
-        )
+    # Call the method
+    outcome = await orchestrator.extract_recipe_from_images(
+        normalized_images=normalized_images,
+        db=mock_db,
+        current_user=mock_user,
+        prompt_override=None,
+    )
 
-    # Verify the agent.run was called
-    assert mock_agent_instance.run.called
+    # Verify the ai_agent.run_image_extraction_agent was called
+    assert mock_ai_agent.run_image_extraction_agent.called
     
     # Get the call arguments
-    call_args = mock_agent_instance.run.call_args[0][0]
-    
-    # Verify the messages structure
-    assert isinstance(call_args, list)
-    assert len(call_args) == 2  # prompt + 1 image
-    
-    # First element should be the prompt string
-    assert isinstance(call_args[0], str)
-    assert "Extract the complete recipe information" in call_args[0]
-    
-    # Second element should be BinaryContent
-    assert isinstance(call_args[1], BinaryContent)
-    assert call_args[1].data == test_image_bytes
-    assert call_args[1].media_type == "image/jpeg"
+    call_args = mock_ai_agent.run_image_extraction_agent.call_args
+    assert call_args[0][0] == normalized_images  # First arg is images list
+    assert call_args[0][1] is None  # Second arg is prompt_override (None in this case)
     
     # Verify outcome is successful
     assert isinstance(outcome, DraftOutcome)
@@ -114,18 +94,14 @@ async def test_extract_recipe_from_images_uses_binary_content() -> None:
 
 @pytest.mark.asyncio
 async def test_extract_recipe_from_images_multiple_images() -> None:
-    """Verify that multiple images are passed as separate BinaryContent objects."""
+    """Verify that multiple images are passed to ai_agent protocol."""
     from schemas.ai import RecipeExtractionResult
 
     # Create mock components
     mock_html_extractor = MagicMock()
-    mock_ai_agent = MagicMock()
+    mock_ai_agent = AsyncMock()
     mock_converter = MagicMock()
     mock_draft_service = MagicMock()
-
-    # Create a mock agent
-    mock_agent_instance = AsyncMock()
-    mock_result = MagicMock()
     
     extraction_result = RecipeExtractionResult(
         title="Test Recipe",
@@ -145,8 +121,9 @@ async def test_extract_recipe_from_images_multiple_images() -> None:
         ],
         confidence_score=0.9,
     )
-    mock_result.output = extraction_result
-    mock_agent_instance.run = AsyncMock(return_value=mock_result)
+
+    # Mock the ai_agent's run_image_extraction_agent method
+    mock_ai_agent.run_image_extraction_agent = AsyncMock(return_value=extraction_result)
 
     # Create mock draft
     mock_draft = MagicMock()
@@ -176,37 +153,18 @@ async def test_extract_recipe_from_images_multiple_images() -> None:
     mock_user = MagicMock()
     mock_user.id = uuid4()
 
-    # Patch the agent creation
-    with patch(
-        "services.ai.agents.create_image_recipe_agent",
-        return_value=mock_agent_instance,
-    ):
-        # Call the method
-        outcome = await orchestrator.extract_recipe_from_images(
-            normalized_images=normalized_images,
-            db=mock_db,
-            current_user=mock_user,
-            prompt_override=None,
-        )
+    # Call the method
+    outcome = await orchestrator.extract_recipe_from_images(
+        normalized_images=normalized_images,
+        db=mock_db,
+        current_user=mock_user,
+        prompt_override=None,
+    )
 
-    # Verify the agent.run was called
-    assert mock_agent_instance.run.called
-    
-    # Get the call arguments
-    call_args = mock_agent_instance.run.call_args[0][0]
-    
-    # Verify the messages structure
-    assert isinstance(call_args, list)
-    assert len(call_args) == 4  # prompt + 3 images
-    
-    # First element should be the prompt
-    assert isinstance(call_args[0], str)
-    
-    # Next three elements should be BinaryContent for each image
-    for i, expected_bytes in enumerate([image1_bytes, image2_bytes, image3_bytes], start=1):
-        assert isinstance(call_args[i], BinaryContent)
-        assert call_args[i].data == expected_bytes
-        assert call_args[i].media_type == "image/jpeg"
+    # Verify the ai_agent.run_image_extraction_agent was called with all images
+    assert mock_ai_agent.run_image_extraction_agent.called
+    call_args = mock_ai_agent.run_image_extraction_agent.call_args
+    assert call_args[0][0] == normalized_images  # All images passed
     
     # Verify outcome is successful
     assert outcome.success is True
@@ -214,16 +172,13 @@ async def test_extract_recipe_from_images_multiple_images() -> None:
 
 @pytest.mark.asyncio
 async def test_extract_recipe_from_images_with_custom_prompt() -> None:
-    """Verify that custom prompt override is used correctly."""
+    """Verify that custom prompt override is passed to ai_agent."""
     from schemas.ai import RecipeExtractionResult
 
     mock_html_extractor = MagicMock()
-    mock_ai_agent = MagicMock()
+    mock_ai_agent = AsyncMock()
     mock_converter = MagicMock()
     mock_draft_service = MagicMock()
-
-    mock_agent_instance = AsyncMock()
-    mock_result = MagicMock()
     
     extraction_result = RecipeExtractionResult(
         title="Test Recipe",
@@ -243,8 +198,9 @@ async def test_extract_recipe_from_images_with_custom_prompt() -> None:
         ],
         confidence_score=0.9,
     )
-    mock_result.output = extraction_result
-    mock_agent_instance.run = AsyncMock(return_value=mock_result)
+
+    # Mock the ai_agent's run_image_extraction_agent method
+    mock_ai_agent.run_image_extraction_agent = AsyncMock(return_value=extraction_result)
 
     mock_draft = MagicMock()
     mock_draft.id = uuid4()
@@ -270,17 +226,83 @@ async def test_extract_recipe_from_images_with_custom_prompt() -> None:
 
     custom_prompt = "Extract recipe with special focus on dietary restrictions"
 
+    await orchestrator.extract_recipe_from_images(
+        normalized_images=normalized_images,
+        db=mock_db,
+        current_user=mock_user,
+        prompt_override=custom_prompt,
+    )
+
+    # Verify custom prompt was passed to ai_agent
+    call_args = mock_ai_agent.run_image_extraction_agent.call_args
+    assert call_args[0][1] == custom_prompt  # Second arg is prompt_override
+
+
+@pytest.mark.asyncio
+async def test_ai_agent_adapter_uses_binary_content() -> None:
+    """Verify that AIAgentAdapter.run_image_extraction_agent uses BinaryContent."""
+    from unittest.mock import patch
+
+    from pydantic_ai.messages import BinaryContent
+
+    from schemas.ai import RecipeExtractionResult
+    from services.ai.orchestrator import AIAgentAdapter
+
+    # Create adapter
+    adapter = AIAgentAdapter()
+
+    # Prepare test data
+    test_image_bytes = b"fake-jpeg-data"
+    images = [test_image_bytes]
+
+    # Create mock agent
+    mock_agent = AsyncMock()
+    mock_result = MagicMock()
+    extraction_result = RecipeExtractionResult(
+        title="Test Recipe",
+        prep_time_minutes=10,
+        cook_time_minutes=20,
+        serving_min=4,
+        instructions=["Step 1"],
+        difficulty="easy",
+        category="dinner",
+        ingredients=[
+            {
+                "name": "flour",
+                "quantity_value": 2.0,
+                "quantity_unit": "cups",
+                "is_optional": False,
+            }
+        ],
+        confidence_score=0.9,
+    )
+    mock_result.output = extraction_result
+    mock_agent.run = AsyncMock(return_value=mock_result)
+
+    # Patch the agent creation
     with patch(
         "services.ai.agents.create_image_recipe_agent",
-        return_value=mock_agent_instance,
+        return_value=mock_agent,
     ):
-        await orchestrator.extract_recipe_from_images(
-            normalized_images=normalized_images,
-            db=mock_db,
-            current_user=mock_user,
-            prompt_override=custom_prompt,
-        )
+        # Call the adapter method
+        result = await adapter.run_image_extraction_agent(images, prompt_override=None)
 
-    # Verify custom prompt was used
-    call_args = mock_agent_instance.run.call_args[0][0]
-    assert call_args[0] == custom_prompt
+    # Verify the agent.run was called with BinaryContent
+    assert mock_agent.run.called
+    call_args = mock_agent.run.call_args[0][0]
+    
+    # Verify messages structure
+    assert isinstance(call_args, list)
+    assert len(call_args) == 2  # prompt + 1 image
+    
+    # First element should be prompt string
+    assert isinstance(call_args[0], str)
+    assert "Extract the complete recipe information" in call_args[0]
+    
+    # Second element should be BinaryContent
+    assert isinstance(call_args[1], BinaryContent)
+    assert call_args[1].data == test_image_bytes
+    assert call_args[1].media_type == "image/jpeg"
+    
+    # Verify result is correct
+    assert result == extraction_result
