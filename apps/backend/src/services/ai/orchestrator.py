@@ -227,15 +227,9 @@ class Orchestrator(AIExtractionService):
 
         agent = create_image_recipe_agent()
 
-        # 2. Prepare prompt for multimodal extraction
-        # For now, use a text-only prompt. Full multimodal integration
-        # will be implemented in a future enhancement.
-        import base64
-
-        image_data_urls = []
-        for img_bytes in normalized_images:
-            b64_data = base64.b64encode(img_bytes).decode("utf-8")
-            image_data_urls.append(f"data:image/jpeg;base64,{b64_data}")
+        # 2. Prepare multimodal messages with BinaryContent
+        # Use pydantic-ai's BinaryContent for proper multimodal image handling
+        from pydantic_ai.messages import BinaryContent
 
         prompt_text = prompt_override or (
             "Extract the complete recipe information from the provided image(s). "
@@ -243,9 +237,16 @@ class Orchestrator(AIExtractionService):
             "visible in the image."
         )
 
-        # 3. Run AI agent
+        # Build message list: prompt first, then BinaryContent for each image
+        messages: list[str | BinaryContent] = [prompt_text]
+        for img_bytes in normalized_images:
+            messages.append(
+                BinaryContent(data=img_bytes, media_type="image/jpeg")
+            )
+
+        # 3. Run AI agent with multimodal messages
         try:
-            result = await agent.run(prompt_text)
+            result = await agent.run(messages)
             extraction_result = getattr(result, "output", None) or getattr(
                 result, "data", None
             )
