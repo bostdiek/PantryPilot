@@ -20,7 +20,7 @@ async def test_extract_recipe_from_images_uses_binary_content() -> None:
     mock_ai_agent = AsyncMock()
     mock_converter = MagicMock()
     mock_draft_service = MagicMock()
-    
+
     # Create a simple extraction result
     extraction_result = RecipeExtractionResult(
         title="Test Recipe",
@@ -65,7 +65,7 @@ async def test_extract_recipe_from_images_uses_binary_content() -> None:
     # Prepare test data
     test_image_bytes = b"fake-jpeg-data"
     normalized_images = [test_image_bytes]
-    
+
     mock_db = AsyncMock()
     mock_user = MagicMock()
     mock_user.id = uuid4()
@@ -80,12 +80,12 @@ async def test_extract_recipe_from_images_uses_binary_content() -> None:
 
     # Verify the ai_agent.run_image_extraction_agent was called
     assert mock_ai_agent.run_image_extraction_agent.called
-    
+
     # Get the call arguments
     call_args = mock_ai_agent.run_image_extraction_agent.call_args
     assert call_args[0][0] == normalized_images  # First arg is images list
     assert call_args[0][1] is None  # Second arg is prompt_override (None in this case)
-    
+
     # Verify outcome is successful
     assert isinstance(outcome, DraftOutcome)
     assert outcome.success is True
@@ -102,7 +102,7 @@ async def test_extract_recipe_from_images_multiple_images() -> None:
     mock_ai_agent = AsyncMock()
     mock_converter = MagicMock()
     mock_draft_service = MagicMock()
-    
+
     extraction_result = RecipeExtractionResult(
         title="Test Recipe",
         prep_time_minutes=10,
@@ -148,7 +148,7 @@ async def test_extract_recipe_from_images_multiple_images() -> None:
     image2_bytes = b"fake-jpeg-data-2"
     image3_bytes = b"fake-jpeg-data-3"
     normalized_images = [image1_bytes, image2_bytes, image3_bytes]
-    
+
     mock_db = AsyncMock()
     mock_user = MagicMock()
     mock_user.id = uuid4()
@@ -165,7 +165,7 @@ async def test_extract_recipe_from_images_multiple_images() -> None:
     assert mock_ai_agent.run_image_extraction_agent.called
     call_args = mock_ai_agent.run_image_extraction_agent.call_args
     assert call_args[0][0] == normalized_images  # All images passed
-    
+
     # Verify outcome is successful
     assert outcome.success is True
 
@@ -179,7 +179,7 @@ async def test_extract_recipe_from_images_with_custom_prompt() -> None:
     mock_ai_agent = AsyncMock()
     mock_converter = MagicMock()
     mock_draft_service = MagicMock()
-    
+
     extraction_result = RecipeExtractionResult(
         title="Test Recipe",
         prep_time_minutes=10,
@@ -219,7 +219,7 @@ async def test_extract_recipe_from_images_with_custom_prompt() -> None:
 
     test_image_bytes = b"fake-jpeg-data"
     normalized_images = [test_image_bytes]
-    
+
     mock_db = AsyncMock()
     mock_user = MagicMock()
     mock_user.id = uuid4()
@@ -290,19 +290,19 @@ async def test_ai_agent_adapter_uses_binary_content() -> None:
     # Verify the agent.run was called with BinaryContent
     assert mock_agent.run.called
     call_args = mock_agent.run.call_args[0][0]
-    
+
     # Verify messages structure
     assert isinstance(call_args, list)
     assert len(call_args) == 2  # prompt + 1 image
-    
+
     # First element should be prompt string
     assert isinstance(call_args[0], str)
     assert "Extract the complete recipe information" in call_args[0]
-    
+
     # Second element should be BinaryContent
     assert isinstance(call_args[1], BinaryContent)
     assert call_args[1].data == test_image_bytes
     assert call_args[1].media_type == "image/jpeg"
-    
+
     # Verify result is correct
     assert result == extraction_result

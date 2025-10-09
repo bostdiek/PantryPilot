@@ -71,7 +71,6 @@ async def test_extract_recipe_from_image_success(
     )
 
     # Override the service dependency
-    from dependencies.db import get_db
     from services.ai.orchestrator import get_ai_extraction_service
 
     app.dependency_overrides[get_ai_extraction_service] = lambda: mock_service

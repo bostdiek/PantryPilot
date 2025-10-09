@@ -291,7 +291,8 @@ class Orchestrator(AIExtractionService):
             return DraftOutcome(failure_draft, token, False, message="not_found")
 
         # 3. Convert to recipe create schema
-        # At this point, extraction_result is RecipeExtractionResult (type narrowed by above check)
+        # At this point, extraction_result is RecipeExtractionResult
+        # (type narrowed by the above check)
         generated_recipe = self.recipe_converter.convert_to_recipe_create(
             extraction_result, "image_upload"
         )
