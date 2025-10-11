@@ -37,6 +37,20 @@ class AIAgentProtocol(Protocol):
         """Run AI agent to extract recipe from HTML content."""
         ...
 
+    async def run_image_extraction_agent(
+        self, images: list[bytes], prompt_override: str | None = None
+    ) -> RecipeExtractionResult | ExtractionNotFound:
+        """Run AI agent to extract recipe from image(s).
+
+        Args:
+            images: List of image bytes (normalized JPEG format)
+            prompt_override: Optional custom extraction prompt
+
+        Returns:
+            RecipeExtractionResult on success or ExtractionNotFound on failure
+        """
+        ...
+
 
 class RecipeConverterProtocol(Protocol):
     """Protocol for converting extraction results to recipe schemas."""
@@ -117,6 +131,27 @@ class AIExtractionService(ABC):
         prompt_override: str | None = None,
     ) -> DraftOutcome[AIDraft]:
         """Extract recipe from URL and create draft (returns DraftOutcome)."""
+        ...
+
+    @abstractmethod
+    async def extract_recipe_from_images(
+        self,
+        normalized_images: list[bytes],
+        db: AsyncSession,
+        current_user: User,
+        prompt_override: str | None = None,
+    ) -> DraftOutcome[AIDraft]:
+        """Extract recipe from images and create draft (returns DraftOutcome).
+
+        Args:
+            normalized_images: List of normalized image bytes (JPEG format)
+            db: Database session
+            current_user: Authenticated user
+            prompt_override: Optional custom prompt
+
+        Returns:
+            DraftOutcome containing draft, token, and success status
+        """
         ...
 
     @abstractmethod

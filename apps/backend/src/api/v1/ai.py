@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,11 @@ from schemas.api import ApiResponse
 from services.ai.interfaces import AIExtractionService
 from services.ai.models import DraftOutcome
 from services.ai.orchestrator import get_ai_extraction_service
+from services.images.normalize import (
+    ImageFormatError,
+    ImageSizeLimitError,
+    normalize_images,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -159,6 +164,105 @@ async def extract_recipe_from_url(
         ) from e
 
 
+@router.post(
+    "/extract-recipe-from-image",
+    response_model=ApiResponse[AIDraftResponse],
+)
+async def extract_recipe_from_image(
+    files: Annotated[list[UploadFile], File(description="Recipe image files")],
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    ai_service: Annotated[AIExtractionService, Depends(get_ai_extraction_service)],
+) -> Any:
+    """Extract recipe from uploaded image(s) using multimodal AI.
+
+    Accepts one or more image files (JPEG/PNG), normalizes them, and uses
+    Gemini Flash multimodal extraction to produce a structured recipe draft.
+    Returns a signed deep link for the frontend to prefill the New Recipe form.
+
+    File requirements:
+    - Formats: image/jpeg, image/png only
+    - Per-file limit: 8 MiB
+    - Combined limit: 20 MiB
+    - Order: Upload pages in reading order
+
+    Returns:
+        AIDraftResponse with draft_id, signed_url, expires_at, and ttl_seconds
+    """
+    try:
+        # Validate and collect file data
+        if not files:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="At least one image file is required",
+            )
+
+        # Read all files into memory
+        image_data: list[tuple[bytes, str]] = []
+        for file in files:
+            content_type = file.content_type or "application/octet-stream"
+            content = await file.read()
+            image_data.append((content, content_type))
+
+        # Validate and normalize images
+        try:
+            normalized_images = normalize_images(image_data)
+        except ImageFormatError as e:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=str(e),
+            ) from e
+        except ImageSizeLimitError as e:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=str(e),
+            ) from e
+
+        # Delegate orchestration to service (same pattern as extract_recipe_from_url)
+        outcome: DraftOutcome[AIDraft] = await ai_service.extract_recipe_from_images(
+            normalized_images, db, current_user, prompt_override=None
+        )
+        draft, token, success = outcome.draft, outcome.token, outcome.success
+
+        # Build response (same as extract_recipe_from_url)
+        signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
+        expires = getattr(draft, "expires_at", None)
+        if expires is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Draft has expired",
+            )
+        expires_dt = _ensure_aware_utc_or_404(expires)
+
+        response_data = AIDraftResponse(
+            draft_id=draft.id,
+            signed_url=signed_url,
+            expires_at=expires_dt,
+            ttl_seconds=DRAFT_TTL_SECONDS,
+        )
+
+        return ApiResponse(
+            success=bool(success),
+            data=response_data,
+            message=(
+                "Recipe extracted successfully from image(s)"
+                if success
+                else "No recipe found in image(s)"
+            ),
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:  # pragma: no cover - unexpected
+        logger.error(
+            "Unexpected error in image recipe extraction: %s", e, exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during image recipe extraction",
+        ) from e
+
+
 # --- Streaming (SSE) extraction endpoint ------------------------------------
 
 
@@ -183,6 +287,39 @@ async def extract_recipe_stream(
         ai_service.stream_extraction_progress(
             source_url, db, current_user, prompt_override
         ),
+        media_type="text/event-stream",
+    )
+
+
+@router.get(
+    "/extract-recipe-image-stream",
+    summary="Stream AI recipe extraction progress from images via Server-Sent Events",
+)
+async def extract_recipe_image_stream(
+    draft_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    ai_service: Annotated[AIExtractionService, Depends(get_ai_extraction_service)],
+) -> StreamingResponse:
+    """Stream progress for image-based recipe extraction.
+
+    This endpoint allows clients to monitor the progress of an image extraction
+    operation by providing the draft_id returned from the POST endpoint.
+
+    Args:
+        draft_id: UUID of the draft to monitor
+        db: Database session
+        current_user: Authenticated user
+
+    Returns:
+        Server-Sent Events stream with progress updates
+    """
+
+    # Delegate to orchestrator streaming so ImageOrchestrator can provide
+    # staged SSE events (implemented to accept a draft UUID as the
+    # `source_url` parameter).
+    return StreamingResponse(
+        ai_service.stream_extraction_progress(str(draft_id), db, current_user),
         media_type="text/event-stream",
     )
 

@@ -66,6 +66,53 @@ Always separate prep words even if uncertain; prefer prep.method over embedding.
 Return confidence_score (0.0-1.0). Provide clean text only (no HTML, ads, scripts).
 """
 
+# System prompt for image-based recipe extraction
+RECIPE_IMAGE_EXTRACTION_PROMPT = """
+You are a skilled recipe extraction AI. Extract structured recipe information
+from the provided recipe photo(s).
+
+Your task is to identify and extract:
+1. title (required)
+2. description (optional)
+3. ingredients list (required)
+4. instructions (required list of steps)
+5. prep_time_minutes and cook_time_minutes (required; integers minutes)
+6. serving_min (required) and serving_max (optional, >= serving_min)
+7. difficulty: easy | medium | hard (default medium)
+8. category: breakfast | lunch | dinner | dessert | snack | appetizer (default dinner)
+9. ethnicity (optional)
+10. oven_temperature_f (optional integer <= 550)
+11. user_notes (optional)
+
+INGREDIENT RULES:
+- Each ingredient object MUST include:
+    name;
+    optional quantity_value (number);
+    optional quantity_unit (string);
+    optional prep (object);
+    is_optional (boolean, default false).
+- prep object fields:
+        - method: main preparation verb ("sliced", "chopped", "diced",
+            "minced", "grated", "shredded", "peeled", etc.)
+        - size_descriptor: adverb or size/cut descriptor ("finely", "coarsely",
+            "thinly", "large", "small", etc.)
+- Do NOT leave preparation words inside the name. Split them out. Examples:
+    * "sliced black olives" -> name: "black olives", prep.method: "sliced"
+        * "finely chopped fresh parsley" -> name: "fresh parsley",
+            prep.method: "chopped", prep.size_descriptor: "finely"
+        * "coarsely shredded cheddar cheese" -> name: "cheddar cheese",
+            prep.method: "shredded", prep.size_descriptor: "coarsely"
+- If multiple adverbs: keep the most relevant single size descriptor
+    ("very finely chopped" -> size_descriptor: "finely").
+- quantity_unit should not repeat inside name. Use canonical units like cup,
+    tsp, tbsp, pound, ounce, can, gram, kilogram.
+- Only include a unit when clearly specified.
+
+Always separate prep words even if uncertain; prefer prep.method over embedding.
+
+Return confidence_score (0.0-1.0). Extract text accurately from the image(s).
+"""
+
 
 def create_recipe_agent() -> Agent:
     """Create a pydantic-ai agent for recipe extraction."""
@@ -83,6 +130,21 @@ def create_recipe_agent() -> Agent:
     return Agent(
         "gemini-2.5-flash-lite",
         system_prompt=RECIPE_EXTRACTION_PROMPT,
+        output_type=[RecipeExtractionResult, ExtractionNotFound, NoFoodOrDrinkRecipe],
+    )
+
+
+def create_image_recipe_agent() -> Agent:
+    """Create a pydantic-ai agent for recipe extraction from images.
+
+    Uses multimodal capabilities of Gemini Flash to extract recipe data
+    from photo(s) of recipe cards, cookbook pages, or handwritten recipes.
+    """
+    from schemas.ai import NoFoodOrDrinkRecipe
+
+    return Agent(
+        "gemini-2.5-flash-lite",
+        system_prompt=RECIPE_IMAGE_EXTRACTION_PROMPT,
         output_type=[RecipeExtractionResult, ExtractionNotFound, NoFoodOrDrinkRecipe],
     )
 
