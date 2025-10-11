@@ -289,7 +289,6 @@ export async function extractRecipeStreamFetch(
       {
         method: 'GET',
         headers,
-        credentials: 'include',
         signal: abortController.signal,
       }
     );
