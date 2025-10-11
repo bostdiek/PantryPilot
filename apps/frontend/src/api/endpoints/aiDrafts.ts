@@ -9,6 +9,76 @@ import { ApiErrorImpl } from '../../types/api';
 import { apiClient, getApiBaseUrl } from '../client';
 
 /**
+ * Validates that a URL is a safe internal path before navigation.
+ * This prevents open redirects and ensures we only navigate to expected routes.
+ *
+ * @param url - The URL to validate
+ * @returns true if the URL is safe for internal navigation
+ */
+export function isSafeInternalPath(url: string): boolean {
+  try {
+    // Handle relative URLs and absolute URLs
+    const absoluteUrl = new URL(url, window.location.origin);
+    
+    // Must be same origin
+    if (absoluteUrl.origin !== window.location.origin) {
+      return false;
+    }
+    
+    // Must start with /recipes (our expected paths)
+    return absoluteUrl.pathname.startsWith('/recipes');
+  } catch {
+    // Invalid URL
+    return false;
+  }
+}
+
+/**
+ * Gets auth headers for API requests.
+ * Centralizes auth header logic to avoid duplication.
+ */
+function getAuthHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Handles common HTTP error responses for image upload endpoints.
+ * Returns an ApiErrorImpl with appropriate user-friendly messages.
+ */
+function handleUploadError(status: number, statusText: string): ApiErrorImpl {
+  if (status === 413) {
+    return new ApiErrorImpl(
+      'File size is too large. Please use a smaller image.',
+      status,
+      'file_too_large'
+    );
+  } else if (status === 415) {
+    return new ApiErrorImpl(
+      'Unsupported file type. Please upload an image file (JPEG, PNG, etc.).',
+      status,
+      'unsupported_media_type'
+    );
+  } else {
+    return new ApiErrorImpl(
+      `HTTP ${status}: ${statusText}`,
+      status,
+      'http_error'
+    );
+  }
+}
+
+/**
+ * Creates FormData for image upload.
+ * Centralizes FormData creation to ensure consistency.
+ */
+function createImageUploadFormData(file: File): FormData {
+  const formData = new FormData();
+  formData.append('files', file); // Backend expects 'files' not 'file'
+  return formData;
+}
+
+/**
  * AI Drafts API endpoints
  * Handles recipe extraction from URLs with streaming SSE support
  */
@@ -344,20 +414,12 @@ export async function extractRecipeFromImageStream(
   onError: (error: ApiErrorImpl) => void
 ): Promise<AbortController> {
   const abortController = new AbortController();
-  const token = useAuthStore.getState().token;
-
-  const headers: Record<string, string> = {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
+  const headers = getAuthHeaders();
   const API_BASE_URL = getApiBaseUrl();
 
   try {
     // Step 1: Upload the image using POST endpoint to get draft_id
-    const formData = new FormData();
-    formData.append('files', file); // Backend expects 'files' not 'file'
-    // Note: prompt_override not yet supported by backend image endpoint
+    const formData = createImageUploadFormData(file);
 
     const uploadResponse = await fetch(
       `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
@@ -365,38 +427,14 @@ export async function extractRecipeFromImageStream(
         method: 'POST',
         headers,
         body: formData,
-        credentials: 'include',
         signal: abortController.signal,
       }
     );
 
     if (!uploadResponse.ok) {
-      // Handle specific error codes
-      if (uploadResponse.status === 413) {
-        onError(
-          new ApiErrorImpl(
-            'File size is too large. Please use a smaller image.',
-            uploadResponse.status,
-            'file_too_large'
-          )
-        );
-      } else if (uploadResponse.status === 415) {
-        onError(
-          new ApiErrorImpl(
-            'Unsupported file type. Please upload an image file (JPEG, PNG, etc.).',
-            uploadResponse.status,
-            'unsupported_media_type'
-          )
-        );
-      } else {
-        onError(
-          new ApiErrorImpl(
-            `HTTP ${uploadResponse.status}: ${uploadResponse.statusText}`,
-            uploadResponse.status,
-            'http_error'
-          )
-        );
-      }
+      onError(
+        handleUploadError(uploadResponse.status, uploadResponse.statusText)
+      );
       return abortController;
     }
 
@@ -532,21 +570,9 @@ export async function extractRecipeFromImageStream(
 export async function extractRecipeFromImage(
   file: File
 ): Promise<AIDraftResponse> {
-  // Create FormData for multipart upload
-  const formData = new FormData();
-  formData.append('files', file); // Backend expects 'files' not 'file'
-  // Note: prompt_override not yet supported by backend image endpoint
-
-  // Use apiClient but pass FormData directly
-  // The apiClient should handle FormData without stringifying
-  const token = useAuthStore.getState().token;
+  const formData = createImageUploadFormData(file);
+  const headers = getAuthHeaders();
   const API_BASE_URL = getApiBaseUrl();
-  const headers: Record<string, string> = {};
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-  // Note: Do NOT set Content-Type header - fetch will set it with boundary for multipart/form-data
 
   const response = await fetch(
     `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
@@ -554,32 +580,11 @@ export async function extractRecipeFromImage(
       method: 'POST',
       headers,
       body: formData,
-      credentials: 'include',
     }
   );
 
   if (!response.ok) {
-    // Handle specific error codes
-    if (response.status === 413) {
-      throw new ApiErrorImpl(
-        'File size is too large. Please use a smaller image.',
-        response.status,
-        'file_too_large'
-      );
-    } else if (response.status === 415) {
-      throw new ApiErrorImpl(
-        'Unsupported file type. Please upload an image file (JPEG, PNG, etc.).',
-        response.status,
-        'unsupported_media_type'
-      );
-    }
-
-    const body = await response.json().catch(() => ({}));
-    throw new ApiErrorImpl(
-      body.error || body.message || `HTTP ${response.status}`,
-      response.status,
-      'http_error'
-    );
+    throw handleUploadError(response.status, response.statusText);
   }
 
   const body = await response.json();

@@ -4,6 +4,7 @@ import {
   extractRecipeFromImage,
   extractRecipeFromImageStream,
   getDraftByIdOwner,
+  isSafeInternalPath,
 } from '../../api/endpoints/aiDrafts';
 import { logger } from '../../lib/logger';
 import { useIsAuthenticated } from '../../stores/useAuthStore';
@@ -13,6 +14,9 @@ import { ApiErrorImpl } from '../../types/api';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ErrorMessage } from '../ui/ErrorMessage';
+
+// Prefer streaming for better UX with progress updates, fallback to POST if unavailable
+const USE_STREAMING = true;
 
 interface AddByPhotoModalProps {
   isOpen: boolean;
@@ -30,7 +34,6 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
-  const [useStreaming] = useState(true);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
 
@@ -88,7 +91,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     setIsLoading(true);
 
     // Try streaming first using fetch-based approach (supports auth headers)
-    if (useStreaming) {
+    if (USE_STREAMING) {
       try {
         const controller = await extractRecipeFromImageStream(
           selectedFile,
@@ -106,9 +109,16 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               signedUrl
             );
 
-            if (signedUrl) {
+            // Validate signed URL before navigation for security
+            if (signedUrl && isSafeInternalPath(signedUrl)) {
               // Use the signed URL from the upload response
               navigate(signedUrl);
+              handleClose();
+            } else if (signedUrl && !isSafeInternalPath(signedUrl)) {
+              // Invalid or external URL - log warning and use fallback
+              logger.warn('Unsafe signed_url received, using fallback:', signedUrl);
+              // Fallback to canonical internal path
+              navigate(`/recipes/new?ai=1&draftId=${draftId}`);
               handleClose();
             } else {
               // Fallback: fetch the draft using owner-only endpoint
@@ -153,9 +163,14 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       const response = await extractRecipeFromImage(selectedFile);
       logger.debug('POST extraction response:', response);
 
-      // Navigate to the signed URL
-      if (response.signed_url) {
+      // Validate and navigate to the signed URL
+      if (response.signed_url && isSafeInternalPath(response.signed_url)) {
         navigate(response.signed_url);
+        handleClose();
+      } else if (response.signed_url && !isSafeInternalPath(response.signed_url)) {
+        // Invalid or external URL - log warning and use fallback
+        logger.warn('Unsafe signed_url received, using fallback:', response.signed_url);
+        navigate(`/recipes/new?ai=1&draftId=${response.draft_id}`);
         handleClose();
       } else {
         setError('Invalid response from server');

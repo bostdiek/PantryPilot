@@ -27,6 +27,18 @@ vi.mock('../../../api/endpoints/aiDrafts', () => ({
   extractRecipeFromImageStream: (...args: any[]) =>
     mockExtractImageStream(...args),
   getDraftByIdOwner: (...args: any[]) => mockGetDraft(...args),
+  isSafeInternalPath: (url: string) => {
+    // Mock implementation matching the real function
+    try {
+      const absoluteUrl = new URL(url, window.location.origin);
+      return (
+        absoluteUrl.origin === window.location.origin &&
+        absoluteUrl.pathname.startsWith('/recipes')
+      );
+    } catch {
+      return false;
+    }
+  },
 }));
 
 vi.mock('../../../lib/logger', () => ({
@@ -391,5 +403,72 @@ describe('AddByPhotoModal', () => {
     await user.click(cancelButton);
 
     expect(mockOnClose).toHaveBeenCalled();
+  });
+
+  it('validates signed URL and uses fallback for unsafe URLs', async () => {
+    const user = userEvent.setup();
+    const unsafeUrl = 'https://evil.com/steal-data';
+
+    // Mock streaming to return unsafe URL
+    mockExtractImageStream.mockImplementation(
+      async (_file, _onProgress, onComplete) => {
+        onComplete(unsafeUrl, 'draft-unsafe');
+        return new AbortController();
+      }
+    );
+
+    renderModal();
+
+    const file = new File(['image'], 'test.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    await user.upload(input, file);
+
+    const extractButton = screen.getByRole('button', {
+      name: /Extract Recipe/i,
+    });
+    await user.click(extractButton);
+
+    // Should navigate to safe fallback, not the unsafe URL
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/recipes/new?ai=1&draftId=draft-unsafe'
+      );
+      expect(mockNavigate).not.toHaveBeenCalledWith(unsafeUrl);
+      expect(mockOnClose).toHaveBeenCalled();
+    });
+  });
+
+  it('accepts safe internal signed URLs', async () => {
+    const user = userEvent.setup();
+    const safeUrl = '/recipes/new?ai=1&draftId=draft-safe&token=jwt';
+
+    // Mock streaming to return safe URL
+    mockExtractImageStream.mockImplementation(
+      async (_file, _onProgress, onComplete) => {
+        onComplete(safeUrl, 'draft-safe');
+        return new AbortController();
+      }
+    );
+
+    renderModal();
+
+    const file = new File(['image'], 'test.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+    await user.upload(input, file);
+
+    const extractButton = screen.getByRole('button', {
+      name: /Extract Recipe/i,
+    });
+    await user.click(extractButton);
+
+    // Should navigate to the safe URL as-is
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(safeUrl);
+      expect(mockOnClose).toHaveBeenCalled();
+    });
   });
 });
