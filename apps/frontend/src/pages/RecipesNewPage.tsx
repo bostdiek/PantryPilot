@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
+import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -72,6 +73,7 @@ const RecipesNewPage: FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
+  const [isAddByPhotoModalOpen, setIsAddByPhotoModalOpen] = useState(false);
 
   // Shared paste handling hook
   const {
@@ -366,12 +368,20 @@ const RecipesNewPage: FC = () => {
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold">Create New Recipe</h1>
           {!isAISuggestion && (
-            <Button
-              variant="secondary"
-              onClick={() => setIsAddByUrlModalOpen(true)}
-            >
-              Add by URL
-            </Button>
+            <div className="flex space-x-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsAddByPhotoModalOpen(true)}
+              >
+                📷 Photo
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setIsAddByUrlModalOpen(true)}
+              >
+                🔗 URL
+              </Button>
+            </div>
           )}
         </div>
 
@@ -742,6 +752,12 @@ const RecipesNewPage: FC = () => {
         <AddByUrlModal
           isOpen={isAddByUrlModalOpen}
           onClose={() => setIsAddByUrlModalOpen(false)}
+        />
+
+        {/* Add by Photo Modal */}
+        <AddByPhotoModal
+          isOpen={isAddByPhotoModalOpen}
+          onClose={() => setIsAddByPhotoModalOpen(false)}
         />
       </Card>
     </Container>
