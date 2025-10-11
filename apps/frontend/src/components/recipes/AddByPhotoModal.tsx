@@ -116,7 +116,10 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               handleClose();
             } else if (signedUrl && !isSafeInternalPath(signedUrl)) {
               // Invalid or external URL - log warning and use fallback
-              logger.warn('Unsafe signed_url received, using fallback:', signedUrl);
+              logger.warn(
+                'Unsafe signed_url received, using fallback:',
+                signedUrl
+              );
               // Fallback to canonical internal path
               navigate(`/recipes/new?ai=1&draftId=${draftId}`);
               handleClose();
@@ -167,9 +170,15 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       if (response.signed_url && isSafeInternalPath(response.signed_url)) {
         navigate(response.signed_url);
         handleClose();
-      } else if (response.signed_url && !isSafeInternalPath(response.signed_url)) {
+      } else if (
+        response.signed_url &&
+        !isSafeInternalPath(response.signed_url)
+      ) {
         // Invalid or external URL - log warning and use fallback
-        logger.warn('Unsafe signed_url received, using fallback:', response.signed_url);
+        logger.warn(
+          'Unsafe signed_url received, using fallback:',
+          response.signed_url
+        );
         navigate(`/recipes/new?ai=1&draftId=${response.draft_id}`);
         handleClose();
       } else {

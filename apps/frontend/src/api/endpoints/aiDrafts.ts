@@ -19,12 +19,12 @@ export function isSafeInternalPath(url: string): boolean {
   try {
     // Handle relative URLs and absolute URLs
     const absoluteUrl = new URL(url, window.location.origin);
-    
+
     // Must be same origin
     if (absoluteUrl.origin !== window.location.origin) {
       return false;
     }
-    
+
     // Must start with /recipes (our expected paths)
     return absoluteUrl.pathname.startsWith('/recipes');
   } catch {

@@ -268,7 +268,9 @@ describe('aiDrafts endpoints', () => {
       expect(isSafeInternalPath('/recipes')).toBe(true);
       expect(isSafeInternalPath('/recipes/new')).toBe(true);
       expect(isSafeInternalPath('/recipes/123')).toBe(true);
-      expect(isSafeInternalPath('/recipes/new?ai=1&draftId=123&token=jwt')).toBe(true);
+      expect(
+        isSafeInternalPath('/recipes/new?ai=1&draftId=123&token=jwt')
+      ).toBe(true);
     });
 
     it('rejects external URLs', () => {
