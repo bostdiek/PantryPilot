@@ -99,7 +99,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               setProgressMessages((prev) => [...prev, event.detail!]);
             }
           },
-          async (signedUrl: string, draftId: string) => {
+          async (_signedUrl: string, draftId: string) => {
             logger.debug('Stream complete, draft_id:', draftId);
 
             // For streaming, we get draft_id but no signed_url

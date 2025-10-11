@@ -1,18 +1,11 @@
+import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BrowserRouter } from 'react-router-dom';
 import { AddByPhotoModal } from '../AddByPhotoModal';
-import * as aiDraftsApi from '../../../api/endpoints/aiDrafts';
 import { useAuthStore } from '../../../stores/useAuthStore';
 import { useRecipeStore } from '../../../stores/useRecipeStore';
-
-// Mock the API functions
-vi.mock('../../../api/endpoints/aiDrafts', () => ({
-  extractRecipeFromImage: vi.fn(),
-  extractRecipeFromImageStream: vi.fn(),
-  getDraftByIdOwner: vi.fn(),
-}));
 
 // Mock navigation
 const mockNavigate = vi.fn();
@@ -24,6 +17,21 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
+// Mock the API functions
+const mockExtractImage = vi.fn();
+const mockExtractImageStream = vi.fn();
+const mockGetDraft = vi.fn();
+
+vi.mock('../../../api/endpoints/aiDrafts', () => ({
+  extractRecipeFromImage: (...args: any[]) => mockExtractImage(...args),
+  extractRecipeFromImageStream: (...args: any[]) => mockExtractImageStream(...args),
+  getDraftByIdOwner: (...args: any[]) => mockGetDraft(...args),
+}));
+
+vi.mock('../../../lib/logger', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
 describe('AddByPhotoModal', () => {
   const mockOnClose = vi.fn();
 
@@ -33,6 +41,11 @@ describe('AddByPhotoModal', () => {
     useAuthStore.setState({ token: 'test-token', user: { id: '1', username: 'test', email: 'test@test.com' } });
     // Reset recipe store
     useRecipeStore.setState({ formSuggestion: null, isAISuggestion: false });
+  });
+
+  afterEach(() => {
+    // cleanup rendered DOM
+    document.body.innerHTML = '';
   });
 
   const renderModal = (isOpen = true) => {
@@ -70,7 +83,7 @@ describe('AddByPhotoModal', () => {
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('Please select an image file (JPEG, PNG, etc.)')).toBeInTheDocument();
+      expect(screen.getByText(/Please select an image file/)).toBeInTheDocument();
     });
   });
 
@@ -114,7 +127,7 @@ describe('AddByPhotoModal', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, file);
 
-    const extractButton = screen.getByText('Extract Recipe');
+    const extractButton = screen.getByRole('button', { name: /Extract Recipe/i });
     await user.click(extractButton);
 
     await waitFor(() => {
@@ -143,14 +156,14 @@ describe('AddByPhotoModal', () => {
     };
 
     // Mock streaming to immediately call onComplete
-    vi.mocked(aiDraftsApi.extractRecipeFromImageStream).mockImplementation(
+    mockExtractImageStream.mockImplementation(
       async (_file, _prompt, _onProgress, onComplete) => {
         onComplete('', 'draft-123');
         return new AbortController();
       }
     );
 
-    vi.mocked(aiDraftsApi.getDraftByIdOwner).mockResolvedValue(mockDraftResponse);
+    mockGetDraft.mockResolvedValue(mockDraftResponse);
 
     renderModal();
 
@@ -158,7 +171,7 @@ describe('AddByPhotoModal', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, file);
 
-    const extractButton = screen.getByText('Extract Recipe');
+    const extractButton = screen.getByRole('button', { name: /Extract Recipe/i });
     await user.click(extractButton);
 
     await waitFor(() => {
@@ -177,12 +190,12 @@ describe('AddByPhotoModal', () => {
     };
 
     // Mock streaming to throw error
-    vi.mocked(aiDraftsApi.extractRecipeFromImageStream).mockRejectedValue(
+    mockExtractImageStream.mockRejectedValue(
       new Error('Streaming failed')
     );
 
     // Mock POST fallback to succeed
-    vi.mocked(aiDraftsApi.extractRecipeFromImage).mockResolvedValue(mockResponse);
+    mockExtractImage.mockResolvedValue(mockResponse);
 
     renderModal();
 
@@ -190,7 +203,7 @@ describe('AddByPhotoModal', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, file);
 
-    const extractButton = screen.getByText('Extract Recipe');
+    const extractButton = screen.getByRole('button', { name: /Extract Recipe/i });
     await user.click(extractButton);
 
     await waitFor(() => {
@@ -207,7 +220,7 @@ describe('AddByPhotoModal', () => {
       code: 'file_too_large',
     };
 
-    vi.mocked(aiDraftsApi.extractRecipeFromImageStream).mockImplementation(
+    mockExtractImageStream.mockImplementation(
       async (_file, _prompt, _onProgress, _onComplete, onError) => {
         onError(error as any);
         return new AbortController();
@@ -220,11 +233,11 @@ describe('AddByPhotoModal', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, file);
 
-    const extractButton = screen.getByText('Extract Recipe');
+    const extractButton = screen.getByRole('button', { name: /Extract Recipe/i });
     await user.click(extractButton);
 
     await waitFor(() => {
-      expect(screen.getByText('File size is too large. Please use a smaller image.')).toBeInTheDocument();
+      expect(screen.getByText(/File size is too large/)).toBeInTheDocument();
     });
   });
 
@@ -236,7 +249,7 @@ describe('AddByPhotoModal', () => {
       code: 'unsupported_media_type',
     };
 
-    vi.mocked(aiDraftsApi.extractRecipeFromImageStream).mockImplementation(
+    mockExtractImageStream.mockImplementation(
       async (_file, _prompt, _onProgress, _onComplete, onError) => {
         onError(error as any);
         return new AbortController();
@@ -249,18 +262,18 @@ describe('AddByPhotoModal', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, file);
 
-    const extractButton = screen.getByText('Extract Recipe');
+    const extractButton = screen.getByRole('button', { name: /Extract Recipe/i });
     await user.click(extractButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Unsupported file type. Please upload an image file (JPEG, PNG, etc.).')).toBeInTheDocument();
+      expect(screen.getByText(/Unsupported file type/)).toBeInTheDocument();
     });
   });
 
   it('displays progress messages during streaming', async () => {
     const user = userEvent.setup();
 
-    vi.mocked(aiDraftsApi.extractRecipeFromImageStream).mockImplementation(
+    mockExtractImageStream.mockImplementation(
       async (_file, _prompt, onProgress, onComplete) => {
         onProgress({ status: 'started', step: 'init', detail: 'Starting extraction...' });
         onProgress({ status: 'ai_call', step: 'ai', detail: 'Analyzing image...' });
@@ -269,7 +282,7 @@ describe('AddByPhotoModal', () => {
       }
     );
 
-    vi.mocked(aiDraftsApi.getDraftByIdOwner).mockResolvedValue({
+    mockGetDraft.mockResolvedValue({
       payload: {
         generated_recipe: null,
         extraction_metadata: {
@@ -288,11 +301,11 @@ describe('AddByPhotoModal', () => {
     const input = document.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(input, file);
 
-    const extractButton = screen.getByText('Extract Recipe');
+    const extractButton = screen.getByRole('button', { name: /Extract Recipe/i });
     await user.click(extractButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Starting extraction...')).toBeInTheDocument();
+      expect(screen.getByText(/Starting extraction/)).toBeInTheDocument();
     });
   });
 
