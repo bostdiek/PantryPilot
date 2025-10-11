@@ -329,10 +329,9 @@ export async function extractRecipeStreamFetch(
 /**
  * Extract recipe from image using Server-Sent Events (SSE) for progress updates.
  * This is the preferred method for better UX with progress feedback.
- * Uses fetch-based approach for better header control (auth tokens).
+ * Uses the correct backend API flow: POST to upload image, then GET to stream progress.
  *
  * @param file - The image file to extract the recipe from
- * @param promptOverride - Optional custom prompt to override default extraction
  * @param onProgress - Callback for progress updates
  * @param onComplete - Callback for completion with signed_url and draft_id
  * @param onError - Callback for error handling
@@ -340,7 +339,6 @@ export async function extractRecipeStreamFetch(
  */
 export async function extractRecipeFromImageStream(
   file: File,
-  promptOverride: string | undefined,
   onProgress: (event: SSEEvent) => void,
   onComplete: (signedUrl: string, draftId: string) => void,
   onError: (error: ApiErrorImpl) => void
@@ -348,24 +346,21 @@ export async function extractRecipeFromImageStream(
   const abortController = new AbortController();
   const token = useAuthStore.getState().token;
 
-  // Create FormData for multipart upload
-  const formData = new FormData();
-  formData.append('file', file);
-  if (promptOverride) {
-    formData.append('prompt_override', promptOverride);
-  }
-
   const headers: Record<string, string> = {};
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  // Note: Do NOT set Content-Type header - browser will set it with boundary for multipart/form-data
 
   const API_BASE_URL = getApiBaseUrl();
 
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image-stream`,
+    // Step 1: Upload the image using POST endpoint to get draft_id
+    const formData = new FormData();
+    formData.append('files', file); // Backend expects 'files' not 'file'
+    // Note: prompt_override not yet supported by backend image endpoint
+
+    const uploadResponse = await fetch(
+      `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
       {
         method: 'POST',
         headers,
@@ -375,29 +370,29 @@ export async function extractRecipeFromImageStream(
       }
     );
 
-    if (!response.ok) {
+    if (!uploadResponse.ok) {
       // Handle specific error codes
-      if (response.status === 413) {
+      if (uploadResponse.status === 413) {
         onError(
           new ApiErrorImpl(
             'File size is too large. Please use a smaller image.',
-            response.status,
+            uploadResponse.status,
             'file_too_large'
           )
         );
-      } else if (response.status === 415) {
+      } else if (uploadResponse.status === 415) {
         onError(
           new ApiErrorImpl(
             'Unsupported file type. Please upload an image file (JPEG, PNG, etc.).',
-            response.status,
+            uploadResponse.status,
             'unsupported_media_type'
           )
         );
       } else {
         onError(
           new ApiErrorImpl(
-            `HTTP ${response.status}: ${response.statusText}`,
-            response.status,
+            `HTTP ${uploadResponse.status}: ${uploadResponse.statusText}`,
+            uploadResponse.status,
             'http_error'
           )
         );
@@ -405,12 +400,55 @@ export async function extractRecipeFromImageStream(
       return abortController;
     }
 
-    if (!response.body) {
-      onError(new ApiErrorImpl('No response body', undefined, 'no_body'));
+    const uploadBody = await uploadResponse.json();
+    const uploadData = uploadBody.data as AIDraftResponse;
+    const draftId = uploadData.draft_id;
+
+    if (!draftId) {
+      onError(
+        new ApiErrorImpl(
+          'Upload succeeded but no draft_id returned',
+          undefined,
+          'invalid_response'
+        )
+      );
       return abortController;
     }
 
-    const reader = response.body.getReader();
+    // Step 2: Stream progress using GET endpoint with draft_id
+    const params = new URLSearchParams({
+      draft_id: draftId,
+    });
+
+    const streamResponse = await fetch(
+      `${API_BASE_URL}/api/v1/ai/extract-recipe-image-stream?${params.toString()}`,
+      {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+        signal: abortController.signal,
+      }
+    );
+
+    if (!streamResponse.ok) {
+      onError(
+        new ApiErrorImpl(
+          `Streaming failed: HTTP ${streamResponse.status}: ${streamResponse.statusText}`,
+          streamResponse.status,
+          'stream_http_error'
+        )
+      );
+      return abortController;
+    }
+
+    if (!streamResponse.body) {
+      onError(
+        new ApiErrorImpl('No stream response body', undefined, 'no_body')
+      );
+      return abortController;
+    }
+
+    const reader = streamResponse.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
 
@@ -442,23 +480,11 @@ export async function extractRecipeFromImageStream(
           onProgress(data);
 
           if (data.status === 'complete') {
-            // SSE streaming returns draft_id only (not signed_url)
-            // The signed_url is only returned from the POST endpoint
-            if (data.draft_id) {
-              // For streaming, we have the draft_id but no signed_url
-              // Pass empty string for signed_url - the caller will fetch the draft using getDraftByIdOwner
-              onComplete('', data.draft_id);
-              // Close the reader to stop processing further messages
-              reader.cancel();
-            } else {
-              onError(
-                new ApiErrorImpl(
-                  'Extraction completed but missing draft_id',
-                  undefined,
-                  'invalid_response'
-                )
-              );
-            }
+            // For image streaming, we already have the draft_id from the upload
+            // Pass the signed_url from the original upload response
+            onComplete(uploadData.signed_url, draftId);
+            // Close the reader to stop processing further messages
+            reader.cancel();
             break;
           } else if (data.status === 'error') {
             onError(
@@ -501,19 +527,15 @@ export async function extractRecipeFromImageStream(
  * Use this when SSE is not available or as a fallback.
  *
  * @param file - The image file to extract the recipe from
- * @param promptOverride - Optional custom prompt to override default extraction
  * @returns Promise with the draft response containing signed_url
  */
 export async function extractRecipeFromImage(
-  file: File,
-  promptOverride?: string
+  file: File
 ): Promise<AIDraftResponse> {
   // Create FormData for multipart upload
   const formData = new FormData();
-  formData.append('file', file);
-  if (promptOverride) {
-    formData.append('prompt_override', promptOverride);
-  }
+  formData.append('files', file); // Backend expects 'files' not 'file'
+  // Note: prompt_override not yet supported by backend image endpoint
 
   // Use apiClient but pass FormData directly
   // The apiClient should handle FormData without stringifying

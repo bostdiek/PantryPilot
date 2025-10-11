@@ -1,4 +1,4 @@
-import { useState, useRef, type FC, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   extractRecipeFromImage,
@@ -6,8 +6,8 @@ import {
   getDraftByIdOwner,
 } from '../../api/endpoints/aiDrafts';
 import { logger } from '../../lib/logger';
-import { useRecipeStore } from '../../stores/useRecipeStore';
 import { useIsAuthenticated } from '../../stores/useAuthStore';
+import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
 import { Button } from '../ui/Button';
@@ -92,35 +92,44 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       try {
         const controller = await extractRecipeFromImageStream(
           selectedFile,
-          undefined, // No prompt override for now
           (event: SSEEvent) => {
             // Update progress messages
             if (event.detail) {
               setProgressMessages((prev) => [...prev, event.detail!]);
             }
           },
-          async (_signedUrl: string, draftId: string) => {
-            logger.debug('Stream complete, draft_id:', draftId);
+          async (signedUrl: string, draftId: string) => {
+            logger.debug(
+              'Stream complete, draft_id:',
+              draftId,
+              'signed_url:',
+              signedUrl
+            );
 
-            // For streaming, we get draft_id but no signed_url
-            // Fetch the draft using owner-only endpoint
-            try {
-              const draftResponse = await getDraftByIdOwner(draftId);
-              logger.debug('Draft fetched:', draftResponse);
-
-              // Set the form suggestion in the store
-              const { setFormFromSuggestion } = useRecipeStore.getState();
-              setFormFromSuggestion(draftResponse.payload);
-
-              // Navigate to new recipe page with ai=1 flag to show AI indicator
-              navigate(`/recipes/new?ai=1&draftId=${draftId}`);
+            if (signedUrl) {
+              // Use the signed URL from the upload response
+              navigate(signedUrl);
               handleClose();
-            } catch (err) {
-              logger.error('Failed to fetch draft after streaming:', err);
-              setError(
-                'Recipe extracted but failed to load. Please try again.'
-              );
-              setIsLoading(false);
+            } else {
+              // Fallback: fetch the draft using owner-only endpoint
+              try {
+                const draftResponse = await getDraftByIdOwner(draftId);
+                logger.debug('Draft fetched:', draftResponse);
+
+                // Set the form suggestion in the store
+                const { setFormFromSuggestion } = useRecipeStore.getState();
+                setFormFromSuggestion(draftResponse.payload);
+
+                // Navigate to new recipe page with ai=1 flag to show AI indicator
+                navigate(`/recipes/new?ai=1&draftId=${draftId}`);
+                handleClose();
+              } catch (err) {
+                logger.error('Failed to fetch draft after streaming:', err);
+                setError(
+                  'Recipe extracted but failed to load. Please try again.'
+                );
+                setIsLoading(false);
+              }
             }
           },
           (err: ApiErrorImpl) => {
@@ -292,11 +301,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
 
         {/* Action buttons */}
         <div className="flex justify-end space-x-2 pt-4">
-          <Button
-            variant="ghost"
-            onClick={handleClose}
-            disabled={isLoading}
-          >
+          <Button variant="ghost" onClick={handleClose} disabled={isLoading}>
             Cancel
           </Button>
           <Button
