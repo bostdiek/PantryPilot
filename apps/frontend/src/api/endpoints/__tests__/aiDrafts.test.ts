@@ -36,6 +36,7 @@ import {
   extractRecipeStreamFetch,
   getDraftById,
   getDraftByIdOwner,
+  isSafeInternalPath,
 } from '../aiDrafts';
 
 describe('aiDrafts endpoints', () => {
@@ -260,5 +261,38 @@ describe('aiDrafts endpoints', () => {
       onError
     );
     expect(onError).toHaveBeenCalled();
+  });
+
+  describe('isSafeInternalPath', () => {
+    it('accepts safe internal /recipes paths', () => {
+      expect(isSafeInternalPath('/recipes')).toBe(true);
+      expect(isSafeInternalPath('/recipes/new')).toBe(true);
+      expect(isSafeInternalPath('/recipes/123')).toBe(true);
+      expect(
+        isSafeInternalPath('/recipes/new?ai=1&draftId=123&token=jwt')
+      ).toBe(true);
+    });
+
+    it('rejects external URLs', () => {
+      expect(isSafeInternalPath('https://evil.com/recipes')).toBe(false);
+      expect(isSafeInternalPath('http://attacker.com/recipes/new')).toBe(false);
+    });
+
+    it('rejects non-recipe paths', () => {
+      expect(isSafeInternalPath('/login')).toBe(false);
+      expect(isSafeInternalPath('/admin')).toBe(false);
+      expect(isSafeInternalPath('/')).toBe(false);
+    });
+
+    it('handles malformed URLs gracefully', () => {
+      expect(isSafeInternalPath('not a url')).toBe(false);
+      expect(isSafeInternalPath('')).toBe(false);
+    });
+
+    it('accepts same-origin absolute URLs', () => {
+      // Assuming window.location.origin in tests
+      const origin = window.location.origin;
+      expect(isSafeInternalPath(`${origin}/recipes/new`)).toBe(true);
+    });
   });
 });

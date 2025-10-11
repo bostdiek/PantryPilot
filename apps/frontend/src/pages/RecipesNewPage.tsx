@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
@@ -42,6 +43,7 @@ const RecipesNewPage: FC = () => {
   const { success } = useToast();
   const { addRecipe, formSuggestion, isAISuggestion, clearFormSuggestion } =
     useRecipeStore();
+  const [showAISuggestion, setShowAISuggestion] = useState(true);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<SelectOption>(
@@ -72,6 +74,7 @@ const RecipesNewPage: FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
+  const [isAddByPhotoModalOpen, setIsAddByPhotoModalOpen] = useState(false);
 
   // Shared paste handling hook
   const {
@@ -334,7 +337,7 @@ const RecipesNewPage: FC = () => {
   return (
     <Container size="md">
       {/* AI Suggestion Indicator */}
-      {isAISuggestion && (
+      {isAISuggestion && showAISuggestion && (
         <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-start">
             <div className="flex-shrink-0">
@@ -359,6 +362,16 @@ const RecipesNewPage: FC = () => {
                 needed before saving.
               </p>
             </div>
+            <div className="ml-4 flex-shrink-0 self-start">
+              <button
+                type="button"
+                aria-label="Close AI suggestion"
+                onClick={() => setShowAISuggestion(false)}
+                className="rounded-md p-1 text-blue-700 hover:bg-blue-100 focus:ring-2 focus:ring-blue-300 focus:outline-none"
+              >
+                <span className="text-xl leading-none">×</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -366,12 +379,20 @@ const RecipesNewPage: FC = () => {
         <div className="mb-4 flex items-center justify-between">
           <h1 className="text-2xl font-bold">Create New Recipe</h1>
           {!isAISuggestion && (
-            <Button
-              variant="secondary"
-              onClick={() => setIsAddByUrlModalOpen(true)}
-            >
-              Add by URL
-            </Button>
+            <div className="flex space-x-2">
+              <Button
+                variant="secondary"
+                onClick={() => setIsAddByPhotoModalOpen(true)}
+              >
+                📷 Photo
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setIsAddByUrlModalOpen(true)}
+              >
+                🔗 URL
+              </Button>
+            </div>
           )}
         </div>
 
@@ -742,6 +763,12 @@ const RecipesNewPage: FC = () => {
         <AddByUrlModal
           isOpen={isAddByUrlModalOpen}
           onClose={() => setIsAddByUrlModalOpen(false)}
+        />
+
+        {/* Add by Photo Modal */}
+        <AddByPhotoModal
+          isOpen={isAddByPhotoModalOpen}
+          onClose={() => setIsAddByPhotoModalOpen(false)}
         />
       </Card>
     </Container>

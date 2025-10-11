@@ -15,6 +15,7 @@ import { RecipePagination } from '../components/recipes/RecipePagination';
 import { RecipeCard } from '../components/recipes/RecipeCard';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
+import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
 import type { Recipe } from '../types/Recipe';
 
 const RecipesPage: FC = () => {
@@ -35,6 +36,9 @@ const RecipesPage: FC = () => {
 
   // Add by URL modal state
   const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
+
+  // Add by Photo modal state
+  const [isAddByPhotoModalOpen, setIsAddByPhotoModalOpen] = useState(false);
 
   // Fetch recipes on mount
   useEffect(() => {
@@ -86,12 +90,18 @@ const RecipesPage: FC = () => {
             </p>
           )}
         </div>
-        <div className="flex space-x-3">
+        <div className="flex flex-wrap gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setIsAddByPhotoModalOpen(true)}
+          >
+            📷 Upload Photo
+          </Button>
           <Button
             variant="secondary"
             onClick={() => setIsAddByUrlModalOpen(true)}
           >
-            Add by URL
+            🔗 Add by URL
           </Button>
           <Link to="/recipes/new">
             <Button variant="primary">+ Add Recipe</Button>
@@ -176,6 +186,12 @@ const RecipesPage: FC = () => {
       <AddByUrlModal
         isOpen={isAddByUrlModalOpen}
         onClose={() => setIsAddByUrlModalOpen(false)}
+      />
+
+      {/* Add by Photo Modal */}
+      <AddByPhotoModal
+        isOpen={isAddByPhotoModalOpen}
+        onClose={() => setIsAddByPhotoModalOpen(false)}
       />
     </Container>
   );

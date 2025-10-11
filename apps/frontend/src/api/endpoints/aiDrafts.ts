@@ -9,6 +9,76 @@ import { ApiErrorImpl } from '../../types/api';
 import { apiClient, getApiBaseUrl } from '../client';
 
 /**
+ * Validates that a URL is a safe internal path before navigation.
+ * This prevents open redirects and ensures we only navigate to expected routes.
+ *
+ * @param url - The URL to validate
+ * @returns true if the URL is safe for internal navigation
+ */
+export function isSafeInternalPath(url: string): boolean {
+  try {
+    // Handle relative URLs and absolute URLs
+    const absoluteUrl = new URL(url, window.location.origin);
+
+    // Must be same origin
+    if (absoluteUrl.origin !== window.location.origin) {
+      return false;
+    }
+
+    // Must start with /recipes (our expected paths)
+    return absoluteUrl.pathname.startsWith('/recipes');
+  } catch {
+    // Invalid URL
+    return false;
+  }
+}
+
+/**
+ * Gets auth headers for API requests.
+ * Centralizes auth header logic to avoid duplication.
+ */
+function getAuthHeaders(): Record<string, string> {
+  const token = useAuthStore.getState().token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+/**
+ * Handles common HTTP error responses for image upload endpoints.
+ * Returns an ApiErrorImpl with appropriate user-friendly messages.
+ */
+function handleUploadError(status: number, statusText: string): ApiErrorImpl {
+  if (status === 413) {
+    return new ApiErrorImpl(
+      'File size is too large. Please use a smaller image.',
+      status,
+      'file_too_large'
+    );
+  } else if (status === 415) {
+    return new ApiErrorImpl(
+      'Unsupported file type. Please upload an image file (JPEG, PNG, etc.).',
+      status,
+      'unsupported_media_type'
+    );
+  } else {
+    return new ApiErrorImpl(
+      `HTTP ${status}: ${statusText}`,
+      status,
+      'http_error'
+    );
+  }
+}
+
+/**
+ * Creates FormData for image upload.
+ * Centralizes FormData creation to ensure consistency.
+ */
+function createImageUploadFormData(file: File): FormData {
+  const formData = new FormData();
+  formData.append('files', file); // Backend expects 'files' not 'file'
+  return formData;
+}
+
+/**
  * AI Drafts API endpoints
  * Handles recipe extraction from URLs with streaming SSE support
  */
@@ -219,7 +289,6 @@ export async function extractRecipeStreamFetch(
       {
         method: 'GET',
         headers,
-        credentials: 'include',
         signal: abortController.signal,
       }
     );
@@ -324,4 +393,199 @@ export async function extractRecipeStreamFetch(
   }
 
   return abortController;
+}
+
+/**
+ * Extract recipe from image using Server-Sent Events (SSE) for progress updates.
+ * This is the preferred method for better UX with progress feedback.
+ * Uses the correct backend API flow: POST to upload image, then GET to stream progress.
+ *
+ * @param file - The image file to extract the recipe from
+ * @param onProgress - Callback for progress updates
+ * @param onComplete - Callback for completion with signed_url and draft_id
+ * @param onError - Callback for error handling
+ * @returns AbortController that can be used to cancel the request
+ */
+export async function extractRecipeFromImageStream(
+  file: File,
+  onProgress: (event: SSEEvent) => void,
+  onComplete: (signedUrl: string, draftId: string) => void,
+  onError: (error: ApiErrorImpl) => void
+): Promise<AbortController> {
+  const abortController = new AbortController();
+  const headers = getAuthHeaders();
+  const API_BASE_URL = getApiBaseUrl();
+
+  try {
+    // Step 1: Upload the image using POST endpoint to get draft_id
+    const formData = createImageUploadFormData(file);
+
+    const uploadResponse = await fetch(
+      `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
+      {
+        method: 'POST',
+        headers,
+        body: formData,
+        signal: abortController.signal,
+      }
+    );
+
+    if (!uploadResponse.ok) {
+      onError(
+        handleUploadError(uploadResponse.status, uploadResponse.statusText)
+      );
+      return abortController;
+    }
+
+    const uploadBody = await uploadResponse.json();
+    const uploadData = uploadBody.data as AIDraftResponse;
+    const draftId = uploadData.draft_id;
+
+    if (!draftId) {
+      onError(
+        new ApiErrorImpl(
+          'Upload succeeded but no draft_id returned',
+          undefined,
+          'invalid_response'
+        )
+      );
+      return abortController;
+    }
+
+    // Step 2: Stream progress using GET endpoint with draft_id
+    const params = new URLSearchParams({
+      draft_id: draftId,
+    });
+
+    const streamResponse = await fetch(
+      `${API_BASE_URL}/api/v1/ai/extract-recipe-image-stream?${params.toString()}`,
+      {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+        signal: abortController.signal,
+      }
+    );
+
+    if (!streamResponse.ok) {
+      onError(
+        new ApiErrorImpl(
+          `Streaming failed: HTTP ${streamResponse.status}: ${streamResponse.statusText}`,
+          streamResponse.status,
+          'stream_http_error'
+        )
+      );
+      return abortController;
+    }
+
+    if (!streamResponse.body) {
+      onError(
+        new ApiErrorImpl('No stream response body', undefined, 'no_body')
+      );
+      return abortController;
+    }
+
+    const reader = streamResponse.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    // Process the stream
+    while (true) {
+      const { value, done } = await reader.read();
+
+      if (done) {
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete messages (SSE format uses \n\n as delimiter)
+      let newlineIndex;
+      while ((newlineIndex = buffer.indexOf('\n\n')) !== -1) {
+        const chunk = buffer.slice(0, newlineIndex).trim();
+        buffer = buffer.slice(newlineIndex + 2);
+
+        if (!chunk || !chunk.startsWith('data: ')) {
+          continue;
+        }
+
+        // Extract JSON from SSE data: line
+        const jsonStr = chunk.slice(6); // Remove "data: " prefix
+
+        try {
+          const data = JSON.parse(jsonStr) as SSEEvent;
+          onProgress(data);
+
+          if (data.status === 'complete') {
+            // For image streaming, we already have the draft_id from the upload
+            // Pass the signed_url from the original upload response
+            onComplete(uploadData.signed_url, draftId);
+            // Close the reader to stop processing further messages
+            reader.cancel();
+            break;
+          } else if (data.status === 'error') {
+            onError(
+              new ApiErrorImpl(
+                data.detail || 'Extraction failed',
+                undefined,
+                data.error_code
+              )
+            );
+            reader.cancel();
+            break;
+          }
+        } catch (err) {
+          logger.error('Failed to parse SSE message:', err);
+        }
+      }
+    }
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      // Request was cancelled, don't call onError
+      return abortController;
+    }
+
+    onError(
+      new ApiErrorImpl(
+        'Stream request failed',
+        undefined,
+        'stream_error',
+        undefined,
+        err instanceof Error ? err : undefined
+      )
+    );
+  }
+
+  return abortController;
+}
+
+/**
+ * Extract recipe from image using standard POST request (fallback method).
+ * Use this when SSE is not available or as a fallback.
+ *
+ * @param file - The image file to extract the recipe from
+ * @returns Promise with the draft response containing signed_url
+ */
+export async function extractRecipeFromImage(
+  file: File
+): Promise<AIDraftResponse> {
+  const formData = createImageUploadFormData(file);
+  const headers = getAuthHeaders();
+  const API_BASE_URL = getApiBaseUrl();
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
+    {
+      method: 'POST',
+      headers,
+      body: formData,
+    }
+  );
+
+  if (!response.ok) {
+    throw handleUploadError(response.status, response.statusText);
+  }
+
+  const body = await response.json();
+  return body.data as AIDraftResponse;
 }
