@@ -86,7 +86,7 @@ describe('AddByPhotoModal', () => {
 
   it('shows file selection button initially', () => {
     renderModal();
-    expect(screen.getByText('📷 Select Photo')).toBeInTheDocument();
+    expect(screen.getByText('📷 Select Photos')).toBeInTheDocument();
   });
 
   it('validates file type on selection', async () => {
@@ -101,15 +101,15 @@ describe('AddByPhotoModal', () => {
     fireEvent.change(input, { target: { files: [file] } });
 
     // Use findByText to wait for the error to appear in the DOM
-    await screen.findByText(/Please select an image file/);
+    await screen.findByText(/Please select only image files/);
   });
 
   it('validates file size on selection', async () => {
     const user = userEvent.setup();
     renderModal();
 
-    // Create a large file (> 10MB)
-    const largeFile = new File(['x'.repeat(11 * 1024 * 1024)], 'large.jpg', {
+    // Create a large file (> 8 MiB)
+    const largeFile = new File(['x'.repeat(9 * 1024 * 1024)], 'large.jpg', {
       type: 'image/jpeg',
     });
     const input = document.querySelector(
@@ -120,9 +120,7 @@ describe('AddByPhotoModal', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(
-          'File size is too large. Please select an image under 10MB.'
-        )
+        screen.getByText(/File size too large\. Max 8 MiB per file/)
       ).toBeInTheDocument();
     });
   });
@@ -139,7 +137,7 @@ describe('AddByPhotoModal', () => {
     await user.upload(input, file);
 
     await waitFor(() => {
-      expect(screen.getByText('test.jpg')).toBeInTheDocument();
+      expect(screen.getByText(/1\. test\.jpg/)).toBeInTheDocument();
     });
   });
 
@@ -370,7 +368,7 @@ describe('AddByPhotoModal', () => {
     await screen.findByText(/Extracting recipe from image/);
   });
 
-  it('allows changing file selection', async () => {
+  it('allows changing file selection by clearing and selecting new files', async () => {
     const user = userEvent.setup();
     renderModal();
 
@@ -381,17 +379,24 @@ describe('AddByPhotoModal', () => {
     await user.upload(input, file1);
 
     await waitFor(() => {
-      expect(screen.getByText('test1.jpg')).toBeInTheDocument();
+      expect(screen.getByText(/1\. test1\.jpg/)).toBeInTheDocument();
     });
 
-    const changeButton = screen.getByText('Change');
-    await user.click(changeButton);
+    // Clear all files
+    const clearButton = screen.getByRole('button', { name: /Clear All/i });
+    await user.click(clearButton);
 
+    await waitFor(() => {
+      expect(screen.getByText('📷 Select Photos')).toBeInTheDocument();
+    });
+
+    // Select new file
     const file2 = new File(['image2'], 'test2.jpg', { type: 'image/jpeg' });
     await user.upload(input, file2);
 
     await waitFor(() => {
-      expect(screen.getByText('test2.jpg')).toBeInTheDocument();
+      expect(screen.getByText(/1\. test2\.jpg/)).toBeInTheDocument();
+      expect(screen.queryByText(/test1\.jpg/)).not.toBeInTheDocument();
     });
   });
 
@@ -497,17 +502,21 @@ describe('AddByPhotoModal', () => {
     renderModal();
 
     // Create files that individually are under 8MiB but combined exceed 20MiB
-    const file1 = new File(['x'.repeat(11 * 1024 * 1024)], 'large1.jpg', {
+    // Each file is 7 MiB, total is 21 MiB which exceeds 20 MiB limit
+    const file1 = new File(['x'.repeat(7 * 1024 * 1024)], 'large1.jpg', {
       type: 'image/jpeg',
     });
-    const file2 = new File(['x'.repeat(11 * 1024 * 1024)], 'large2.jpg', {
+    const file2 = new File(['x'.repeat(7 * 1024 * 1024)], 'large2.jpg', {
+      type: 'image/jpeg',
+    });
+    const file3 = new File(['x'.repeat(7 * 1024 * 1024)], 'large3.jpg', {
       type: 'image/jpeg',
     });
     const input = document.querySelector(
       'input[type="file"]'
     ) as HTMLInputElement;
 
-    await user.upload(input, [file1, file2]);
+    await user.upload(input, [file1, file2, file3]);
 
     await waitFor(() => {
       expect(
@@ -611,7 +620,9 @@ describe('AddByPhotoModal', () => {
     await user.upload(input, file2);
 
     await waitFor(() => {
-      expect(screen.getByText(/1\. test2\.jpg/)).toBeInTheDocument();
+      expect(screen.getByText('2 files selected')).toBeInTheDocument();
+      expect(screen.getByText(/1\. test1\.jpg/)).toBeInTheDocument();
+      expect(screen.getByText(/2\. test2\.jpg/)).toBeInTheDocument();
     });
   });
 

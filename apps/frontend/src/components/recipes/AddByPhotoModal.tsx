@@ -55,22 +55,26 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) {
+    const incomingFiles = Array.from(e.target.files || []);
+    if (incomingFiles.length === 0) {
       return;
     }
 
+    // Merge with existing files for "Add More" functionality
+    const allFiles = [...selectedFiles, ...incomingFiles];
+
     // Validate file types
-    const invalidFiles = files.filter((file) => !file.type.startsWith('image/'));
+    const invalidFiles = allFiles.filter((file) => !file.type.startsWith('image/'));
     if (invalidFiles.length > 0) {
       setError(
         `Please select only image files (JPEG, PNG, etc.). Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
       );
+      e.currentTarget.value = '';
       return;
     }
 
     // Validate individual file sizes
-    const oversizedFiles = files.filter(
+    const oversizedFiles = allFiles.filter(
       (file) => file.size > PER_FILE_SIZE_LIMIT
     );
     if (oversizedFiles.length > 0) {
@@ -78,22 +82,26 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       setError(
         `File size too large. Max ${maxSizeMiB} MiB per file. Oversized: ${oversizedFiles.map((f) => f.name).join(', ')}`
       );
+      e.currentTarget.value = '';
       return;
     }
 
     // Validate combined file size
-    const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+    const totalSize = allFiles.reduce((sum, file) => sum + file.size, 0);
     if (totalSize > COMBINED_SIZE_LIMIT) {
       const maxTotalMiB = (COMBINED_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
       const currentTotalMiB = (totalSize / (1024 * 1024)).toFixed(2);
       setError(
         `Combined file size (${currentTotalMiB} MiB) exceeds limit of ${maxTotalMiB} MiB. Please select fewer or smaller files.`
       );
+      e.currentTarget.value = '';
       return;
     }
 
-    setSelectedFiles(files);
+    setSelectedFiles(allFiles);
     setError(null);
+    // Clear input value to allow selecting the same files again
+    e.currentTarget.value = '';
   };
 
   const handleUpload = async () => {
