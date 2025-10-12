@@ -18,6 +18,10 @@ import { ErrorMessage } from '../ui/ErrorMessage';
 // Prefer streaming for better UX with progress updates, fallback to POST if unavailable
 const USE_STREAMING = true;
 
+// File size limits (matching backend constraints)
+const PER_FILE_SIZE_LIMIT = 8 * 1024 * 1024; // 8 MiB per file
+const COMBINED_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MiB total
+
 interface AddByPhotoModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -30,7 +34,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   const navigate = useNavigate();
   const isAuthenticated = useIsAuthenticated();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
@@ -43,7 +47,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       abortController.abort();
       setAbortController(null);
     }
-    setSelectedFile(null);
+    setSelectedFiles([]);
     setError(null);
     setProgressMessages([]);
     setIsLoading(false);
@@ -51,31 +55,62 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
+    const incomingFiles = Array.from(e.target.files || []);
+    if (incomingFiles.length === 0) {
       return;
     }
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      setError('Please select an image file (JPEG, PNG, etc.)');
+    // Merge with existing files for "Add More" functionality
+    const allFiles = [...selectedFiles, ...incomingFiles];
+
+    // Validate file types
+    const invalidFiles = allFiles.filter(
+      (file) => !file.type.startsWith('image/')
+    );
+    if (invalidFiles.length > 0) {
+      setError(
+        `Please select only image files. Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
+      );
+      e.currentTarget.value = '';
       return;
     }
 
-    // Validate file size (e.g., max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      setError('File size is too large. Please select an image under 10MB.');
+    // Validate individual file sizes
+    const oversizedFiles = allFiles.filter(
+      (file) => file.size > PER_FILE_SIZE_LIMIT
+    );
+    if (oversizedFiles.length > 0) {
+      const maxSizeMiB = (PER_FILE_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
+      setError(
+        `File size too large. Max ${maxSizeMiB} MiB per file. Oversized: ${oversizedFiles
+          .map((f) => `${f.name} (${(f.size / (1024 * 1024)).toFixed(2)} MiB)`)
+          .join(', ')}`
+      );
+      e.currentTarget.value = '';
       return;
     }
 
-    setSelectedFile(file);
+    // Validate combined file size
+    const totalSize = allFiles.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > COMBINED_SIZE_LIMIT) {
+      const maxTotalMiB = (COMBINED_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
+      const currentTotalMiB = (totalSize / (1024 * 1024)).toFixed(2);
+      setError(
+        `Combined file size (${currentTotalMiB} MiB) exceeds limit of ${maxTotalMiB} MiB. Please select fewer or smaller files.`
+      );
+      e.currentTarget.value = '';
+      return;
+    }
+
+    setSelectedFiles(allFiles);
     setError(null);
+    // Clear input value to allow selecting the same files again
+    e.currentTarget.value = '';
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
-      setError('Please select a file first');
+    if (selectedFiles.length === 0) {
+      setError('Please select at least one file first');
       return;
     }
 
@@ -94,7 +129,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     if (USE_STREAMING) {
       try {
         const controller = await extractRecipeFromImageStream(
-          selectedFile,
+          selectedFiles,
           (event: SSEEvent) => {
             // Update progress messages
             if (event.detail) {
@@ -163,7 +198,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     // Fallback to POST request
     try {
       logger.debug('Using POST fallback for image extraction');
-      const response = await extractRecipeFromImage(selectedFile);
+      const response = await extractRecipeFromImage(selectedFiles);
       logger.debug('POST extraction response:', response);
 
       // Validate and navigate to the signed URL
@@ -200,6 +235,20 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     fileInputRef.current?.click();
   };
 
+  const handleRemoveFile = (indexToRemove: number) => {
+    setSelectedFiles((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
+  };
+
+  const handleClearAll = () => {
+    setSelectedFiles([]);
+  };
+
+  // Calculate total size for display
+  const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+  const totalSizeMiB = (totalSize / (1024 * 1024)).toFixed(2);
+
   return (
     <Dialog isOpen={isOpen} onClose={handleClose} title="Upload Recipe Photo">
       <div className="space-y-4">
@@ -208,7 +257,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           ref={fileInputRef}
           type="file"
           accept="image/*"
-          capture="environment"
+          multiple
           onChange={handleFileSelect}
           className="hidden"
           disabled={isLoading}
@@ -217,63 +266,94 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
         {/* Instructions */}
         <div className="space-y-2">
           <p className="text-sm text-gray-700">
-            Take a photo or select an image of a recipe to automatically extract
-            the recipe details.
+            Select one or more images of a recipe to automatically extract the
+            recipe details. You can upload multiple photos for multi-page
+            recipes.
           </p>
           <div className="rounded-md bg-blue-50 p-3">
             <p className="text-xs text-blue-800">
               <strong>Tip:</strong> For best results, ensure the recipe text is
               clear and well-lit. Works with recipe cards, cookbook pages, or
-              screenshots.
+              screenshots. Max 8 MiB per file, 20 MiB total.
             </p>
           </div>
         </div>
 
         {/* File selection button */}
-        {!selectedFile ? (
+        {selectedFiles.length === 0 ? (
           <Button
             variant="primary"
             onClick={handleButtonClick}
             disabled={isLoading}
             className="w-full"
           >
-            📷 Select Photo
+            📷 Select Photos
           </Button>
         ) : (
-          <div className="rounded-md border border-gray-200 bg-gray-50 p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <svg
-                  className="h-5 w-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-                <div className="text-sm">
-                  <p className="font-medium text-gray-900">
-                    {selectedFile.name}
-                  </p>
-                  <p className="text-gray-500">
-                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                </div>
+          <div className="space-y-3">
+            {/* File list header with summary */}
+            <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-3">
+              <div className="text-sm">
+                <p className="font-medium text-gray-900">
+                  {selectedFiles.length} file
+                  {selectedFiles.length !== 1 ? 's' : ''} selected
+                </p>
+                <p className="text-gray-500">Total: {totalSizeMiB} MiB</p>
               </div>
               {!isLoading && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedFile(null)}
-                >
-                  Change
-                </Button>
+                <div className="flex space-x-2">
+                  <Button variant="ghost" size="sm" onClick={handleButtonClick}>
+                    Add More
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={handleClearAll}>
+                    Clear All
+                  </Button>
+                </div>
               )}
+            </div>
+
+            {/* File list */}
+            <div className="max-h-60 space-y-2 overflow-y-auto">
+              {selectedFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${index}`}
+                  className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <svg
+                      className="h-5 w-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      />
+                    </svg>
+                    <div className="text-sm">
+                      <p className="font-medium text-gray-900">
+                        {index + 1}. {file.name}
+                      </p>
+                      <p className="text-gray-500">
+                        {(file.size / (1024 * 1024)).toFixed(2)} MiB
+                      </p>
+                    </div>
+                  </div>
+                  {!isLoading && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveFile(index)}
+                      aria-label={`Remove ${file.name}`}
+                    >
+                      ✕
+                    </Button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -331,7 +411,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           <Button
             variant="primary"
             onClick={handleUpload}
-            disabled={!selectedFile || isLoading}
+            disabled={selectedFiles.length === 0 || isLoading}
           >
             {isLoading ? 'Processing...' : 'Extract Recipe'}
           </Button>

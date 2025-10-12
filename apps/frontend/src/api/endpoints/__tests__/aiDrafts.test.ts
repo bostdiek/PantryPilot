@@ -31,6 +31,7 @@ vi.mock('../../../stores/useAuthStore', () => ({
 }));
 
 import {
+  createImageUploadFormData,
   extractRecipeFromUrl,
   extractRecipeStream,
   extractRecipeStreamFetch,
@@ -261,6 +262,41 @@ describe('aiDrafts endpoints', () => {
       onError
     );
     expect(onError).toHaveBeenCalled();
+  });
+
+  describe('createImageUploadFormData', () => {
+    it('creates FormData with single file', () => {
+      const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
+      const formData = createImageUploadFormData(file);
+
+      // FormData.getAll returns all values for a given key
+      const files = formData.getAll('files');
+      expect(files).toHaveLength(1);
+      expect(files[0]).toBe(file);
+    });
+
+    it('creates FormData with multiple files', () => {
+      const file1 = new File(['test1'], 'test1.jpg', { type: 'image/jpeg' });
+      const file2 = new File(['test2'], 'test2.jpg', { type: 'image/jpeg' });
+      const file3 = new File(['test3'], 'test3.jpg', { type: 'image/jpeg' });
+
+      const formData = createImageUploadFormData([file1, file2, file3]);
+
+      const files = formData.getAll('files');
+      expect(files).toHaveLength(3);
+      expect(files[0]).toBe(file1);
+      expect(files[1]).toBe(file2);
+      expect(files[2]).toBe(file3);
+    });
+
+    it('uses "files" field name for backend compatibility', () => {
+      const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
+      const formData = createImageUploadFormData(file);
+
+      // Check that the field name is 'files' not 'file'
+      expect(formData.has('files')).toBe(true);
+      expect(formData.has('file')).toBe(false);
+    });
   });
 
   describe('isSafeInternalPath', () => {
