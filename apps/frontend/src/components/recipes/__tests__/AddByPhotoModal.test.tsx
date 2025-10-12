@@ -471,4 +471,170 @@ describe('AddByPhotoModal', () => {
       expect(mockOnClose).toHaveBeenCalled();
     });
   });
+
+  // Multiple file tests
+  it('accepts multiple image files', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const file1 = new File(['image1'], 'test1.jpg', { type: 'image/jpeg' });
+    const file2 = new File(['image2'], 'test2.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(screen.getByText('2 files selected')).toBeInTheDocument();
+      expect(screen.getByText(/1\. test1\.jpg/)).toBeInTheDocument();
+      expect(screen.getByText(/2\. test2\.jpg/)).toBeInTheDocument();
+    });
+  });
+
+  it('validates combined file size for multiple files', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    // Create files that individually are under 8MiB but combined exceed 20MiB
+    const file1 = new File(['x'.repeat(11 * 1024 * 1024)], 'large1.jpg', {
+      type: 'image/jpeg',
+    });
+    const file2 = new File(['x'.repeat(11 * 1024 * 1024)], 'large2.jpg', {
+      type: 'image/jpeg',
+    });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Combined file size .* exceeds limit of 20 MiB/)
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('validates individual file size in multiple file selection', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const file1 = new File(['image1'], 'test1.jpg', { type: 'image/jpeg' });
+    const file2 = new File(['x'.repeat(9 * 1024 * 1024)], 'large.jpg', {
+      type: 'image/jpeg',
+    });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/File size too large\. Max 8 MiB per file/)
+      ).toBeInTheDocument();
+    });
+  });
+
+  it('allows removing individual files from selection', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const file1 = new File(['image1'], 'test1.jpg', { type: 'image/jpeg' });
+    const file2 = new File(['image2'], 'test2.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(screen.getByText('2 files selected')).toBeInTheDocument();
+    });
+
+    // Find and click the remove button for the first file
+    const removeButtons = screen.getAllByRole('button', { name: /Remove/ });
+    await user.click(removeButtons[0]);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 file selected')).toBeInTheDocument();
+      expect(screen.queryByText(/1\. test1\.jpg/)).not.toBeInTheDocument();
+      expect(screen.getByText(/1\. test2\.jpg/)).toBeInTheDocument();
+    });
+  });
+
+  it('allows clearing all selected files', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const file1 = new File(['image1'], 'test1.jpg', { type: 'image/jpeg' });
+    const file2 = new File(['image2'], 'test2.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(screen.getByText('2 files selected')).toBeInTheDocument();
+    });
+
+    const clearButton = screen.getByRole('button', { name: /Clear All/i });
+    await user.click(clearButton);
+
+    await waitFor(() => {
+      expect(screen.getByText('📷 Select Photos')).toBeInTheDocument();
+      expect(screen.queryByText('2 files selected')).not.toBeInTheDocument();
+    });
+  });
+
+  it('allows adding more files to existing selection', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const file1 = new File(['image1'], 'test1.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, file1);
+
+    await waitFor(() => {
+      expect(screen.getByText('1 file selected')).toBeInTheDocument();
+    });
+
+    const addMoreButton = screen.getByRole('button', { name: /Add More/i });
+    await user.click(addMoreButton);
+
+    const file2 = new File(['image2'], 'test2.jpg', { type: 'image/jpeg' });
+    await user.upload(input, file2);
+
+    await waitFor(() => {
+      expect(screen.getByText(/1\. test2\.jpg/)).toBeInTheDocument();
+    });
+  });
+
+  it('shows total file size for multiple files', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    // Create files with known sizes
+    const file1 = new File(['x'.repeat(1024 * 1024)], 'test1.jpg', {
+      type: 'image/jpeg',
+    }); // 1 MiB
+    const file2 = new File(['x'.repeat(2 * 1024 * 1024)], 'test2.jpg', {
+      type: 'image/jpeg',
+    }); // 2 MiB
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    await waitFor(() => {
+      expect(screen.getByText('2 files selected')).toBeInTheDocument();
+      expect(screen.getByText(/Total: 3\.00 MiB/)).toBeInTheDocument();
+    });
+  });
 });

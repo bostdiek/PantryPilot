@@ -71,10 +71,17 @@ function handleUploadError(status: number, statusText: string): ApiErrorImpl {
 /**
  * Creates FormData for image upload.
  * Centralizes FormData creation to ensure consistency.
+ * Supports both single file (legacy) and multiple files.
  */
-function createImageUploadFormData(file: File): FormData {
+function createImageUploadFormData(files: File | File[]): FormData {
   const formData = new FormData();
-  formData.append('files', file); // Backend expects 'files' not 'file'
+  const fileArray = Array.isArray(files) ? files : [files];
+  
+  // Backend expects 'files' field name (supports multiple)
+  fileArray.forEach((file) => {
+    formData.append('files', file);
+  });
+  
   return formData;
 }
 
@@ -400,14 +407,14 @@ export async function extractRecipeStreamFetch(
  * This is the preferred method for better UX with progress feedback.
  * Uses the correct backend API flow: POST to upload image, then GET to stream progress.
  *
- * @param file - The image file to extract the recipe from
+ * @param files - The image file(s) to extract the recipe from (supports multiple files)
  * @param onProgress - Callback for progress updates
  * @param onComplete - Callback for completion with signed_url and draft_id
  * @param onError - Callback for error handling
  * @returns AbortController that can be used to cancel the request
  */
 export async function extractRecipeFromImageStream(
-  file: File,
+  files: File | File[],
   onProgress: (event: SSEEvent) => void,
   onComplete: (signedUrl: string, draftId: string) => void,
   onError: (error: ApiErrorImpl) => void
@@ -417,8 +424,8 @@ export async function extractRecipeFromImageStream(
   const API_BASE_URL = getApiBaseUrl();
 
   try {
-    // Step 1: Upload the image using POST endpoint to get draft_id
-    const formData = createImageUploadFormData(file);
+    // Step 1: Upload the image(s) using POST endpoint to get draft_id
+    const formData = createImageUploadFormData(files);
 
     const uploadResponse = await fetch(
       `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
@@ -563,13 +570,13 @@ export async function extractRecipeFromImageStream(
  * Extract recipe from image using standard POST request (fallback method).
  * Use this when SSE is not available or as a fallback.
  *
- * @param file - The image file to extract the recipe from
+ * @param files - The image file(s) to extract the recipe from (supports multiple files)
  * @returns Promise with the draft response containing signed_url
  */
 export async function extractRecipeFromImage(
-  file: File
+  files: File | File[]
 ): Promise<AIDraftResponse> {
-  const formData = createImageUploadFormData(file);
+  const formData = createImageUploadFormData(files);
   const headers = getAuthHeaders();
   const API_BASE_URL = getApiBaseUrl();
 
