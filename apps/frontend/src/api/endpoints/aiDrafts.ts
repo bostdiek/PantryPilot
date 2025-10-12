@@ -77,12 +77,12 @@ function handleUploadError(status: number, statusText: string): ApiErrorImpl {
 export function createImageUploadFormData(files: File | File[]): FormData {
   const formData = new FormData();
   const fileArray = Array.isArray(files) ? files : [files];
-  
+
   // Backend expects 'files' field name (supports multiple)
   fileArray.forEach((file) => {
     formData.append('files', file);
   });
-  
+
   return formData;
 }
 

@@ -64,7 +64,9 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     const allFiles = [...selectedFiles, ...incomingFiles];
 
     // Validate file types
-    const invalidFiles = allFiles.filter((file) => !file.type.startsWith('image/'));
+    const invalidFiles = allFiles.filter(
+      (file) => !file.type.startsWith('image/')
+    );
     if (invalidFiles.length > 0) {
       setError(
         `Please select only image files (JPEG, PNG, etc.). Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
@@ -232,7 +234,9 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   };
 
   const handleRemoveFile = (indexToRemove: number) => {
-    setSelectedFiles((prev) => prev.filter((_, index) => index !== indexToRemove));
+    setSelectedFiles((prev) =>
+      prev.filter((_, index) => index !== indexToRemove)
+    );
   };
 
   const handleClearAll = () => {
@@ -261,7 +265,8 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
         <div className="space-y-2">
           <p className="text-sm text-gray-700">
             Select one or more images of a recipe to automatically extract the
-            recipe details. You can upload multiple photos for multi-page recipes.
+            recipe details. You can upload multiple photos for multi-page
+            recipes.
           </p>
           <div className="rounded-md bg-blue-50 p-3">
             <p className="text-xs text-blue-800">
@@ -288,26 +293,17 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
             <div className="flex items-center justify-between rounded-md border border-gray-200 bg-gray-50 p-3">
               <div className="text-sm">
                 <p className="font-medium text-gray-900">
-                  {selectedFiles.length} file{selectedFiles.length !== 1 ? 's' : ''} selected
+                  {selectedFiles.length} file
+                  {selectedFiles.length !== 1 ? 's' : ''} selected
                 </p>
-                <p className="text-gray-500">
-                  Total: {totalSizeMiB} MiB
-                </p>
+                <p className="text-gray-500">Total: {totalSizeMiB} MiB</p>
               </div>
               {!isLoading && (
                 <div className="flex space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleButtonClick}
-                  >
+                  <Button variant="ghost" size="sm" onClick={handleButtonClick}>
                     Add More
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleClearAll}
-                  >
+                  <Button variant="ghost" size="sm" onClick={handleClearAll}>
                     Clear All
                   </Button>
                 </div>

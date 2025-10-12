@@ -268,7 +268,7 @@ describe('aiDrafts endpoints', () => {
     it('creates FormData with single file', () => {
       const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
       const formData = createImageUploadFormData(file);
-      
+
       // FormData.getAll returns all values for a given key
       const files = formData.getAll('files');
       expect(files).toHaveLength(1);
@@ -279,9 +279,9 @@ describe('aiDrafts endpoints', () => {
       const file1 = new File(['test1'], 'test1.jpg', { type: 'image/jpeg' });
       const file2 = new File(['test2'], 'test2.jpg', { type: 'image/jpeg' });
       const file3 = new File(['test3'], 'test3.jpg', { type: 'image/jpeg' });
-      
+
       const formData = createImageUploadFormData([file1, file2, file3]);
-      
+
       const files = formData.getAll('files');
       expect(files).toHaveLength(3);
       expect(files[0]).toBe(file1);
@@ -292,7 +292,7 @@ describe('aiDrafts endpoints', () => {
     it('uses "files" field name for backend compatibility', () => {
       const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
       const formData = createImageUploadFormData(file);
-      
+
       // Check that the field name is 'files' not 'file'
       expect(formData.has('files')).toBe(true);
       expect(formData.has('file')).toBe(false);
