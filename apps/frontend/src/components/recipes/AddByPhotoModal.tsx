@@ -69,7 +69,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     );
     if (invalidFiles.length > 0) {
       setError(
-        `Please select only image files (JPEG, PNG, etc.). Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
+        `Please select only image files. Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
       );
       e.currentTarget.value = '';
       return;
@@ -82,7 +82,9 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     if (oversizedFiles.length > 0) {
       const maxSizeMiB = (PER_FILE_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
       setError(
-        `File size too large. Max ${maxSizeMiB} MiB per file. Oversized: ${oversizedFiles.map((f) => f.name).join(', ')}`
+        `File size too large. Max ${maxSizeMiB} MiB per file. Oversized: ${oversizedFiles
+          .map((f) => `${f.name} (${(f.size / (1024 * 1024)).toFixed(2)} MiB)`)
+          .join(', ')}`
       );
       e.currentTarget.value = '';
       return;

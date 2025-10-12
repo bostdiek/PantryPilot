@@ -72,7 +72,8 @@ function handleUploadError(status: number, statusText: string): ApiErrorImpl {
  * Creates FormData for image upload.
  * Centralizes FormData creation to ensure consistency.
  * Supports both single file (legacy) and multiple files.
- * @internal Exported for testing purposes only
+ *
+ * Note: Exported for testing purposes only.
  */
 export function createImageUploadFormData(files: File | File[]): FormData {
   const formData = new FormData();
