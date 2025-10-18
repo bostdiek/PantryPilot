@@ -8,7 +8,7 @@ import {
 } from '../../api/endpoints/aiDrafts';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { logger } from '../../lib/logger';
-import { useIsAuthenticated } from '../../stores/useAuthStore';
+import { useIsAuthenticated, useAuthStore } from '../../stores/useAuthStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
@@ -298,6 +298,18 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           },
           (err: ApiErrorImpl) => {
             logger.error('Stream extraction error:', err);
+            // If unauthorized, force logout and redirect to login to re-authenticate
+            if (err?.status === 401) {
+              try {
+                useAuthStore.getState().logout('expired');
+              } catch {
+                /* ignore */
+              }
+              const currentPath = window.location.pathname;
+              navigate(`/login?next=${encodeURIComponent(currentPath)}`);
+              return;
+            }
+
             setError(err.message || 'Failed to extract recipe from image');
             setIsLoading(false);
           }
@@ -338,6 +350,18 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     } catch (err) {
       logger.error('POST extraction error:', err);
       if (err instanceof ApiErrorImpl) {
+        // If unauthorized, logout and redirect to login
+        if (err.status === 401) {
+          try {
+            useAuthStore.getState().logout('expired');
+          } catch {
+            /* ignore */
+          }
+          const currentPath = window.location.pathname;
+          navigate(`/login?next=${encodeURIComponent(currentPath)}`);
+          return;
+        }
+
         setError(err.message);
       } else {
         setError('Failed to extract recipe from image');

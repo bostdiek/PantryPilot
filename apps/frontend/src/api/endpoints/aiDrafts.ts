@@ -423,6 +423,17 @@ export async function extractRecipeFromImageStream(
 ): Promise<AbortController> {
   const abortController = new AbortController();
   const headers = getAuthHeaders();
+  const token = useAuthStore.getState().token;
+  // Log presence (masked) to help diagnose auth failures during uploads
+  try {
+    logger.debug(
+      'extractRecipeFromImageStream auth token present:',
+      Boolean(token),
+      token ? `${String(token).slice(0, 8)}...` : null
+    );
+  } catch {
+    /* ignore logging errors */
+  }
   const API_BASE_URL = getApiBaseUrl();
 
   try {
@@ -434,12 +445,42 @@ export async function extractRecipeFromImageStream(
       {
         method: 'POST',
         headers,
+        // Include cookies for same-origin or cross-site sessions when applicable
+        // (some deployments use cookie-based session auth rather than Bearer tokens)
+        credentials: 'include',
         body: formData,
         signal: abortController.signal,
       }
     );
 
     if (!uploadResponse.ok) {
+      // Try to get response text for richer debugging info
+      let respText = '';
+      try {
+        respText = await uploadResponse.text();
+      } catch {
+        /* ignore */
+      }
+      logger.error(
+        'Image upload failed',
+        uploadResponse.status,
+        uploadResponse.statusText,
+        respText
+      );
+
+      // If unauthorized, log the user out (consistent with apiClient) and surface error
+      if (uploadResponse.status === 401) {
+        try {
+          useAuthStore.getState().logout('expired');
+        } catch {
+          /* ignore logout errors */
+        }
+        onError(
+          new ApiErrorImpl('Unauthorized - please sign in', 401, 'unauthorized')
+        );
+        return abortController;
+      }
+
       onError(
         handleUploadError(uploadResponse.status, uploadResponse.statusText)
       );
@@ -580,6 +621,16 @@ export async function extractRecipeFromImage(
 ): Promise<AIDraftResponse> {
   const formData = createImageUploadFormData(files);
   const headers = getAuthHeaders();
+  const token = useAuthStore.getState().token;
+  try {
+    logger.debug(
+      'extractRecipeFromImage auth token present:',
+      Boolean(token),
+      token ? `${String(token).slice(0, 8)}...` : null
+    );
+  } catch {
+    /* ignore */
+  }
   const API_BASE_URL = getApiBaseUrl();
 
   const response = await fetch(
@@ -587,11 +638,37 @@ export async function extractRecipeFromImage(
     {
       method: 'POST',
       headers,
+      // Ensure cookies are sent when the backend relies on cookie-based auth
+      credentials: 'include',
       body: formData,
     }
   );
 
   if (!response.ok) {
+    let respText = '';
+    try {
+      respText = await response.text();
+    } catch {
+      /* ignore */
+    }
+    logger.error(
+      'Image POST failed',
+      response.status,
+      response.statusText,
+      respText
+    );
+    if (response.status === 401) {
+      try {
+        useAuthStore.getState().logout('expired');
+      } catch {
+        /* ignore logout errors */
+      }
+      throw new ApiErrorImpl(
+        'Unauthorized - please sign in',
+        401,
+        'unauthorized'
+      );
+    }
     throw handleUploadError(response.status, response.statusText);
   }
 
