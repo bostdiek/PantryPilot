@@ -18,26 +18,44 @@ export function useMediaQuery(query: string): boolean {
     (callback) => {
       // Check if we're in a browser environment
       if (typeof window === 'undefined') {
-        return () => {}; // No-op cleanup for SSR
+        // Server-side rendering - no-op cleanup
+        return () => {};
       }
 
-      const mediaQuery = window.matchMedia(query);
+      // In some test environments window.matchMedia may not be defined
+      const mm = (window as any).matchMedia;
+      if (typeof mm !== 'function') {
+        return () => {};
+      }
+
+      let mediaQuery: MediaQueryList;
+      try {
+        mediaQuery = window.matchMedia(query);
+      } catch (err) {
+        // If matchMedia throws (some envs), no-op
+        // Use debug-level log to avoid lint complaints in test environments
+        console.debug('useMediaQuery: matchMedia threw', err);
+        return () => {};
+      }
 
       // Add listener with fallback for older browsers
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener('change', callback);
-      } else {
+      } else if ((mediaQuery as any).addListener) {
         // Fallback for older browsers that don't support addEventListener
-        mediaQuery.addListener(callback);
+        (mediaQuery as any).addListener(callback);
       }
 
       // Return cleanup function
       return () => {
-        if (mediaQuery.removeEventListener) {
-          mediaQuery.removeEventListener('change', callback);
-        } else {
-          // Fallback for older browsers
-          mediaQuery.removeListener(callback);
+        try {
+          if (mediaQuery.removeEventListener) {
+            mediaQuery.removeEventListener('change', callback);
+          } else if ((mediaQuery as any).removeListener) {
+            (mediaQuery as any).removeListener(callback);
+          }
+        } catch {
+          // ignore cleanup errors
         }
       };
     },
@@ -45,6 +63,11 @@ export function useMediaQuery(query: string): boolean {
       // Get current snapshot
       if (typeof window === 'undefined') {
         return false; // SSR fallback
+      }
+      // In some test environments window.matchMedia may not be defined
+      // Fall back to false when unavailable to avoid throwing.
+      if (typeof (window as any).matchMedia !== 'function') {
+        return false;
       }
       return window.matchMedia(query).matches;
     },

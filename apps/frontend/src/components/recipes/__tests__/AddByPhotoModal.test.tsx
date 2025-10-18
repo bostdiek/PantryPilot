@@ -76,7 +76,7 @@ describe('AddByPhotoModal', () => {
     renderModal();
     expect(screen.getByText('Upload Recipe Photo')).toBeInTheDocument();
     // Wait for the button text which includes an emoji to appear
-    await screen.findByText(/Select Photo/);
+    await screen.findByText(/Take Photo/);
   });
 
   it('does not render when closed', () => {
@@ -86,7 +86,7 @@ describe('AddByPhotoModal', () => {
 
   it('shows file selection button initially', () => {
     renderModal();
-    expect(screen.getByText('📷 Select Photos')).toBeInTheDocument();
+    expect(screen.getByText('📷 Take Photo')).toBeInTheDocument();
   });
 
   it('validates file type on selection', async () => {
@@ -387,7 +387,7 @@ describe('AddByPhotoModal', () => {
     await user.click(clearButton);
 
     await waitFor(() => {
-      expect(screen.getByText('📷 Select Photos')).toBeInTheDocument();
+      expect(screen.getByText('📷 Take Photo')).toBeInTheDocument();
     });
 
     // Select new file
@@ -593,7 +593,7 @@ describe('AddByPhotoModal', () => {
     await user.click(clearButton);
 
     await waitFor(() => {
-      expect(screen.getByText('📷 Select Photos')).toBeInTheDocument();
+      expect(screen.getByText('📷 Take Photo')).toBeInTheDocument();
       expect(screen.queryByText('2 files selected')).not.toBeInTheDocument();
     });
   });
@@ -647,5 +647,77 @@ describe('AddByPhotoModal', () => {
       expect(screen.getByText('2 files selected')).toBeInTheDocument();
       expect(screen.getByText(/Total: 3\.00 MiB/)).toBeInTheDocument();
     });
+  });
+
+  it('allows using the camera input (capture) to select a file', async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const cameraInput = document.querySelector(
+      'input[capture="environment"]'
+    ) as HTMLInputElement;
+    const camFile = new File(['imgdata'], 'cam.jpg', { type: 'image/jpeg' });
+
+    await user.upload(cameraInput, camFile);
+
+    await waitFor(() => {
+      expect(screen.getByText(/1\. cam\.jpg/)).toBeInTheDocument();
+    });
+  });
+
+  it('creates and revokes object URLs for previews on remove and clear', async () => {
+    const user = userEvent.setup();
+
+    const originalCreate = URL.createObjectURL;
+    const originalRevoke = URL.revokeObjectURL;
+
+    const createMock = vi.fn((f: File) => `blob:${f.name}`);
+    const revokeMock = vi.fn();
+
+    // Replace URL.createObjectURL / revokeObjectURL
+    // @ts-ignore - override for test
+    URL.createObjectURL = createMock;
+    // @ts-ignore
+    URL.revokeObjectURL = revokeMock;
+
+    renderModal();
+
+    const file1 = new File(['a'], 'p1.jpg', { type: 'image/jpeg' });
+    const file2 = new File(['b'], 'p2.jpg', { type: 'image/jpeg' });
+    const input = document.querySelector(
+      'input[type="file"]'
+    ) as HTMLInputElement;
+
+    await user.upload(input, [file1, file2]);
+
+    // Previews should be rendered with alt text
+    await waitFor(() => {
+      expect(screen.getByAltText(/Preview of p1.jpg/)).toBeInTheDocument();
+      expect(screen.getByAltText(/Preview of p2.jpg/)).toBeInTheDocument();
+    });
+
+    expect(createMock).toHaveBeenCalledTimes(2);
+
+    // Remove first file -> revoke called for first preview
+    const removeButtons = screen.getAllByRole('button', { name: /Remove/ });
+    await user.click(removeButtons[0]);
+
+    await waitFor(() => {
+      expect(revokeMock).toHaveBeenCalledWith('blob:p1.jpg');
+    });
+
+    // Clear all -> revoke called for remaining preview (p2)
+    const clearButton = screen.getByRole('button', { name: /Clear All/i });
+    await user.click(clearButton);
+
+    await waitFor(() => {
+      expect(revokeMock).toHaveBeenCalledWith('blob:p2.jpg');
+    });
+
+    // Restore originals
+    // @ts-ignore
+    URL.createObjectURL = originalCreate;
+    // @ts-ignore
+    URL.revokeObjectURL = originalRevoke;
   });
 });
