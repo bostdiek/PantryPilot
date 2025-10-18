@@ -423,17 +423,6 @@ export async function extractRecipeFromImageStream(
 ): Promise<AbortController> {
   const abortController = new AbortController();
   const headers = getAuthHeaders();
-  const token = useAuthStore.getState().token;
-  // Log presence (masked) to help diagnose auth failures during uploads
-  try {
-    logger.debug(
-      'extractRecipeFromImageStream auth token present:',
-      Boolean(token),
-      token ? `${String(token).slice(0, 8)}...` : null
-    );
-  } catch {
-    /* ignore logging errors */
-  }
   const API_BASE_URL = getApiBaseUrl();
 
   try {
@@ -621,16 +610,7 @@ export async function extractRecipeFromImage(
 ): Promise<AIDraftResponse> {
   const formData = createImageUploadFormData(files);
   const headers = getAuthHeaders();
-  const token = useAuthStore.getState().token;
-  try {
-    logger.debug(
-      'extractRecipeFromImage auth token present:',
-      Boolean(token),
-      token ? `${String(token).slice(0, 8)}...` : null
-    );
-  } catch {
-    /* ignore */
-  }
+  // auth headers are handled by getAuthHeaders(); no debug logging here
   const API_BASE_URL = getApiBaseUrl();
 
   const response = await fetch(
