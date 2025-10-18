@@ -208,7 +208,9 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       incomingFiles.map((f) => ({ name: f.name, type: f.type }))
     );
     if (incomingFiles.length === 0) {
-      setError('Please select only image files');
+      // User cancelled the file picker (no files selected). Don't show an error;
+      // real validation (invalid MIME types, sizes, etc.) happens in
+      // processSelectedFiles which will surface helpful errors when needed.
       if (e.currentTarget) e.currentTarget.value = '';
       return;
     }
@@ -219,8 +221,9 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     setInputSource('camera');
     const incomingFiles = Array.from(e.target.files || []);
     if (incomingFiles.length === 0) {
-      // Align with tests which simulate empty selection
-      setError('Please select at least one file');
+      // User cancelled camera file picker - don't surface an error. processSelectedFiles
+      // will show errors for invalid input when applicable.
+      if (e.currentTarget) e.currentTarget.value = '';
       return;
     }
     processSelectedFiles(incomingFiles, e.currentTarget);

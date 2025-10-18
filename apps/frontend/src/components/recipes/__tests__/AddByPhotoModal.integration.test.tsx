@@ -110,14 +110,18 @@ describe('AddByPhotoModal integration', () => {
     const cameraInput = document.querySelector(
       'input[capture="environment"]'
     ) as HTMLInputElement;
-    // Simulate error: no file selected by firing a change event with empty FileList
+    // Simulate user cancelling camera picker: no file selected. Component should
+    // not surface an error for a cancelled picker; validation only occurs for
+    // deliberate selections. Dispatch change with empty files.
     const event = new Event('change', { bubbles: true });
     Object.defineProperty(cameraInput, 'files', { value: [], writable: false });
     cameraInput.dispatchEvent(event);
     await waitFor(() => {
       expect(
-        screen.getByText(/Please select at least one file/)
-      ).toBeInTheDocument();
+        screen.queryByText(
+          /Please select at least one file|Please select only image files/i
+        )
+      ).toBeNull();
     });
   });
 });
