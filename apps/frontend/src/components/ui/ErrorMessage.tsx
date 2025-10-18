@@ -10,7 +10,12 @@ interface ErrorMessageProps {
 export const ErrorMessage: React.FC<ErrorMessageProps> = ({
   message = 'Something went wrong.',
 }) => (
-  <div className="flex items-center justify-center">
+  <div
+    className="flex items-center justify-center"
+    role="alert"
+    aria-live="assertive"
+    data-testid="error-message"
+  >
     <p className="font-medium text-red-600">{message}</p>
   </div>
 );

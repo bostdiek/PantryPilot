@@ -27,6 +27,30 @@ import {
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
 
+// Sanitize errors before showing to users to avoid leaking internal details.
+function sanitizeErrorMessage(
+  err: unknown,
+  fallback = 'An unexpected error occurred. Please try again.'
+) {
+  // Always log full error for diagnostics
+  logger.error('Sanitized error (original):', err);
+
+  if (err instanceof Error) {
+    const raw = err.message || fallback;
+    // Remove newlines and excessive whitespace
+    const single = raw.replace(/\s+/g, ' ').trim();
+    // If it looks like a stack trace or contains likely secrets, return fallback
+    if (/stack|trace|token=|password|secret|sql|exception/i.test(single)) {
+      return fallback;
+    }
+    // Limit length to avoid exposing long internal messages
+    if (single.length > 200) return `${single.slice(0, 200)}...`;
+    return single;
+  }
+
+  return fallback;
+}
+
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
   id: cat,
@@ -325,9 +349,7 @@ const RecipesNewPage: FC = () => {
     } catch (err) {
       logger.error('Failed to create recipe:', err);
       setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to create recipe. Please try again.'
+        sanitizeErrorMessage(err, 'Failed to create recipe. Please try again.')
       );
     } finally {
       setIsSubmitting(false);
@@ -399,6 +421,13 @@ const RecipesNewPage: FC = () => {
         {apiUnavailable && (
           <div className="mb-4">
             <ErrorMessage message="⚠️ Backend service unavailable — recipe will be saved locally until connection is restored." />
+          </div>
+        )}
+
+        {/* Render validation/server errors here so tests and screen readers can see them */}
+        {error && (
+          <div className="mb-4">
+            <ErrorMessage message={error} />
           </div>
         )}
 
@@ -722,11 +751,6 @@ const RecipesNewPage: FC = () => {
 
           {/* Actions */}
           <div className="flex items-center justify-end space-x-2">
-            {error && (
-              <div className="mr-auto" role="alert" aria-live="polite">
-                <ErrorMessage message={error} />
-              </div>
-            )}
             <Button
               type="button"
               variant="ghost"
