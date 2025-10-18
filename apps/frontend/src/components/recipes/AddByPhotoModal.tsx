@@ -8,7 +8,7 @@ import {
 } from '../../api/endpoints/aiDrafts';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { logger } from '../../lib/logger';
-import { useIsAuthenticated, useAuthStore } from '../../stores/useAuthStore';
+import { useAuthStore, useIsAuthenticated } from '../../stores/useAuthStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
