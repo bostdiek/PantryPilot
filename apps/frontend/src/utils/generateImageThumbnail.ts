@@ -16,6 +16,14 @@ export async function generateImageThumbnail(
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
     ctx.drawImage(img, 0, 0, w, h);
+    // Release ImageBitmap GPU resources as soon as possible
+    try {
+      // ImageBitmap.close may not exist in all environments; guard defensively
+      // @ts-ignore
+      if (typeof img.close === 'function') img.close();
+    } catch {
+      /* ignore */
+    }
 
     return await new Promise<Blob | null>((resolve) => {
       canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.8);

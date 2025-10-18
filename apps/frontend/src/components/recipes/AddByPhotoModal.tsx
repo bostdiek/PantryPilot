@@ -173,15 +173,20 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       return `blob:${f.name}`;
     };
 
-    // Build previews async for incomingFiles and append once ready
+    // Build previews in parallel for incomingFiles and append once ready.
+    // Using Promise.all speeds up processing for multiple files and avoids
+    // serial waits and intermediate reflows.
     (async () => {
-      const created: string[] = [];
-      for (const f of incomingFiles) {
-        const url = await createPreviewForFile(f);
-        created.push(url);
+      try {
+        const created: string[] = await Promise.all(
+          incomingFiles.map((f) => createPreviewForFile(f))
+        );
+        previewsRef.current = [...previewsRef.current, ...created];
+        setFilePreviews((prev) => [...prev, ...created]);
+      } catch (err) {
+        // If any preview creation fails, log and continue with partial results.
+        logger.debug('Error creating previews in parallel', err);
       }
-      previewsRef.current = [...previewsRef.current, ...created];
-      setFilePreviews((prev) => [...prev, ...created]);
     })();
 
     setSelectedFiles(allFiles);
