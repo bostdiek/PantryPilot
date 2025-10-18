@@ -27,16 +27,13 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
   }, [selected]);
 
   const imgAlt = `Preview of ${alt}`;
-
   return (
     <div className="group relative m-1">
       <button
         ref={ref}
         type="button"
-        aria-pressed={selected}
-        aria-label={`Preview ${index + 1}: ${alt}`}
         className={[
-          'flex h-24 min-h-[48px] w-24 min-w-[48px] items-center justify-center overflow-hidden rounded bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:outline-none',
+          'inline-flex h-28 w-28 items-center justify-center overflow-hidden rounded-md bg-gray-100',
           'transition duration-150',
           'group-hover:scale-105 group-hover:shadow-lg',
           selected ? 'ring-2 ring-blue-500' : '',
@@ -65,9 +62,10 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
           />
         )}
       </button>
+
       <button
         type="button"
-        aria-label={`Remove ${index + 1}`}
+        aria-label={`Remove ${index + 1}: ${alt || 'image'}`}
         onClick={() => onRemove(index)}
         className="absolute top-1 right-1 rounded bg-white p-1 text-sm opacity-80 shadow transition-opacity hover:opacity-100"
       >

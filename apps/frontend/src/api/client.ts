@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger';
 import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
@@ -53,7 +54,7 @@ class ApiClient {
       : `/${endpoint}`;
     const url = `${this.baseUrl}${normalizedEndpoint}`;
 
-    console.log(`API Request: ${options?.method || 'GET'} ${url}`);
+    logger.debug(`API Request: ${options?.method || 'GET'} ${url}`);
 
     try {
       const headers = {
@@ -66,15 +67,15 @@ class ApiClient {
         headers,
       });
 
-      console.log(`API Response status: ${resp.status}`);
+      logger.debug(`API Response status: ${resp.status}`);
       const responseText = await resp.text();
-      console.log(`API Response text:`, responseText);
+      logger.debug(`API Response text: ${responseText}`);
 
       let body;
       try {
         body = responseText ? JSON.parse(responseText) : {};
       } catch (e) {
-        console.error('Failed to parse JSON response:', e);
+        logger.error('Failed to parse JSON response:', e);
         // Network/parsing errors - throw as native Error for network issues
         throw new Error(`Invalid JSON response from API: ${responseText}`);
       }
@@ -106,13 +107,11 @@ class ApiClient {
           // Log logout event with correlation ID for debugging
           const correlationId = (body as any)?.error?.correlation_id;
           if (correlationId) {
-            console.info(
+            logger.info(
               `Session expired logout triggered (correlation_id: ${correlationId})`
             );
           } else {
-            console.info(
-              'Session expired logout triggered (no correlation_id)'
-            );
+            logger.info('Session expired logout triggered (no correlation_id)');
           }
           useAuthStore.getState().logout('expired');
         }
@@ -149,11 +148,11 @@ class ApiClient {
             // Log logout event with correlation ID for debugging
             const correlationId = (apiResponse as any)?.error?.correlation_id;
             if (correlationId) {
-              console.info(
+              logger.info(
                 `Session expired logout triggered (correlation_id: ${correlationId})`
               );
             } else {
-              console.info(
+              logger.info(
                 'Session expired logout triggered (no correlation_id)'
               );
             }
@@ -184,7 +183,7 @@ class ApiClient {
       // For native errors (network failures, JSON parsing), wrap them in ApiErrorImpl
       // to ensure callers always receive the same error type
       if (err instanceof Error) {
-        console.error(`Network/parsing error for ${url}:`, err.message);
+        logger.error(`Network/parsing error for ${url}: ${err.message}`);
         throw new ApiErrorImpl(
           `Network error: ${err.message}`,
           undefined,
@@ -204,7 +203,7 @@ class ApiClient {
         err instanceof Error ? err : undefined
       );
 
-      console.error(`API request failed: ${url}`, apiError);
+      logger.error(`API request failed: ${url}`, apiError);
       throw apiError;
     }
   }

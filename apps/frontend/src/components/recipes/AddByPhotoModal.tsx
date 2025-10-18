@@ -80,20 +80,10 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       incomingFiles.map((f) => f.name)
     );
     // Some browsers (and the testing environment) will ignore files that don't match
-    // the input's `accept` attribute resulting in an empty FileList. In that case,
-    // surface a helpful error for the user/tests instead of silently returning.
+    // the input's `accept` attribute resulting in an empty FileList. Treat this as a
+    // cancelled/empty selection and silently return; the input is cleared if provided.
     if (incomingFiles.length === 0) {
-      // If a file input was provided (clearInput), assume the user attempted to select
-      // files but none matched the accept criteria -> show invalid file error.
-      if (
-        clearInput &&
-        clearInput.accept &&
-        clearInput.accept.includes('image')
-      ) {
-        setError('Please select only image files');
-        if (clearInput) clearInput.value = '';
-        return;
-      }
+      if (clearInput) clearInput.value = '';
       return;
     }
 
@@ -111,7 +101,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       );
       // Helpful console output during tests to ensure branch is hit
       // (left intentionally lightweight; removed after debugging if no longer needed)
-      console.log(
+      logger.debug(
         'AddByPhotoModal: invalid files detected',
         invalidFiles.map((f) => f.name)
       );
@@ -203,7 +193,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     setInputSource('file');
     const incomingFiles = Array.from(e.target.files || []);
     // Debugging: log incoming file details to help tests
-    console.log(
+    logger.debug(
       'handleFileSelect incomingFiles',
       incomingFiles.map((f) => ({ name: f.name, type: f.type }))
     );

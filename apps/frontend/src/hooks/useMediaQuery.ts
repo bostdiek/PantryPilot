@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { logger } from '../lib/logger';
 
 /**
  * Custom hook to detect media query matches
@@ -34,7 +35,7 @@ export function useMediaQuery(query: string): boolean {
       } catch (err) {
         // If matchMedia throws (some envs), no-op
         // Use debug-level log to avoid lint complaints in test environments
-        console.debug('useMediaQuery: matchMedia threw', err);
+        logger.debug('useMediaQuery: matchMedia threw', err);
         return () => {};
       }
 
