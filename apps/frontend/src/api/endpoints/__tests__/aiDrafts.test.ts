@@ -1,4 +1,3 @@
-// Use Vitest globals (configured via vitest.config.ts)
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mocks for modules used by aiDrafts
