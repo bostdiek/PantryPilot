@@ -1,4 +1,4 @@
-import { type FC, useEffect, useRef } from 'react';
+import { type FC, useEffect, useMemo, useRef } from 'react';
 
 export interface ImageThumbnailProps {
   src?: string | null;
@@ -26,7 +26,20 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
     if (selected) ref.current?.focus();
   }, [selected]);
 
-  const imgAlt = `Preview of ${alt}`;
+  // Sanitize alt/aria-label text to mitigate potential injection of angle brackets or control chars.
+  // We preserve most unicode (including emoji and non-latin scripts) while stripping control chars
+  // and angle brackets that could interfere with assistive tech parsing.
+  const sanitizeAlt = (value: string): string => {
+    // Remove angle brackets, NULL, and collapse newlines; avoid broad control-char regex to satisfy lint rules.
+    const cleaned = value
+      .replace(/</g, '')
+      .replace(/>/g, '')
+      .replace(/\0/g, '')
+      .replace(/[\r\n]+/g, ' ');
+    return cleaned.slice(0, 200).trim() || 'image';
+  };
+  const sanitizedAlt = useMemo(() => sanitizeAlt(alt), [alt]);
+  const imgAlt = `Preview of ${sanitizedAlt}`;
   // Validate image source to mitigate DOM-based XSS and excessive inline payloads.
   // Rules:
   // 1. Allow http/https and blob protocols (browser enforces same-origin / CSP policies).
@@ -90,7 +103,13 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
             aria-label="Loading thumbnail"
           />
         ) : error ? (
-          <span className="text-2xl text-red-500" aria-label="Thumbnail error">
+          <span
+            className="text-2xl text-red-500"
+            aria-label="Thumbnail error"
+            role="img"
+            aria-hidden={false}
+          >
+            {/* Static emoji icon; not user-controlled */}
             ⚠️
           </span>
         ) : // Only render the image when we have a validated safe src. If not, render nothing.
@@ -99,7 +118,15 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
             src={safeSrc}
             alt={imgAlt}
             className="h-full w-full object-cover"
+            loading="lazy"
+            decoding="async"
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
+            draggable={false}
+            width={112}
+            height={112}
             onError={({ currentTarget }) => {
+              // Hide broken image but do not expose underlying alt text in a way that could be misinterpreted.
               (currentTarget as HTMLImageElement).style.display = 'none';
             }}
           />
@@ -108,7 +135,7 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
 
       <button
         type="button"
-        aria-label={`Remove ${index + 1}: ${alt || 'image'}`}
+        aria-label={`Remove ${index + 1}: ${sanitizedAlt || 'image'}`}
         onClick={() => onRemove(index)}
         className="absolute top-1 right-1 rounded bg-white p-1 text-sm opacity-80 shadow transition-opacity hover:opacity-100"
       >
