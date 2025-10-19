@@ -57,6 +57,8 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  // Track swipe start position locally (avoid polluting global namespace)
+  const swipeStartXRef = useRef<number | null>(null);
 
   const handleClose = () => {
     // Cancel any ongoing stream
@@ -309,6 +311,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               navigate(`/login?next=${encodeURIComponent(currentPath)}`);
               setIsLoading(false);
               return;
+            }
 
             setError(err.message || 'Failed to extract recipe from image');
             setIsLoading(false);
@@ -697,12 +700,14 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
                 // Basic swipe gesture for mobile: left/right to change focus
                 const touch = e.touches?.[0];
                 if (!touch) return;
-                (window as any)._swipeStartX = touch.clientX;
+                // Store starting X position; ignore multi-touch
+                swipeStartXRef.current = touch.clientX;
               }}
               onTouchEnd={(e) => {
                 const touch = e.changedTouches?.[0];
                 if (!touch || focusedThumbnailIndex === null) return;
-                const startX = (window as any)._swipeStartX;
+                const startX = swipeStartXRef.current;
+                if (startX == null) return; // No valid start recorded
                 const deltaX = touch.clientX - startX;
                 if (Math.abs(deltaX) > 30) {
                   let next = focusedThumbnailIndex;
@@ -715,6 +720,11 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
                   if (next !== focusedThumbnailIndex)
                     setFocusedThumbnailIndex(next);
                 }
+                // Reset after handling
+                swipeStartXRef.current = null;
+              }}
+              onTouchCancel={() => {
+                swipeStartXRef.current = null;
               }}
             >
               {selectedFiles.map((file, index) => {

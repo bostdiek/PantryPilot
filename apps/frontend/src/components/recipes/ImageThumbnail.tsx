@@ -27,24 +27,45 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
   }, [selected]);
 
   const imgAlt = `Preview of ${alt}`;
-  // Only allow safe image source schemes to prevent DOM-based XSS via javascript: URIs
+  // Validate image source to mitigate DOM-based XSS and excessive inline payloads.
+  // Rules:
+  // 1. Allow http/https and blob protocols (browser enforces same-origin / CSP policies).
+  // 2. Allow data URIs ONLY for specific image MIME types (png, jpeg, webp, gif) and below a size threshold.
+  // 3. Reject everything else (including javascript:, ftp:, file:, etc.).
+  // 4. If parsing fails, treat as unsafe.
   const isSafeImageSrc = (value?: string | null): value is string => {
     if (!value) return false;
+    let protocol: string;
     try {
-      // Attempt to parse as URL to get protocol when possible
-      // For data: and blob: URLs, URL constructor works in modern browsers
+      // Use window.location.href as base so relative URLs resolve correctly (still protocol http/https)
       const parsed = new URL(value, window.location.href);
-      const protocol = parsed.protocol.toLowerCase();
-      return (
-        protocol === 'http:' ||
-        protocol === 'https:' ||
-        protocol === 'blob:' ||
-        protocol === 'data:'
-      );
+      protocol = parsed.protocol.toLowerCase();
     } catch {
-      // If URL parsing fails, reject the value as unsafe
       return false;
     }
+
+    if (protocol === 'http:' || protocol === 'https:' || protocol === 'blob:') {
+      return true;
+    }
+
+    if (protocol === 'data:') {
+      // Enforce MIME whitelist + size cap (approximate) to avoid huge inline payloads.
+      // Example valid prefix: data:image/png;base64,iVBOR...
+      const allowedMimePattern = /^data:image\/(png|jpe?g|webp|gif);base64,/i;
+      if (!allowedMimePattern.test(value)) return false;
+      // Rough size calculation: base64 expands ~4/3; compute bytes from length after comma.
+      const commaIndex = value.indexOf(',');
+      if (commaIndex === -1) return false;
+      const base64Data = value.substring(commaIndex + 1);
+      // Convert base64 length to bytes (ignoring padding nuances for simplicity).
+      const estimatedBytes = Math.floor((base64Data.length * 3) / 4);
+      // Cap inline images to ~1.5MB (tunable). Prevents unbounded memory usage.
+      const MAX_INLINE_BYTES = 1.5 * 1024 * 1024; // 1.5 MiB
+      if (estimatedBytes > MAX_INLINE_BYTES) return false;
+      return true;
+    }
+
+    return false;
   };
 
   const safeSrc = isSafeImageSrc(src) ? src : undefined;
