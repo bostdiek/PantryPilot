@@ -32,8 +32,10 @@ function sanitizeErrorMessage(
   err: unknown,
   fallback = 'An unexpected error occurred. Please try again.'
 ) {
-  // Always log full error for diagnostics
-  logger.error('Sanitized error (original):', err);
+  // Only log full error in development mode to avoid leaking sensitive info in production
+  if (process.env.NODE_ENV === 'development') {
+    logger.error('Sanitized error (original):', err);
+  }
 
   if (err instanceof Error) {
     const raw = err.message || fallback;
