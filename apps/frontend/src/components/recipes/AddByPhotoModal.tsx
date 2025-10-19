@@ -6,13 +6,13 @@ import {
   getDraftByIdOwner,
   isSafeInternalPath,
 } from '../../api/endpoints/aiDrafts';
+import { useImageSelection } from '../../hooks/useImageSelection';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { logger } from '../../lib/logger';
 import { useAuthStore, useIsAuthenticated } from '../../stores/useAuthStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
-import { generateImageThumbnail } from '../../utils/generateImageThumbnail';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ErrorMessage } from '../ui/ErrorMessage';
@@ -21,9 +21,7 @@ import ImageThumbnail from './ImageThumbnail';
 // Prefer streaming for better UX with progress updates, fallback to POST if unavailable
 const USE_STREAMING = true;
 
-// File size limits (matching backend constraints)
-const PER_FILE_SIZE_LIMIT = 8 * 1024 * 1024; // 8 MiB per file
-const COMBINED_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MiB total
+// (File size limits enforced inside useImageSelection)
 
 interface AddByPhotoModalProps {
   isOpen: boolean;
@@ -43,12 +41,20 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [showCameraPreview, setShowCameraPreview] = useState(false);
   const mediaStreamRef = useRef<MediaStream | null>(null);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  // Image selection & preview management (extracted hook)
+  const {
+    selectedFiles,
+    previews: filePreviews,
+    processSelectedFiles,
+    removeFile: handleRemoveFile,
+    clearAll: handleClearAll,
+    totalSizeMiB,
+  } = useImageSelection({
+    onError: (msg) => setError(msg),
+  });
   const [inputSource, setInputSource] = useState<'camera' | 'file' | null>(
     null
   );
-  const [filePreviews, setFilePreviews] = useState<string[]>([]);
-  const previewsRef = useRef<string[]>([]);
   const [focusedThumbnailIndex, setFocusedThumbnailIndex] = useState<
     number | null
   >(null);
@@ -66,134 +72,11 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       abortController.abort();
       setAbortController(null);
     }
-    setSelectedFiles([]);
+    handleClearAll();
     setError(null);
     setProgressMessages([]);
     setIsLoading(false);
     onClose();
-  };
-
-  const processSelectedFiles = (
-    incomingFiles: File[],
-    clearInput?: HTMLInputElement | null
-  ) => {
-    logger.debug(
-      'processSelectedFiles called',
-      incomingFiles.map((f) => f.name)
-    );
-    // Some browsers (and the testing environment) will ignore files that don't match
-    // the input's `accept` attribute resulting in an empty FileList. Treat this as a
-    // cancelled/empty selection and silently return; the input is cleared if provided.
-    if (incomingFiles.length === 0) {
-      if (clearInput) clearInput.value = '';
-      return;
-    }
-
-    // Merge with existing files for "Add More" functionality
-    const allFiles = [...selectedFiles, ...incomingFiles];
-
-    // Validate file types
-    const invalidFiles = allFiles.filter(
-      (file) => !file.type.startsWith('image/')
-    );
-    if (invalidFiles.length > 0) {
-      logger.debug(
-        'processSelectedFiles invalid files',
-        invalidFiles.map((f) => f.name)
-      );
-      // Helpful console output during tests to ensure branch is hit
-      // (left intentionally lightweight; removed after debugging if no longer needed)
-      logger.debug(
-        'AddByPhotoModal: invalid files detected',
-        invalidFiles.map((f) => f.name)
-      );
-      setError(
-        `Please select only image files. Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
-      );
-      if (clearInput) clearInput.value = '';
-      return;
-    }
-
-    // Validate individual file sizes
-    const oversizedFiles = allFiles.filter(
-      (file) => file.size > PER_FILE_SIZE_LIMIT
-    );
-    if (oversizedFiles.length > 0) {
-      const maxSizeMiB = (PER_FILE_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
-      setError(
-        `File size too large. Max ${maxSizeMiB} MiB per file. Oversized: ${oversizedFiles
-          .map((f) => `${f.name} (${(f.size / (1024 * 1024)).toFixed(2)} MiB)`)
-          .join(', ')}`
-      );
-      if (clearInput) clearInput.value = '';
-      return;
-    }
-
-    // Validate combined file size
-    const totalSize = allFiles.reduce((sum, file) => sum + file.size, 0);
-    if (totalSize > COMBINED_SIZE_LIMIT) {
-      const maxTotalMiB = (COMBINED_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
-      const currentTotalMiB = (totalSize / (1024 * 1024)).toFixed(2);
-      setError(
-        `Combined file size (${currentTotalMiB} MiB) exceeds limit of ${maxTotalMiB} MiB. Please select fewer or smaller files.`
-      );
-      if (clearInput) clearInput.value = '';
-      return;
-    }
-
-    // (previous safeCreateObjectURL removed - using generateImageThumbnail or URL.createObjectURL directly)
-
-    // Create thumbnails (resize) when possible to reduce memory and bandwidth
-    const createPreviewForFile = async (f: File): Promise<string> => {
-      try {
-        const thumbBlob = await generateImageThumbnail(f, 150);
-        if (thumbBlob) {
-          if (
-            typeof (URL as any) !== 'undefined' &&
-            typeof (URL as any).createObjectURL === 'function'
-          ) {
-            // @ts-ignore - URL.createObjectURL exists in browsers
-            return URL.createObjectURL(thumbBlob);
-          }
-        }
-      } catch {
-        // ignore and fall back
-      }
-
-      // Fallback to original file object URL or deterministic string for tests
-      try {
-        if (
-          typeof (URL as any) !== 'undefined' &&
-          typeof (URL as any).createObjectURL === 'function'
-        ) {
-          // @ts-ignore
-          return URL.createObjectURL(f);
-        }
-      } catch {
-        // ignore
-      }
-      return `blob:${f.name}`;
-    };
-
-    // Build previews in parallel for incomingFiles and append once ready.
-    // Using Promise.all speeds up processing for multiple files and avoids
-    // serial waits and intermediate reflows.
-    (async () => {
-      try {
-        const created: string[] = await Promise.all(
-          incomingFiles.map((f) => createPreviewForFile(f))
-        );
-        previewsRef.current = [...previewsRef.current, ...created];
-        setFilePreviews((prev) => [...prev, ...created]);
-      } catch (err) {
-        // If any preview creation fails, log and continue with partial results.
-        logger.debug('Error creating previews in parallel', err);
-      }
-    })();
-
-    setSelectedFiles(allFiles);
-    setError(null);
-    if (clearInput) clearInput.value = '';
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
@@ -488,75 +371,9 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     processSelectedFiles([file], null);
   };
 
-  const handleRemoveFile = (indexToRemove: number) => {
-    setSelectedFiles((prev) =>
-      prev.filter((_, index) => index !== indexToRemove)
-    );
-    // Revoke and remove corresponding preview
-    setFilePreviews((prev) => {
-      const url = prev[indexToRemove];
-      if (url) {
-        try {
-          if (
-            typeof (URL as any) !== 'undefined' &&
-            typeof (URL as any).revokeObjectURL === 'function'
-          ) {
-            // @ts-ignore
-            URL.revokeObjectURL(url);
-          }
-        } catch {
-          // ignore
-        }
-      }
-      const next = prev.filter((_, i) => i !== indexToRemove);
-      previewsRef.current = next.slice();
-      return next;
-    });
-  };
+  // (Preview cleanup & removal handled inside useImageSelection)
 
-  const handleClearAll = () => {
-    // Revoke all previews
-    previewsRef.current.forEach((url) => {
-      try {
-        if (
-          typeof (URL as any) !== 'undefined' &&
-          typeof (URL as any).revokeObjectURL === 'function'
-        ) {
-          // @ts-ignore
-          URL.revokeObjectURL(url);
-        }
-      } catch {
-        // ignore
-      }
-    });
-    previewsRef.current = [];
-    setFilePreviews([]);
-    setSelectedFiles([]);
-  };
-
-  // Cleanup object URLs on unmount
-  useEffect(() => {
-    return () => {
-      previewsRef.current.forEach((url) => {
-        try {
-          if (
-            typeof (URL as any) !== 'undefined' &&
-            typeof (URL as any).revokeObjectURL === 'function'
-          ) {
-            // @ts-ignore
-            URL.revokeObjectURL(url);
-          }
-        } catch {
-          // ignore
-        }
-      });
-      previewsRef.current = [];
-    };
-  }, []);
-
-  // Calculate total size for display
-  const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-  const totalSizeMiB = (totalSize / (1024 * 1024)).toFixed(2);
+  // Total size provided by hook
 
   return (
     <Dialog

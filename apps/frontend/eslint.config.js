@@ -66,9 +66,17 @@ export default [
     languageOptions: {
       parserOptions: {
         tsconfigRootDir: import.meta.dirname,
-        project: ['./tsconfig.eslint.json'],
+        // Include both general and test-specific tsconfigs so test files are part of the program
+        project: ['./tsconfig.eslint.json', './tsconfig.test.json'],
       },
     },
+    ignores: [
+      '**/__tests__/**',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+    ],
     rules: {
       // disable core rule and let typescript-eslint handle it
       'no-unused-vars': 'off',
@@ -80,6 +88,21 @@ export default [
           ignoreRestSiblings: true,
         },
       ],
+    },
+  },
+  // Override for test files: avoid project-based parsing errors by disabling project lookup
+  {
+    files: ['**/__tests__/**/*.{ts,tsx}', '**/*.{test,spec}.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: {
+        tsconfigRootDir: import.meta.dirname,
+        // Omit project to parse with isolated file mode for tests
+      },
+    },
+    rules: {
+      // Disable unused vars entirely for tests (helpers and inline mock params often unused)
+      'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
     },
   },
   reactHooks.configs['recommended-latest'],

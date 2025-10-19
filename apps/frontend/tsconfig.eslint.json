@@ -1,7 +1,15 @@
 {
-  "extends": "./tsconfig.app.json",
   "compilerOptions": {
-    "noEmit": true
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true
   },
   "include": [
     "src",
@@ -9,6 +17,7 @@
     "src/**/*.tsx",
     "src/**/__tests__/**/*.ts",
     "src/**/__tests__/**/*.tsx",
+    "src/hooks/__tests__/useImageSelection.test.tsx",
     "src/**/*.test.ts",
     "src/**/*.test.tsx",
     "vite.config.ts",
