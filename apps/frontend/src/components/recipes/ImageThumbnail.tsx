@@ -27,6 +27,27 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
   }, [selected]);
 
   const imgAlt = `Preview of ${alt}`;
+  // Only allow safe image source schemes to prevent DOM-based XSS via javascript: URIs
+  const isSafeImageSrc = (value?: string | null): value is string => {
+    if (!value) return false;
+    try {
+      // Attempt to parse as URL to get protocol when possible
+      // For data: and blob: URLs, URL constructor works in modern browsers
+      const parsed = new URL(value, window.location.href);
+      const protocol = parsed.protocol.toLowerCase();
+      return (
+        protocol === 'http:' ||
+        protocol === 'https:' ||
+        protocol === 'blob:' ||
+        protocol === 'data:'
+      );
+    } catch {
+      // If URL parsing fails, reject the value as unsafe
+      return false;
+    }
+  };
+
+  const safeSrc = isSafeImageSrc(src) ? src : undefined;
   return (
     <div className="group relative m-1">
       <button
@@ -51,16 +72,17 @@ export const ImageThumbnail: FC<ImageThumbnailProps> = ({
           <span className="text-2xl text-red-500" aria-label="Thumbnail error">
             ⚠️
           </span>
-        ) : (
+        ) : // Only render the image when we have a validated safe src. If not, render nothing.
+        safeSrc ? (
           <img
-            src={src ?? undefined}
+            src={safeSrc}
             alt={imgAlt}
             className="h-full w-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
+            onError={({ currentTarget }) => {
+              (currentTarget as HTMLImageElement).style.display = 'none';
             }}
           />
-        )}
+        ) : null}
       </button>
 
       <button
