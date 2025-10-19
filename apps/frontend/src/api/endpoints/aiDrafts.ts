@@ -434,9 +434,9 @@ export async function extractRecipeFromImageStream(
       {
         method: 'POST',
         headers,
-        // Include cookies for same-origin or cross-site sessions when applicable
+        // Include cookies for same-origin sessions only to reduce CSRF risk
         // (some deployments use cookie-based session auth rather than Bearer tokens)
-        credentials: 'include',
+        credentials: 'same-origin',
         body: formData,
         signal: abortController.signal,
       }
