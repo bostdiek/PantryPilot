@@ -619,7 +619,7 @@ export async function extractRecipeFromImage(
       method: 'POST',
       headers,
       // Ensure cookies are sent when the backend relies on cookie-based auth
-      credentials: 'include',
+      credentials: 'same-origin',
       body: formData,
     }
   );
