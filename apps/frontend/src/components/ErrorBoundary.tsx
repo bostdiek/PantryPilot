@@ -1,9 +1,10 @@
 import type { ComponentType, ErrorInfo, ReactNode } from 'react';
 import { Component } from 'react';
+import { logger } from '../lib/logger';
+import { navigateTo } from '../utils/navigation';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Container } from './ui/Container';
-import { navigateTo } from '../utils/navigation';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -44,8 +45,8 @@ export class ErrorBoundary extends Component<
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // Log the error details for debugging (in development only)
     if (import.meta.env.MODE === 'development') {
-      console.error('Error Boundary caught an error:', error);
-      console.error('Error Info:', errorInfo);
+      logger.error('Error Boundary caught an error:', error);
+      logger.error('Error Info:', errorInfo);
     }
 
     // Call optional error reporting callback

@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type FC } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type FC } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   extractRecipeFromImage,
@@ -6,21 +6,22 @@ import {
   getDraftByIdOwner,
   isSafeInternalPath,
 } from '../../api/endpoints/aiDrafts';
+import { useImageSelection } from '../../hooks/useImageSelection';
+import { useIsMobile } from '../../hooks/useMediaQuery';
 import { logger } from '../../lib/logger';
-import { useIsAuthenticated } from '../../stores/useAuthStore';
+import { useAuthStore, useIsAuthenticated } from '../../stores/useAuthStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
 import { Button } from '../ui/Button';
 import { Dialog } from '../ui/Dialog';
 import { ErrorMessage } from '../ui/ErrorMessage';
+import ImageThumbnail from './ImageThumbnail';
 
 // Prefer streaming for better UX with progress updates, fallback to POST if unavailable
 const USE_STREAMING = true;
 
-// File size limits (matching backend constraints)
-const PER_FILE_SIZE_LIMIT = 8 * 1024 * 1024; // 8 MiB per file
-const COMBINED_SIZE_LIMIT = 20 * 1024 * 1024; // 20 MiB total
+// (File size limits enforced inside useImageSelection)
 
 interface AddByPhotoModalProps {
   isOpen: boolean;
@@ -33,13 +34,37 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
 }) => {
   const navigate = useNavigate();
   const isAuthenticated = useIsAuthenticated();
+  const isMobile = useIsMobile();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  // Desktop camera stream state
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [showCameraPreview, setShowCameraPreview] = useState(false);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  // Image selection & preview management (extracted hook)
+  const {
+    selectedFiles,
+    previews: filePreviews,
+    processSelectedFiles,
+    removeFile: handleRemoveFile,
+    clearAll: handleClearAll,
+    totalSizeMiB,
+  } = useImageSelection({
+    onError: (msg) => setError(msg),
+  });
+  const [inputSource, setInputSource] = useState<'camera' | 'file' | null>(
+    null
+  );
+  const [focusedThumbnailIndex, setFocusedThumbnailIndex] = useState<
+    number | null
+  >(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progressMessages, setProgressMessages] = useState<string[]>([]);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+  // Track swipe start position locally (avoid polluting global namespace)
+  const swipeStartXRef = useRef<number | null>(null);
 
   const handleClose = () => {
     // Cancel any ongoing stream
@@ -47,7 +72,7 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       abortController.abort();
       setAbortController(null);
     }
-    setSelectedFiles([]);
+    handleClearAll();
     setError(null);
     setProgressMessages([]);
     setIsLoading(false);
@@ -55,57 +80,33 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
   };
 
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    setInputSource('file');
+    const incomingFiles = Array.from(e.target.files || []);
+    // Debugging: log incoming file details to help tests
+    logger.debug(
+      'handleFileSelect incomingFiles',
+      incomingFiles.map((f) => ({ name: f.name, type: f.type }))
+    );
+    if (incomingFiles.length === 0) {
+      // User cancelled the file picker (no files selected). Don't show an error;
+      // real validation (invalid MIME types, sizes, etc.) happens in
+      // processSelectedFiles which will surface helpful errors when needed.
+      if (e.currentTarget) e.currentTarget.value = '';
+      return;
+    }
+    processSelectedFiles(incomingFiles, e.currentTarget);
+  };
+
+  const handleCameraCapture = (e: ChangeEvent<HTMLInputElement>) => {
+    setInputSource('camera');
     const incomingFiles = Array.from(e.target.files || []);
     if (incomingFiles.length === 0) {
+      // User cancelled camera file picker - don't surface an error. processSelectedFiles
+      // will show errors for invalid input when applicable.
+      if (e.currentTarget) e.currentTarget.value = '';
       return;
     }
-
-    // Merge with existing files for "Add More" functionality
-    const allFiles = [...selectedFiles, ...incomingFiles];
-
-    // Validate file types
-    const invalidFiles = allFiles.filter(
-      (file) => !file.type.startsWith('image/')
-    );
-    if (invalidFiles.length > 0) {
-      setError(
-        `Please select only image files. Invalid: ${invalidFiles.map((f) => f.name).join(', ')}`
-      );
-      e.currentTarget.value = '';
-      return;
-    }
-
-    // Validate individual file sizes
-    const oversizedFiles = allFiles.filter(
-      (file) => file.size > PER_FILE_SIZE_LIMIT
-    );
-    if (oversizedFiles.length > 0) {
-      const maxSizeMiB = (PER_FILE_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
-      setError(
-        `File size too large. Max ${maxSizeMiB} MiB per file. Oversized: ${oversizedFiles
-          .map((f) => `${f.name} (${(f.size / (1024 * 1024)).toFixed(2)} MiB)`)
-          .join(', ')}`
-      );
-      e.currentTarget.value = '';
-      return;
-    }
-
-    // Validate combined file size
-    const totalSize = allFiles.reduce((sum, file) => sum + file.size, 0);
-    if (totalSize > COMBINED_SIZE_LIMIT) {
-      const maxTotalMiB = (COMBINED_SIZE_LIMIT / (1024 * 1024)).toFixed(0);
-      const currentTotalMiB = (totalSize / (1024 * 1024)).toFixed(2);
-      setError(
-        `Combined file size (${currentTotalMiB} MiB) exceeds limit of ${maxTotalMiB} MiB. Please select fewer or smaller files.`
-      );
-      e.currentTarget.value = '';
-      return;
-    }
-
-    setSelectedFiles(allFiles);
-    setError(null);
-    // Clear input value to allow selecting the same files again
-    e.currentTarget.value = '';
+    processSelectedFiles(incomingFiles, e.currentTarget);
   };
 
   const handleUpload = async () => {
@@ -182,6 +183,19 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           },
           (err: ApiErrorImpl) => {
             logger.error('Stream extraction error:', err);
+            // If unauthorized, force logout and redirect to login to re-authenticate
+            if (err?.status === 401) {
+              try {
+                useAuthStore.getState().logout('expired');
+              } catch {
+                /* ignore */
+              }
+              const currentPath = window.location.pathname;
+              navigate(`/login?next=${encodeURIComponent(currentPath)}`);
+              setIsLoading(false);
+              return;
+            }
+
             setError(err.message || 'Failed to extract recipe from image');
             setIsLoading(false);
           }
@@ -222,6 +236,18 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     } catch (err) {
       logger.error('POST extraction error:', err);
       if (err instanceof ApiErrorImpl) {
+        // If unauthorized, logout and redirect to login
+        if (err.status === 401) {
+          try {
+            useAuthStore.getState().logout('expired');
+          } catch {
+            /* ignore */
+          }
+          const currentPath = window.location.pathname;
+          navigate(`/login?next=${encodeURIComponent(currentPath)}`);
+          return;
+        }
+
         setError(err.message);
       } else {
         setError('Failed to extract recipe from image');
@@ -235,22 +261,127 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     fileInputRef.current?.click();
   };
 
-  const handleRemoveFile = (indexToRemove: number) => {
-    setSelectedFiles((prev) =>
-      prev.filter((_, index) => index !== indexToRemove)
+  const handleCameraButtonClick = () => {
+    // On mobile, prefer the capture input which triggers device camera
+    if (isMobile) {
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    // On desktop, if getUserMedia is available, open in-modal camera preview
+    const md = (navigator as any).mediaDevices;
+    if (md && typeof md.getUserMedia === 'function') {
+      setShowCameraPreview(true);
+      // Start stream asynchronously when preview shown via effect
+      return;
+    }
+
+    // Fallback to file chooser if no camera available
+    cameraInputRef.current?.click();
+  };
+
+  // Start/stop media stream when preview is shown/hidden
+  useEffect(() => {
+    let mounted = true;
+    const v = videoRef.current;
+    async function start() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' },
+          audio: false,
+        });
+        mediaStreamRef.current = stream;
+        if (!mounted) return;
+        if (v) {
+          // @ts-ignore - srcObject exists on HTMLVideoElement
+          (v as any).srcObject = stream;
+          // Autoplay may be blocked; try play()
+          try {
+            await v.play();
+          } catch {
+            /* ignore */
+          }
+        }
+      } catch (err) {
+        // If permission denied or no camera, fall back to file input and show error
+        logger.debug('getUserMedia error', err);
+        setError(
+          'Unable to access camera. Please allow camera permissions or use file picker.'
+        );
+        setShowCameraPreview(false);
+      }
+    }
+
+    if (showCameraPreview) start();
+
+    return () => {
+      mounted = false;
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+      }
+      if (v) {
+        try {
+          // detach stream
+          (v as any).srcObject = null;
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+  }, [showCameraPreview]);
+
+  const handleCaptureFromPreview = async () => {
+    const video = videoRef.current;
+    if (!video || !mediaStreamRef.current) {
+      setError('Camera is not available');
+      return;
+    }
+
+    // Draw current video frame to canvas and convert to blob
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setError('Unable to capture image');
+      return;
+    }
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((b) => resolve(b), 'image/jpeg', 0.9)
     );
+    if (!blob) {
+      setError('Failed to capture image');
+      return;
+    }
+
+    // Create a File from the blob so downstream logic expects File objects
+    const file = new File([blob], `camera-${Date.now()}.jpg`, {
+      type: 'image/jpeg',
+    });
+    // Stop preview and stream
+    setShowCameraPreview(false);
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+
+    // Pass to existing processing path
+    processSelectedFiles([file], null);
   };
 
-  const handleClearAll = () => {
-    setSelectedFiles([]);
-  };
+  // (Preview cleanup & removal handled inside useImageSelection)
 
-  // Calculate total size for display
-  const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-  const totalSizeMiB = (totalSize / (1024 * 1024)).toFixed(2);
+  // Total size provided by hook
 
   return (
-    <Dialog isOpen={isOpen} onClose={handleClose} title="Upload Recipe Photo">
+    <Dialog
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Upload Recipe Photo"
+      data-input-source={inputSource ?? undefined}
+    >
       <div className="space-y-4">
         {/* File input (hidden, triggered by button) */}
         <input
@@ -258,7 +389,19 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           type="file"
           accept="image/*"
           multiple
+          aria-label="Choose files"
           onChange={handleFileSelect}
+          className="hidden"
+          disabled={isLoading}
+        />
+
+        {/* Camera input (hidden) - capture attribute restores mobile camera access */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleCameraCapture}
           className="hidden"
           disabled={isLoading}
         />
@@ -279,16 +422,32 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           </div>
         </div>
 
-        {/* File selection button */}
+        {/* File selection buttons (camera + file chooser) */}
         {selectedFiles.length === 0 ? (
-          <Button
-            variant="primary"
-            onClick={handleButtonClick}
-            disabled={isLoading}
-            className="w-full"
+          <div
+            className={`${
+              isMobile ? 'flex flex-col gap-2' : 'grid grid-cols-2 gap-2'
+            }`}
           >
-            📷 Select Photos
-          </Button>
+            <Button
+              variant="primary"
+              onClick={handleCameraButtonClick}
+              disabled={isLoading}
+              className="min-h-[48px] w-full min-w-[48px] text-lg"
+              aria-label="Take photo with camera"
+            >
+              📷 Take Photo
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleButtonClick}
+              disabled={isLoading}
+              className="min-h-[48px] w-full min-w-[48px] text-lg"
+              aria-label="Open file chooser"
+            >
+              📁 Browse Files
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3">
             {/* File list header with summary */}
@@ -312,48 +471,137 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               )}
             </div>
 
-            {/* File list */}
-            <div className="max-h-60 space-y-2 overflow-y-auto">
-              {selectedFiles.map((file, index) => (
-                <div
-                  key={`${file.name}-${index}`}
-                  className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <svg
-                      className="h-5 w-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                      />
-                    </svg>
-                    <div className="text-sm">
-                      <p className="font-medium text-gray-900">
-                        {index + 1}. {file.name}
-                      </p>
-                      <p className="text-gray-500">
-                        {(file.size / (1024 * 1024)).toFixed(2)} MiB
-                      </p>
+            {/* Textual list of filenames (kept for accessibility/tests) */}
+            <div className="mt-2 space-y-1 text-sm text-gray-700">
+              {selectedFiles.map((file, idx) => (
+                <p
+                  key={`name-${file.name}-${idx}`}
+                >{`${idx + 1}. ${file.name}`}</p>
+              ))}
+            </div>
+
+            {/* Thumbnail grid */}
+            <div
+              role="list"
+              aria-label="Selected images"
+              className="grid grid-cols-2 gap-3 p-1 sm:grid-cols-3 md:grid-cols-4"
+              onKeyDown={(e) => {
+                if (focusedThumbnailIndex === null) return;
+                const cols =
+                  window.innerWidth >= 768
+                    ? 4
+                    : window.innerWidth >= 640
+                      ? 3
+                      : 2;
+                let next = focusedThumbnailIndex;
+                if (e.key === 'ArrowRight')
+                  next = Math.min(
+                    selectedFiles.length - 1,
+                    focusedThumbnailIndex + 1
+                  );
+                if (e.key === 'ArrowLeft')
+                  next = Math.max(0, focusedThumbnailIndex - 1);
+                if (e.key === 'ArrowDown')
+                  next = Math.min(
+                    selectedFiles.length - 1,
+                    focusedThumbnailIndex + cols
+                  );
+                if (e.key === 'ArrowUp')
+                  next = Math.max(0, focusedThumbnailIndex - cols);
+                if (next !== focusedThumbnailIndex) {
+                  e.preventDefault();
+                  setFocusedThumbnailIndex(next);
+                }
+              }}
+              onTouchStart={(e) => {
+                // Basic swipe gesture for mobile: left/right to change focus
+                const touch = e.touches?.[0];
+                if (!touch) return;
+                // Store starting X position; ignore multi-touch
+                swipeStartXRef.current = touch.clientX;
+              }}
+              onTouchEnd={(e) => {
+                const touch = e.changedTouches?.[0];
+                if (!touch || focusedThumbnailIndex === null) return;
+                const startX = swipeStartXRef.current;
+                if (startX == null) return; // No valid start recorded
+                const deltaX = touch.clientX - startX;
+                if (Math.abs(deltaX) > 30) {
+                  let next = focusedThumbnailIndex;
+                  if (deltaX < 0)
+                    next = Math.min(
+                      selectedFiles.length - 1,
+                      focusedThumbnailIndex + 1
+                    );
+                  if (deltaX > 0) next = Math.max(0, focusedThumbnailIndex - 1);
+                  if (next !== focusedThumbnailIndex)
+                    setFocusedThumbnailIndex(next);
+                }
+                // Reset after handling
+                swipeStartXRef.current = null;
+              }}
+              onTouchCancel={() => {
+                swipeStartXRef.current = null;
+              }}
+            >
+              {selectedFiles.map((file, index) => {
+                const previewUrl = filePreviews[index] ?? null;
+                const loading = !previewUrl;
+                return (
+                  <div
+                    key={`${file.name}-${index}`}
+                    role="listitem"
+                    className="flex flex-col items-center"
+                  >
+                    <ImageThumbnail
+                      src={previewUrl}
+                      alt={file.name}
+                      index={index}
+                      selected={focusedThumbnailIndex === index}
+                      onRemove={handleRemoveFile}
+                      onFocusRequest={(i) => setFocusedThumbnailIndex(i)}
+                      loading={loading}
+                      error={false}
+                    />
+                    <div className="mt-1 text-center text-xs text-gray-500">
+                      {(file.size / (1024 * 1024)).toFixed(2)} MiB
                     </div>
                   </div>
-                  {!isLoading && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleRemoveFile(index)}
-                      aria-label={`Remove ${file.name}`}
-                    >
-                      ✕
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Desktop camera preview overlay (in-modal) */}
+        {showCameraPreview && (
+          <div className="rounded-md border bg-gray-50 p-3">
+            <p className="mb-2 text-sm font-medium">Camera Preview</p>
+            <div className="flex w-full justify-center">
+              <video
+                ref={videoRef}
+                className="w-full max-w-md rounded bg-black"
+                playsInline
+                muted
+              />
+            </div>
+            <div className="mt-3 flex justify-end space-x-2">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  // Stop and close preview
+                  setShowCameraPreview(false);
+                  if (mediaStreamRef.current) {
+                    mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+                    mediaStreamRef.current = null;
+                  }
+                }}
+              >
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleCaptureFromPreview}>
+                Capture Photo
+              </Button>
             </div>
           </div>
         )}

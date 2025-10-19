@@ -2,6 +2,8 @@
  * Utility functions for detecting and splitting multi-step content in recipe instructions
  */
 
+import { logger } from '../lib/logger';
+
 // Maximum content size for paste detection (50KB)
 const MAX_PASTE_SIZE = 50000;
 // Maximum number of steps to prevent UI freezing
@@ -15,7 +17,7 @@ const MAX_STEPS = 50;
 export function looksMultiStep(text: string): boolean {
   // Performance guard: skip detection for very large content
   if (text.length > MAX_PASTE_SIZE) {
-    console.warn(
+    logger.warn(
       `Paste content too large (${text.length} chars), skipping multi-step detection`
     );
     return false;
@@ -49,7 +51,7 @@ export function looksMultiStep(text: string): boolean {
 export function splitSteps(raw: string): string[] {
   // Performance guard: return single step for very large content
   if (raw.length > MAX_PASTE_SIZE) {
-    console.warn(
+    logger.warn(
       `Paste content too large (${raw.length} chars), treating as single step`
     );
     return [raw.trim()];
@@ -110,7 +112,7 @@ export function splitSteps(raw: string): string[] {
 
   // Performance guard: limit number of steps to prevent UI freezing
   if (cleanedSteps.length > MAX_STEPS) {
-    console.warn(
+    logger.warn(
       `Too many steps detected (${cleanedSteps.length}), limiting to ${MAX_STEPS}`
     );
     return cleanedSteps.slice(0, MAX_STEPS);
