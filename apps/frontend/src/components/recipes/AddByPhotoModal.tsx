@@ -307,8 +307,8 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               }
               const currentPath = window.location.pathname;
               navigate(`/login?next=${encodeURIComponent(currentPath)}`);
+              setIsLoading(false);
               return;
-            }
 
             setError(err.message || 'Failed to extract recipe from image');
             setIsLoading(false);
