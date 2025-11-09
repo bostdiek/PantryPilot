@@ -765,7 +765,6 @@ const MealPlanPage: FC = () => {
           recipes={recipes}
           todayDate={toYyyyMmDd(today)}
           onMarkCooked={(entryId) => useMealPlanStore.getState().markCooked(entryId)}
-          onRemoveEntry={(entryId) => removeEntry(entryId)}
           onRecipeClick={handleRecipeClick}
         />
 

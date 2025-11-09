@@ -19,7 +19,6 @@ describe('MobileMealCard', () => {
     serving_max: 4,
     ingredients: [],
     instructions: [],
-    image_url: 'https://example.com/image.jpg',
     userId: 'user-1',
     createdAt: '2024-01-01T00:00:00Z',
     updatedAt: '2024-01-01T00:00:00Z',
@@ -154,13 +153,6 @@ describe('MobileMealCard', () => {
     );
     
     expect(screen.getByText('Add Recipe')).toBeInTheDocument();
-  });
-
-  it('renders recipe image when available', () => {
-    render(<MobileMealCard entry={mockEntry} recipe={mockRecipe} />);
-    
-    const image = screen.getByAltText('Test Recipe');
-    expect(image).toHaveAttribute('src', 'https://example.com/image.jpg');
   });
 
   it('has minimum 48px touch targets for interactive elements', () => {

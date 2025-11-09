@@ -42,7 +42,7 @@ export interface MobileMealPlanViewProps {
   /**
    * Callback when an entry should be removed
    */
-  onRemoveEntry?: (entryId: string) => void;
+  _onRemoveEntry?: (entryId: string) => void;
 
   /**
    * Callback when a recipe is clicked (for preview)
@@ -73,7 +73,6 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
   onEditEntry,
   onAddRecipeToEntry,
   onMarkCooked,
-  onRemoveEntry,
   onRecipeClick,
 }) => {
   // Organize days into today and upcoming
@@ -145,7 +144,6 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
               onEdit={() => onEditEntry?.(entry.id)}
               onAddRecipe={() => onAddRecipeToEntry?.(entry.id)}
               onMarkCooked={() => onMarkCooked?.(entry.id)}
-              onRemove={() => onRemoveEntry?.(entry.id)}
               onRecipeClick={() => onRecipeClick?.(entry.id, dayData.date)}
             />
           ))

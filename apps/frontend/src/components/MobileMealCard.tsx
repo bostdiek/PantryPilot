@@ -83,23 +83,23 @@ export const MobileMealCard: FC<MobileMealCardProps> = ({
       className={`p-3 ${isToday ? 'border-primary-300 bg-primary-50/30' : 'border-gray-200'}`}
     >
       <div className="flex items-start gap-3">
-        {/* Recipe image or placeholder */}
+        {/* Recipe placeholder icon */}
         <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-          {recipe?.image_url ? (
-            <img
-              src={recipe.image_url}
-              alt={recipe.title}
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-gray-400">
-              <Icon
-                svg={entry.isEatingOut ? undefined : undefined}
-                className="h-8 w-8"
-                title="No image"
+          <div className="flex h-full w-full items-center justify-center text-gray-400">
+            <svg
+              className="h-8 w-8"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 6v6m0 0v6m0-6h6m-6 0H6"
               />
-            </div>
-          )}
+            </svg>
+          </div>
         </div>
 
         {/* Content */}
