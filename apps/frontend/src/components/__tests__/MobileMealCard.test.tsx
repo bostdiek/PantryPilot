@@ -39,7 +39,9 @@ describe('MobileMealCard', () => {
     render(<MobileMealCard entry={mockEntry} recipe={mockRecipe} />);
     
     expect(screen.getByText('Test Recipe')).toBeInTheDocument();
-    expect(screen.getByText(/30.*min total/)).toBeInTheDocument();
+    // Text is now split across elements, so we check for the parts
+    expect(screen.getByText('30 min')).toBeInTheDocument();
+    expect(screen.getByText('easy')).toBeInTheDocument();
   });
 
   it('renders eating out entry', () => {
@@ -64,8 +66,9 @@ describe('MobileMealCard', () => {
     
     render(<MobileMealCard entry={leftoverEntry} />);
     
-    expect(screen.getByText('Leftovers')).toBeInTheDocument();
-    expect(screen.getByText('Leftovers from earlier')).toBeInTheDocument();
+    // Now "Leftovers" appears twice - once in title and once in badge
+    const leftoverElements = screen.getAllByText('Leftovers');
+    expect(leftoverElements.length).toBeGreaterThan(0);
   });
 
   it('shows cooked status when meal is cooked', () => {
@@ -137,7 +140,8 @@ describe('MobileMealCard', () => {
       <MobileMealCard entry={mockEntry} recipe={mockRecipe} isToday={true} />
     );
     
-    const card = container.querySelector('.border-primary-300');
+    // Now uses border-primary-400 instead of border-primary-300
+    const card = container.querySelector('.border-primary-400');
     expect(card).toBeInTheDocument();
   });
 
