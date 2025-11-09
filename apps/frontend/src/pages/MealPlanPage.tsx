@@ -32,6 +32,7 @@ import {
   type ReactNode,
 } from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
+import { MobileMealPlanView } from '../components/MobileMealPlanView';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 import { DaySelectionDialog } from '../components/recipes/DaySelectionDialog';
 import { Button } from '../components/ui/Button';
@@ -758,6 +759,17 @@ const MealPlanPage: FC = () => {
           </div>
         </div>
 
+        {/* Mobile View - Today + Next Few Days */}
+        <MobileMealPlanView
+          currentWeek={currentWeek}
+          recipes={recipes}
+          todayDate={toYyyyMmDd(today)}
+          onMarkCooked={(entryId) => useMealPlanStore.getState().markCooked(entryId)}
+          onRemoveEntry={(entryId) => removeEntry(entryId)}
+          onRecipeClick={handleRecipeClick}
+        />
+
+        {/* Desktop View - Horizontal 7-Day Layout */}
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
@@ -767,7 +779,7 @@ const MealPlanPage: FC = () => {
         >
           {isLoading && <div className="mb-4">Loading weekly plan…</div>}
           {currentWeek && (
-            <div className="overflow-x-auto" ref={scrollRef}>
+            <div className="hidden overflow-x-auto md:block" ref={scrollRef}>
               <div className="flex gap-4 pb-2">
                 {currentWeek.days.map((day) => {
                   const isToday = day.date === toYyyyMmDd(today);
