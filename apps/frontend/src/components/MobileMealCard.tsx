@@ -127,12 +127,12 @@ export const MobileMealCard: FC<MobileMealCardProps> = ({
               onClick={onRecipeClick}
               className="w-full text-left focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 rounded-md transition-colors"
             >
-              <h4 className="truncate text-base font-semibold text-gray-900 hover:text-primary-700 leading-snug">
+              <h4 className="line-clamp-2 text-base font-semibold text-gray-900 hover:text-primary-700 leading-snug">
                 {label}
               </h4>
             </button>
           ) : (
-            <h4 className="truncate text-base font-semibold text-gray-900 leading-snug">{label}</h4>
+            <h4 className="line-clamp-2 text-base font-semibold text-gray-900 leading-snug">{label}</h4>
           )}
           
           {/* Meal type with icon-style badge */}
