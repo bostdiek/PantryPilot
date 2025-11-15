@@ -1,5 +1,5 @@
-import { webcrypto as nodeWebcrypto } from 'node:crypto';
 import { mockAnimationsApi } from 'jsdom-testing-mocks';
+import { webcrypto as nodeWebcrypto } from 'node:crypto';
 import { vi } from 'vitest';
 
 // Polyfill Web Crypto for test runtime if missing (fixes crypto.getRandomValues error)
@@ -10,6 +10,27 @@ if (
   // Assign Node's Web Crypto to the global for tests
 
   (globalThis as any).crypto = nodeWebcrypto as unknown as Crypto;
+}
+
+// Polyfill window.matchMedia for jsdom in test environments. Some hooks and
+// components branch on media queries (mobile vs desktop). Providing a
+// deterministic implementation prevents CI from rendering different DOM
+// trees compared to local runs.
+if (typeof (window as any).matchMedia === 'undefined') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
 }
 
 // Setup animation mock for Headless UI
