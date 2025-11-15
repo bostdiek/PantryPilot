@@ -10,9 +10,9 @@ import ChefHatIcon from '../components/ui/icons/chef-hat.svg?react';
 import ChevronRightIcon from '../components/ui/icons/chevron-right.svg?react';
 import KitchenIcon from '../components/ui/icons/kitchen.svg?react';
 import RestaurantIcon from '../components/ui/icons/restaurant.svg?react';
+import { useDisplayName } from '../stores/useAuthStore';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
-import { useDisplayName } from '../stores/useAuthStore';
 
 const HomePage: React.FC = () => {
   // Get data from stores (already loaded by the route loader)
@@ -120,7 +120,7 @@ const HomePage: React.FC = () => {
                   key={e.id}
                   className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2 text-sm"
                 >
-                  <span className="truncate">{labelForEntry(e)}</span>
+                  <span className="break-words">{labelForEntry(e)}</span>
                   {e.wasCooked ? (
                     <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
                       cooked

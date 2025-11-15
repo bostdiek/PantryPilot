@@ -59,7 +59,7 @@ interface DayData {
 
 /**
  * Mobile-optimized meal plan view with focused daily layout
- * 
+ *
  * Features:
  * - Today's meals prominently displayed
  * - Next few days in collapsible sections
@@ -140,7 +140,6 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
               key={entry.id}
               entry={entry}
               recipe={getRecipeForEntry(entry)}
-              isToday={dayData.isToday}
               onEdit={() => onEditEntry?.(entry.id)}
               onAddRecipe={() => onAddRecipeToEntry?.(entry.id)}
               onMarkCooked={() => onMarkCooked?.(entry.id)}
@@ -154,9 +153,7 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
 
   if (!currentWeek) {
     return (
-      <div className="py-8 text-center text-gray-500">
-        Loading meal plan...
-      </div>
+      <div className="py-8 text-center text-gray-500">Loading meal plan...</div>
     );
   }
 
@@ -164,10 +161,10 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
     <div className="space-y-4 md:hidden">
       {/* Today's meals - prominently featured */}
       {todayData && (
-        <Card className="border-primary-200 bg-gradient-to-r from-primary-50 to-primary-100">
+        <Card className="border-primary-200 from-primary-50 to-primary-100 bg-gradient-to-r">
           <div className="p-4">
-            <h2 className="mb-2 text-xl font-bold text-primary-900">Today</h2>
-            <p className="mb-4 text-sm text-primary-700">
+            <h2 className="text-primary-900 mb-2 text-xl font-bold">Today</h2>
+            <p className="text-primary-700 mb-4 text-sm">
               {formatDate(todayData.date)}
             </p>
             {renderDayMeals(todayData)}

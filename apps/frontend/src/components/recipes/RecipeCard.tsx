@@ -1,10 +1,10 @@
-import { Link } from 'react-router-dom';
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useIsMobile, useIsTablet } from '../../hooks/useMediaQuery';
 import { useTouchFeedback } from '../../hooks/useTouchFeedback';
 import type { Recipe } from '../../types/Recipe';
-import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -91,7 +91,7 @@ export function RecipeCard({
             </div>
 
             {/* Title */}
-            <h3 className="mb-2 line-clamp-2 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
+            <h3 className="mb-2 line-clamp-3 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
               {recipe.title}
             </h3>
 

@@ -623,7 +623,7 @@ const MealPlanPage: FC = () => {
                 className="w-full rounded-sm text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
                 aria-label={`View ${label} recipe preview`}
               >
-                <span className="line-clamp-2 block leading-5 font-medium text-blue-600 hover:text-blue-800">
+                <span className="block leading-5 font-medium break-words text-blue-600 hover:text-blue-800">
                   {label}
                 </span>
                 {meta && (
@@ -634,7 +634,7 @@ const MealPlanPage: FC = () => {
               </button>
             ) : (
               <span>
-                <span className="line-clamp-2 block leading-5 font-medium">
+                <span className="block leading-5 font-medium break-words">
                   {label}
                 </span>
                 {meta && (
@@ -764,7 +764,9 @@ const MealPlanPage: FC = () => {
           currentWeek={currentWeek}
           recipes={recipes}
           todayDate={toYyyyMmDd(today)}
-          onMarkCooked={(entryId) => useMealPlanStore.getState().markCooked(entryId)}
+          onMarkCooked={(entryId) =>
+            useMealPlanStore.getState().markCooked(entryId)
+          }
           onRecipeClick={handleRecipeClick}
         />
 

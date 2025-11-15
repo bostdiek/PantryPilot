@@ -1,7 +1,12 @@
 import clsx from 'clsx';
 import type { ReactNode } from 'react';
 
-export type BadgeVariant = 'primary' | 'secondary' | 'success' | 'warning' | 'danger';
+export type BadgeVariant =
+  | 'primary'
+  | 'secondary'
+  | 'success'
+  | 'warning'
+  | 'danger';
 
 export interface BadgeProps {
   /**

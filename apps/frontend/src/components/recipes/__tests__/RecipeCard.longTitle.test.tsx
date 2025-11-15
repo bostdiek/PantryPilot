@@ -1,8 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { RecipeCard } from '../RecipeCard';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Recipe } from '../../../types/Recipe';
+import { RecipeCard } from '../RecipeCard';
 
 // Mock window.matchMedia for media query hooks
 const mockMatchMedia = vi.fn();
@@ -90,7 +90,7 @@ describe('RecipeCard - Long Title Handling', () => {
     );
 
     const titleElement = screen.getByRole('heading', { level: 3 });
-    expect(titleElement).toHaveClass('line-clamp-2');
+    expect(titleElement).toHaveClass('line-clamp-3');
   });
 
   it('keeps grid layout stable with mixed title lengths', () => {

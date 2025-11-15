@@ -137,11 +137,11 @@ describe('MobileMealPlanView', () => {
 
     // Next Few Days section should be visible
     expect(screen.getByText('Next Few Days')).toBeInTheDocument();
-    
+
     // Tuesday should be collapsible
     expect(screen.getByText('Tuesday')).toBeInTheDocument();
     expect(screen.getByText('2 meals')).toBeInTheDocument();
-    
+
     // Wednesday should be collapsible
     expect(screen.getByText('Wednesday')).toBeInTheDocument();
     expect(screen.getByText('0 meals')).toBeInTheDocument();
@@ -163,7 +163,7 @@ describe('MobileMealPlanView', () => {
 
   it('expands collapsible day sections when clicked', async () => {
     const user = userEvent.setup();
-    
+
     render(
       <MobileMealPlanView
         currentWeek={mockWeeklyPlan}
@@ -187,7 +187,7 @@ describe('MobileMealPlanView', () => {
   it('calls onMarkCooked when mark cooked is clicked', async () => {
     const user = userEvent.setup();
     const onMarkCooked = vi.fn();
-    
+
     render(
       <MobileMealPlanView
         currentWeek={mockWeeklyPlan}
@@ -209,7 +209,7 @@ describe('MobileMealPlanView', () => {
   it('calls onRemoveEntry when remove is clicked', async () => {
     const user = userEvent.setup();
     const onRemoveEntry = vi.fn();
-    
+
     // Expand Tuesday to access its meals
     render(
       <MobileMealPlanView
@@ -228,7 +228,7 @@ describe('MobileMealPlanView', () => {
   it('calls onRecipeClick when recipe is clicked', async () => {
     const user = userEvent.setup();
     const onRecipeClick = vi.fn();
-    
+
     render(
       <MobileMealPlanView
         currentWeek={mockWeeklyPlan}
