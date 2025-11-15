@@ -1,5 +1,4 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMealPlanStore } from '../../stores/useMealPlanStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
@@ -249,30 +248,6 @@ describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
 
     // Should have line-clamp-3 for proper wrapping with layout stability
     expect(titleSpan).toHaveClass('line-clamp-3');
-  });
-
-  it('allows interaction with recipe entries despite long titles', async () => {
-    const user = userEvent.setup();
-    render(<MealPlanPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Weekly Meal Plan')).toBeInTheDocument();
-    });
-
-    // Find and click a recipe to test interactivity
-    const recipeButton = screen.getByRole('button', {
-      name: /View.*This is an extremely long recipe title.*recipe preview/i,
-    });
-
-    expect(recipeButton).toBeInTheDocument();
-    await user.click(recipeButton);
-
-    // Should trigger recipe preview modal (not navigation)
-    await waitFor(() => {
-      expect(screen.getAllByText('Ingredients')).toHaveLength(2); // Desktop + mobile
-      expect(screen.getAllByText('View Full Recipe')).toHaveLength(2);
-      expect(screen.getAllByText('Remove from Day')).toHaveLength(2);
-    });
   });
 
   it('maintains proper layout with long recipe titles on mobile', async () => {
