@@ -33,11 +33,6 @@ export interface MobileMealCardProps {
   onMarkCooked?: () => void;
 
   /**
-   * Callback when the meal should be removed
-   */
-  _onRemove?: () => void;
-
-  /**
    * Callback when the recipe is clicked (for preview)
    */
   onRecipeClick?: () => void;
@@ -163,7 +158,7 @@ export const MobileMealCard: FC<MobileMealCardProps> = ({
                 <Icon
                   svg={PencilIcon}
                   className="h-4 w-4 text-gray-600"
-                  title=""
+                  aria-hidden="true"
                 />
               </Button>
             )}

@@ -23,6 +23,7 @@ import {
 import { Menu, Transition } from '@headlessui/react';
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -67,6 +68,11 @@ const MealPlanPage: FC = () => {
   } = useMealPlanStore();
   const today = useMemo(() => new Date(), []);
   const isMobile = useIsMobile();
+
+  // Store method handlers wrapped in useCallback for stable prop identity
+  const handleMarkCooked = useCallback((entryId: string) => {
+    useMealPlanStore.getState().markCooked(entryId);
+  }, []);
 
   // Week helpers
   function startOfSundayWeek(d: Date): Date {
@@ -623,7 +629,7 @@ const MealPlanPage: FC = () => {
                 className="w-full rounded-sm text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
                 aria-label={`View ${label} recipe preview`}
               >
-                <span className="block leading-5 font-medium break-words text-blue-600 hover:text-blue-800">
+                <span className="line-clamp-3 block leading-5 font-medium text-blue-600 hover:text-blue-800">
                   {label}
                 </span>
                 {meta && (
@@ -634,7 +640,7 @@ const MealPlanPage: FC = () => {
               </button>
             ) : (
               <span>
-                <span className="block leading-5 font-medium break-words">
+                <span className="line-clamp-3 block leading-5 font-medium">
                   {label}
                 </span>
                 {meta && (
@@ -764,9 +770,7 @@ const MealPlanPage: FC = () => {
           currentWeek={currentWeek}
           recipes={recipes}
           todayDate={toYyyyMmDd(today)}
-          onMarkCooked={(entryId) =>
-            useMealPlanStore.getState().markCooked(entryId)
-          }
+          onMarkCooked={handleMarkCooked}
           onRecipeClick={handleRecipeClick}
         />
 

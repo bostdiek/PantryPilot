@@ -120,7 +120,7 @@ const HomePage: React.FC = () => {
                   key={e.id}
                   className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2 text-sm"
                 >
-                  <span className="break-words">{labelForEntry(e)}</span>
+                  <span className="line-clamp-2">{labelForEntry(e)}</span>
                   {e.wasCooked ? (
                     <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
                       cooked

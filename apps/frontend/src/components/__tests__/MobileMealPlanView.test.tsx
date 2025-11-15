@@ -1,9 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { MobileMealPlanView } from '../MobileMealPlanView';
 import type { WeeklyMealPlan } from '../../types/MealPlan';
 import type { Recipe } from '../../types/Recipe';
+import { MobileMealPlanView } from '../MobileMealPlanView';
 
 describe('MobileMealPlanView', () => {
   const mockRecipes: Recipe[] = [
@@ -207,7 +207,6 @@ describe('MobileMealPlanView', () => {
   });
 
   it('calls onRemoveEntry when remove is clicked', async () => {
-    const user = userEvent.setup();
     const onRemoveEntry = vi.fn();
 
     // Expand Tuesday to access its meals

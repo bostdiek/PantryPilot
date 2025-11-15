@@ -40,11 +40,6 @@ export interface MobileMealPlanViewProps {
   onMarkCooked?: (entryId: string) => void;
 
   /**
-   * Callback when an entry should be removed
-   */
-  _onRemoveEntry?: (entryId: string) => void;
-
-  /**
    * Callback when a recipe is clicked (for preview)
    */
   onRecipeClick?: (entryId: string, date: string) => void;

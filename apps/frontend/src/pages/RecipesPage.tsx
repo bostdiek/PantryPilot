@@ -131,9 +131,8 @@ const RecipesPage: FC = () => {
         <div className="space-y-6">
           {/* Recipe Grid */}
           <Grid
-            columns={1}
             gap={6}
-            className="auto-rows-fr sm:grid-cols-2 md:grid-cols-3"
+            className="auto-rows-fr grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
           >
             {paginatedRecipes.map((recipe) => (
               <RecipeCard

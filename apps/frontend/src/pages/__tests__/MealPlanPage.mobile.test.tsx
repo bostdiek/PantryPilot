@@ -247,8 +247,8 @@ describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
     expect(titleSpan).not.toHaveClass('line-clamp-2');
     expect(titleSpan).not.toHaveClass('truncate');
 
-    // Should have break-words for proper wrapping
-    expect(titleSpan).toHaveClass('break-words');
+    // Should have line-clamp-3 for proper wrapping with layout stability
+    expect(titleSpan).toHaveClass('line-clamp-3');
   });
 
   it('allows interaction with recipe entries despite long titles', async () => {
@@ -294,8 +294,8 @@ describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
     );
     expect(longTitleElement).toBeInTheDocument();
 
-    // The element should have break-words class for proper text wrapping
-    expect(longTitleElement.className).toContain('break-words');
+    // The element should have line-clamp-3 class for proper text wrapping with layout stability
+    expect(longTitleElement.className).toContain('line-clamp-3');
   });
 
   it('shows recipe metadata alongside full titles', async () => {
