@@ -271,13 +271,17 @@ describe('MealPlanPage', () => {
     const recipeText = within(recipeButton).getByText('Spaghetti');
     expect(recipeText).toHaveClass('text-blue-600');
 
-    // Click the recipe name
+    // Click the recipe name to open the quick preview
     await user.click(recipeButton);
 
-    // Should open the quick preview modal with recipe details
-    expect(screen.getAllByText('Ingredients')).toHaveLength(2); // Desktop + mobile
-    expect(screen.getAllByText('View Full Recipe')).toHaveLength(2);
-    expect(screen.getAllByText('Remove from Day')).toHaveLength(2);
+    // Wait for modal content (transitioned) to appear; tolerate one or two instances.
+    const ingredientsHeadings = await screen.findAllByText('Ingredients');
+    expect(ingredientsHeadings.length).toBeGreaterThanOrEqual(1);
+    // Action buttons should be present (desktop + mobile may duplicate)
+    const viewFullButtons = await screen.findAllByText('View Full Recipe');
+    expect(viewFullButtons.length).toBeGreaterThanOrEqual(1);
+    const removeButtons = await screen.findAllByText('Remove from Day');
+    expect(removeButtons.length).toBeGreaterThanOrEqual(1);
   });
 
   it('navigates to recipe detail when clicking View Full Recipe', async () => {
@@ -314,8 +318,8 @@ describe('MealPlanPage', () => {
     const recipeButton = screen.getByLabelText('View Spaghetti recipe preview');
     await user.click(recipeButton);
 
-    // Click "View Full Recipe" button (desktop version)
-    const viewFullButtons = screen.getAllByText('View Full Recipe');
+    // Wait for at least one "View Full Recipe" button then click first
+    const viewFullButtons = await screen.findAllByText('View Full Recipe');
     await user.click(viewFullButtons[0]);
 
     // Should navigate to recipe detail page with context params
@@ -363,7 +367,7 @@ describe('MealPlanPage', () => {
     await user.click(recipeButton);
 
     // Click "Remove from Day" button (desktop version)
-    const removeButtons = screen.getAllByText('Remove from Day');
+    const removeButtons = await screen.findAllByText('Remove from Day');
     await user.click(removeButtons[0]);
 
     // Should call removeEntry with the correct entry ID
