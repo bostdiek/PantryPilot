@@ -16,6 +16,8 @@ if (
 // components branch on media queries (mobile vs desktop). Providing a
 // deterministic implementation prevents CI from rendering different DOM
 // trees compared to local runs.
+//
+// The mock can be configured per-test to simulate different viewport sizes.
 if (typeof (window as any).matchMedia === 'undefined') {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -30,6 +32,22 @@ if (typeof (window as any).matchMedia === 'undefined') {
       removeListener: () => {},
       dispatchEvent: () => false,
     }),
+  });
+}
+
+// Helper function to configure matchMedia mock for individual tests
+export function mockMatchMedia(matches: boolean | ((query: string) => boolean)) {
+  const matchFn = typeof matches === 'function' ? matches : () => matches;
+  
+  window.matchMedia = (query: string) => ({
+    matches: matchFn(query),
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
   });
 }
 

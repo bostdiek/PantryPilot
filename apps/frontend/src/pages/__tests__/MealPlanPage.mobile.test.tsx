@@ -1,7 +1,9 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MealPlanState } from '../../stores/useMealPlanStore';
 import { useMealPlanStore } from '../../stores/useMealPlanStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
+import type { Recipe } from '../../types/Recipe';
 import MealPlanPage from '../MealPlanPage';
 
 // Mock router navigation
@@ -95,107 +97,133 @@ describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
     const initialMealPlanState = useMealPlanStore.getState();
     const initialRecipeState = useRecipeStore.getState();
 
-    useMealPlanStore.setState({
-      ...initialMealPlanState,
-      currentWeek: {
-        weekStartDate: '2025-01-12',
-        days: [
+    // Create properly typed mock data
+    const mockWeeklyPlan: MealPlanState['currentWeek'] = {
+      weekStartDate: '2025-01-12',
+      days: [
+        {
+          dayOfWeek: 'Monday',
+          date: '2025-01-13',
+          entries: [
+            {
+              id: 'm1',
+              plannedForDate: '2025-01-13',
+              mealType: 'dinner',
+              isLeftover: false,
+              isEatingOut: false,
+              orderIndex: 0,
+              wasCooked: false,
+              recipeId: 'r1',
+            },
+            {
+              id: 'm2',
+              plannedForDate: '2025-01-13',
+              mealType: 'breakfast',
+              isLeftover: false,
+              isEatingOut: false,
+              orderIndex: 1,
+              wasCooked: false,
+              recipeId: 'r2',
+            },
+          ],
+        },
+        {
+          dayOfWeek: 'Tuesday',
+          date: '2025-01-14',
+          entries: [
+            {
+              id: 'm3',
+              plannedForDate: '2025-01-14',
+              mealType: 'lunch',
+              isLeftover: false,
+              isEatingOut: false,
+              orderIndex: 0,
+              wasCooked: false,
+              recipeId: 'r3',
+            },
+          ],
+        },
+      ],
+    };
+
+    const mockRecipes: Recipe[] = [
+      {
+        id: 'r1',
+        title:
+          'This is an extremely long recipe title that should not be truncated and should be fully visible to users in the mobile meal planning interface so they can identify their planned meals',
+        ingredients: [
           {
-            dayOfWeek: 'Monday',
-            date: '2025-01-13',
-            entries: [
-              {
-                id: 'm1',
-                plannedForDate: '2025-01-13',
-                mealType: 'dinner',
-                isLeftover: false,
-                isEatingOut: false,
-                orderIndex: 0,
-                wasCooked: false,
-                recipeId: 'r1',
-              },
-              {
-                id: 'm2',
-                plannedForDate: '2025-01-13',
-                mealType: 'breakfast',
-                isLeftover: false,
-                isEatingOut: false,
-                orderIndex: 1,
-                wasCooked: false,
-                recipeId: 'r2',
-              },
-            ],
-          },
-          {
-            dayOfWeek: 'Tuesday',
-            date: '2025-01-14',
-            entries: [
-              {
-                id: 'm3',
-                plannedForDate: '2025-01-14',
-                mealType: 'lunch',
-                isLeftover: false,
-                isEatingOut: false,
-                orderIndex: 0,
-                wasCooked: false,
-                recipeId: 'r3',
-              },
-            ],
+            id: 'ing-1',
+            name: 'Pasta',
+            quantity_value: 200,
+            quantity_unit: 'g',
           },
         ],
+        instructions: [],
+        prep_time_minutes: 10,
+        cook_time_minutes: 20,
+        total_time_minutes: 30,
+        difficulty: 'easy',
+        category: 'dinner',
+        serving_min: 2,
+        created_at: new Date(),
+        updated_at: new Date(),
       },
+      {
+        id: 'r2',
+        title: 'Mac and Cheese with Extra Special Ingredients',
+        ingredients: [
+          {
+            id: 'ing-2',
+            name: 'Cheese',
+            quantity_value: 100,
+            quantity_unit: 'g',
+          },
+        ],
+        instructions: [],
+        prep_time_minutes: 5,
+        cook_time_minutes: 20,
+        total_time_minutes: 25,
+        difficulty: 'easy',
+        category: 'dinner',
+        serving_min: 2,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+      {
+        id: 'r3',
+        title: 'Simple Omelette Recipe with Fresh Herbs and Vegetables',
+        ingredients: [
+          {
+            id: 'ing-3',
+            name: 'Eggs',
+            quantity_value: 3,
+            quantity_unit: 'pieces',
+          },
+        ],
+        instructions: [],
+        prep_time_minutes: 5,
+        cook_time_minutes: 10,
+        total_time_minutes: 15,
+        difficulty: 'easy',
+        category: 'breakfast',
+        serving_min: 1,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    ];
+
+    useMealPlanStore.setState({
+      ...initialMealPlanState,
+      currentWeek: mockWeeklyPlan,
       isLoading: false,
       error: null,
-    } as any);
+    });
 
     useRecipeStore.setState({
       ...initialRecipeState,
-      recipes: [
-        {
-          id: 'r1',
-          title:
-            'This is an extremely long recipe title that should not be truncated and should be fully visible to users in the mobile meal planning interface so they can identify their planned meals',
-          ingredients: [
-            {
-              id: 'ing-1',
-              name: 'Pasta',
-              quantity_value: 200,
-              quantity_unit: 'g',
-            },
-          ],
-          total_time_minutes: 30,
-          difficulty: 'easy',
-        },
-        {
-          id: 'r2',
-          title: 'Mac and Cheese with Extra Special Ingredients',
-          ingredients: [
-            {
-              id: 'ing-2',
-              name: 'Cheese',
-              quantity_value: 100,
-              quantity_unit: 'g',
-            },
-          ],
-          total_time_minutes: 25,
-          difficulty: 'easy',
-        },
-        {
-          id: 'r3',
-          title: 'Simple Omelette Recipe with Fresh Herbs and Vegetables',
-          ingredients: [
-            {
-              id: 'ing-3',
-              name: 'Eggs',
-              quantity_value: 3,
-              quantity_unit: 'pieces',
-            },
-          ],
-          total_time_minutes: 15,
-          difficulty: 'easy',
-        },
-      ] as any,
-    } as any);
+      recipes: mockRecipes,
+    });
   });
 
   it('displays full recipe titles without truncation in mobile meal plan', async () => {
