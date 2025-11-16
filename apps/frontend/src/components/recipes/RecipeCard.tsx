@@ -1,10 +1,10 @@
-import { Link } from 'react-router-dom';
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useIsMobile, useIsTablet } from '../../hooks/useMediaQuery';
 import { useTouchFeedback } from '../../hooks/useTouchFeedback';
 import type { Recipe } from '../../types/Recipe';
-import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
+import { Card } from '../ui/Card';
 
 interface RecipeCardProps {
   recipe: Recipe;
@@ -68,7 +68,8 @@ export function RecipeCard({
           variant="secondary"
           size="sm"
           onClick={handlePreviewClick}
-          className={`absolute top-4 right-4 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${isMobile || isTablet ? 'opacity-100' : ''} min-h-[44px] min-w-[44px] !px-2 !py-1 text-xs`}
+          // Additional top spacing on mobile (top-6) vs desktop (top-4) to account for increased touch target size
+          className={`absolute ${isMobile ? 'top-6' : 'top-4'} right-4 z-10 opacity-0 transition-opacity duration-200 group-hover:opacity-100 ${isMobile || isTablet ? 'opacity-100' : ''} min-h-[44px] min-w-[44px] !px-2 !py-1 text-xs`}
           aria-label={`Preview ${recipe.title}`}
         >
           👁️ Preview
@@ -82,7 +83,7 @@ export function RecipeCard({
         >
           {/* Recipe content */}
           {/* min-w-0 allows long titles to wrap inside a flex parent and prevents overflow */}
-          <div className="min-w-0 p-4">
+          <div className="min-w-0 p-4 sm:p-6">
             {/* Category badge at top */}
             <div className="mb-3 flex justify-end">
               <span className="inline-block rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-700">
@@ -91,7 +92,7 @@ export function RecipeCard({
             </div>
 
             {/* Title */}
-            <h3 className="mb-2 line-clamp-2 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
+            <h3 className="mb-2 line-clamp-3 text-lg font-semibold text-gray-900 transition-colors group-hover:text-blue-600">
               {recipe.title}
             </h3>
 

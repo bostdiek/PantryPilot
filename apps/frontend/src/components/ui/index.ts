@@ -1,5 +1,7 @@
 // Re-export all UI components
 export { LayoutDemo } from '../layout/LayoutDemo';
+export { Badge } from './Badge';
+export type { BadgeProps, BadgeVariant } from './Badge';
 export { Button } from './Button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './Button';
 export { ButtonDemo } from './ButtonDemo';
@@ -45,6 +47,8 @@ export { useToast } from './useToast';
 export { default as CalendarIcon } from './icons/calendar.svg?react';
 export { default as CheckIcon } from './icons/check.svg?react';
 export { default as ChefHatIcon } from './icons/chef-hat.svg?react';
+export { default as ChevronDownIcon } from './icons/chevron-down.svg?react';
 export { default as ChevronUpDownIcon } from './icons/chevron-up-down.svg?react';
 export { default as KitchenIcon } from './icons/kitchen.svg?react';
+export { default as PencilIcon } from './icons/pencil.svg?react';
 export { default as RestaurantIcon } from './icons/restaurant.svg?react';

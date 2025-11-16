@@ -23,6 +23,7 @@ import {
 import { Menu, Transition } from '@headlessui/react';
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -32,6 +33,7 @@ import {
   type ReactNode,
 } from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
+import { MobileMealPlanView } from '../components/MobileMealPlanView';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 import { DaySelectionDialog } from '../components/recipes/DaySelectionDialog';
 import { Button } from '../components/ui/Button';
@@ -66,6 +68,11 @@ const MealPlanPage: FC = () => {
   } = useMealPlanStore();
   const today = useMemo(() => new Date(), []);
   const isMobile = useIsMobile();
+
+  // Store method handlers wrapped in useCallback for stable prop identity
+  const handleMarkCooked = useCallback((entryId: string) => {
+    useMealPlanStore.getState().markCooked(entryId);
+  }, []);
 
   // Week helpers
   function startOfSundayWeek(d: Date): Date {
@@ -622,7 +629,7 @@ const MealPlanPage: FC = () => {
                 className="w-full rounded-sm text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
                 aria-label={`View ${label} recipe preview`}
               >
-                <span className="line-clamp-2 block leading-5 font-medium text-blue-600 hover:text-blue-800">
+                <span className="line-clamp-3 block leading-5 font-medium text-blue-600 hover:text-blue-800">
                   {label}
                 </span>
                 {meta && (
@@ -633,7 +640,7 @@ const MealPlanPage: FC = () => {
               </button>
             ) : (
               <span>
-                <span className="line-clamp-2 block leading-5 font-medium">
+                <span className="line-clamp-3 block leading-5 font-medium">
                   {label}
                 </span>
                 {meta && (
@@ -758,6 +765,17 @@ const MealPlanPage: FC = () => {
           </div>
         </div>
 
+        {/* Mobile View - Today + Next Few Days */}
+        <MobileMealPlanView
+          currentWeek={currentWeek}
+          recipes={recipes}
+          todayDate={toYyyyMmDd(today)}
+          onMarkCooked={handleMarkCooked}
+          onRecipeClick={handleRecipeClick}
+          onRemoveEntry={handleRemoveFromDay}
+        />
+
+        {/* Desktop View - Horizontal 7-Day Layout */}
         <DndContext
           sensors={sensors}
           onDragStart={handleDragStart}
@@ -767,7 +785,7 @@ const MealPlanPage: FC = () => {
         >
           {isLoading && <div className="mb-4">Loading weekly plan…</div>}
           {currentWeek && (
-            <div className="overflow-x-auto" ref={scrollRef}>
+            <div className="hidden overflow-x-auto md:block" ref={scrollRef}>
               <div className="flex gap-4 pb-2">
                 {currentWeek.days.map((day) => {
                   const isToday = day.date === toYyyyMmDd(today);

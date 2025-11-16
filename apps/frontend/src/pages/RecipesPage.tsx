@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useState, type FC } from 'react';
 import { Link } from 'react-router-dom';
 import { Grid } from '../components/layout/Grid';
+import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
+import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
+import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
+import { RecipeCard } from '../components/recipes/RecipeCard';
+import { RecipePagination } from '../components/recipes/RecipePagination';
+import { RecipeSearchFilters } from '../components/recipes/RecipeSearchFilters';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
-import { Icon } from '../components/ui/Icon';
-import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
+import { Icon } from '../components/ui/Icon';
 import ChefHatIcon from '../components/ui/icons/chef-hat.svg?react';
-import { useRecipeStore } from '../stores/useRecipeStore';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { useRecipeFilters } from '../hooks/useRecipeFilters';
-import { RecipeSearchFilters } from '../components/recipes/RecipeSearchFilters';
-import { RecipePagination } from '../components/recipes/RecipePagination';
-import { RecipeCard } from '../components/recipes/RecipeCard';
-import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
-import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
-import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
+import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe } from '../types/Recipe';
 
 const RecipesPage: FC = () => {
@@ -130,7 +130,10 @@ const RecipesPage: FC = () => {
       ) : paginatedRecipes.length > 0 ? (
         <div className="space-y-6">
           {/* Recipe Grid */}
-          <Grid columns={3} gap={6} className="auto-rows-fr">
+          <Grid
+            gap={6}
+            className="auto-rows-fr grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
+          >
             {paginatedRecipes.map((recipe) => (
               <RecipeCard
                 key={recipe.id}
