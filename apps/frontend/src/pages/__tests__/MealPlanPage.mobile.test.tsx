@@ -73,7 +73,7 @@ const mockMatchMedia = vi.fn();
 beforeEach(() => {
   // Mock mobile viewport (375px width)
   mockMatchMedia.mockImplementation((query) => ({
-    matches: query === '(max-width: 768px)', // Simulate mobile
+    matches: query.includes('768px'), // Simulate mobile for any query containing '768px'
     media: query,
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
