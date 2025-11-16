@@ -82,12 +82,12 @@ export const MobileMealCard: FC<MobileMealCardProps> = ({
               className="group w-full rounded-md text-left transition-colors focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none"
               aria-label={`View ${label} recipe preview`}
             >
-              <h3 className="text-lg leading-tight font-semibold line-clamp-2 text-gray-900 group-hover:text-blue-700">
+              <h3 className="line-clamp-2 text-lg leading-tight font-semibold text-gray-900 group-hover:text-blue-700">
                 {label}
               </h3>
             </button>
           ) : (
-            <h3 className="text-lg leading-tight font-semibold line-clamp-2 text-gray-900">
+            <h3 className="line-clamp-2 text-lg leading-tight font-semibold text-gray-900">
               {label}
             </h3>
           )}

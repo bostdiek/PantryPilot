@@ -36,9 +36,11 @@ if (typeof (window as any).matchMedia === 'undefined') {
 }
 
 // Helper function to configure matchMedia mock for individual tests
-export function mockMatchMedia(matches: boolean | ((query: string) => boolean)) {
+export function mockMatchMedia(
+  matches: boolean | ((query: string) => boolean)
+) {
   const matchFn = typeof matches === 'function' ? matches : () => matches;
-  
+
   window.matchMedia = (query: string) => ({
     matches: matchFn(query),
     media: query,
