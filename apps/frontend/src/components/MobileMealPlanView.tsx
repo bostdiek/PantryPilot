@@ -43,6 +43,11 @@ export interface MobileMealPlanViewProps {
    * Callback when a recipe is clicked (for preview)
    */
   onRecipeClick?: (entryId: string, date: string) => void;
+
+  /**
+   * Callback when an entry should be removed
+   */
+  onRemoveEntry?: (entryId: string) => void;
 }
 
 interface DayData {
@@ -69,6 +74,7 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
   onAddRecipeToEntry,
   onMarkCooked,
   onRecipeClick,
+  onRemoveEntry,
 }) => {
   // Organize days into today and upcoming
   const { todayData, upcomingDays } = useMemo(() => {
@@ -139,6 +145,7 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
               onAddRecipe={() => onAddRecipeToEntry?.(entry.id)}
               onMarkCooked={() => onMarkCooked?.(entry.id)}
               onRecipeClick={() => onRecipeClick?.(entry.id, dayData.date)}
+              _onRemove={() => onRemoveEntry?.(entry.id)}
             />
           ))
         )}
