@@ -772,6 +772,7 @@ const MealPlanPage: FC = () => {
           todayDate={toYyyyMmDd(today)}
           onMarkCooked={handleMarkCooked}
           onRecipeClick={handleRecipeClick}
+          onRemoveEntry={handleRemoveFromDay}
         />
 
         {/* Desktop View - Horizontal 7-Day Layout */}
