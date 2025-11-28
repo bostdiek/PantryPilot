@@ -70,7 +70,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-      - /dev/shm:mode=1777
+      - /dev/shm:uid=1000,gid=1000,mode=0777,size=200m
       # Allow uv and runtime to write cache directories even when root FS is read-only.
       # Mount a tmpfs with ownership and mode so the non-root `app` user can write.
       # If your image creates `app` with a different UID/GID, change uid=1000,gid=1000 accordingly.
