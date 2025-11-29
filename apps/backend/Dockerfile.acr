@@ -1,55 +1,17 @@
 # =============================================================================
 # Backend Dockerfile for PantryPilot FastAPI Application
-# Based on Astral uv + FastAPI + Docker best practices
+# ACR-compatible version (no BuildKit cache mounts)
+#
+# USE THIS FOR:
+#   - Emergency local pushes to ACR from Apple Silicon (M1/M2/M3)
+#   - Azure ACR Tasks (az acr build) which don't support BuildKit mounts
+#
+# BUILD COMMAND (from apps/backend/):
+#   docker build --platform linux/amd64 -f Dockerfile.acr \
+#     -t pantrypilotacrdevdev001.azurecr.io/pantrypilot-backend:latest .
+#
+# FOR CI/CD: Use the main Dockerfile (GitHub Actions supports BuildKit)
 # =============================================================================
-
-# =============================================================================
-# DEVELOPMENT STAGE
-# =============================================================================
-FROM python:3.12-slim-bookworm AS development
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install uv from official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-# uv environment variables for container optimization
-ENV UV_SYSTEM_PYTHON=1
-ENV UV_COMPILE_BYTECODE=1
-ENV UV_LINK_MODE=copy
-
-# Set working directory
-WORKDIR /app
-
-# Copy dependency files first for better Docker layer caching
-COPY pyproject.toml uv.lock ./
-
-# Install dependencies only (not the project itself) for better caching
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --group dev
-
-# Copy the entire project
-COPY . .
-
-# Install the project in editable mode for development
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --group dev
-
-# Create non-root user for security
-RUN groupadd -r app && useradd -r -g app app
-RUN chown -R app:app /app
-RUN mkdir -p /home/app/.cache && chown -R app:app /home/app
-USER app
-
-# Expose development port
-EXPOSE 8000
-
-# Development command (will be overridden by docker-compose for hot reload)
-CMD ["uv", "run", "fastapi", "dev", "src/main.py", "--host", "0.0.0.0", "--port", "8000"]
 
 # =============================================================================
 # PRODUCTION BUILDER STAGE
@@ -76,15 +38,13 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install production dependencies only (no dev dependencies, no editable installs)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-editable
+RUN uv sync --locked --no-install-project --no-editable
 
 # Copy the project source
 COPY . .
 
 # Install the project (not in editable mode)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-editable
+RUN uv sync --locked --no-editable
 
 # =============================================================================
 # PRODUCTION STAGE
@@ -130,11 +90,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Expose port (internal only, not mapped in production)
 EXPOSE 8000
 
-# Production command with gunicorn + uvicorn workers via uv (consistent toolchain; .venv now isolated by .dockerignore)
-# --forwarded-allow-ips="*" enables X-Forwarded-* header processing for reverse proxies (Azure Container Apps, nginx)
-# --workers=2 optimizes for Azure Container Apps 0.5 CPU allocation (2 workers = 1 per 0.25 CPU)
+# Production command with gunicorn + uvicorn workers
+# --forwarded-allow-ips="*" enables X-Forwarded-* header processing for Azure Container Apps
 CMD ["uv", "run", "gunicorn", "src.main:app", \
-    "--workers", "2", \
+    "--workers", "4", \
     "--worker-class", "uvicorn.workers.UvicornWorker", \
     "--bind", "0.0.0.0:8000", \
     "--forwarded-allow-ips", "*", \

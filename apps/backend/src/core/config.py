@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # App
     APP_NAME: str = "PantryPilot"
-    ENVIRONMENT: str = "development"  # development | production
+    ENVIRONMENT: str = "development"  # development | production | test
 
     # Security
     SECRET_KEY: str
@@ -76,16 +76,19 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     env = os.getenv("ENVIRONMENT", "development").lower()
-    if env not in {"development", "production"}:
-        raise ValueError("ENVIRONMENT must be 'development' or 'production'")
+    if env not in {"development", "production", "test"}:
+        raise ValueError("ENVIRONMENT must be 'development', 'production', or 'test'")
 
-    if env == "development":
+    if env == "production":
+        env_file = ".env.prod"
+    elif env == "development":
         env_file = ".env.dev"
     else:
-        env_file = ".env.prod"
+        # test environment - no env file needed, use defaults
+        env_file = ""
     # pydantic-settings supports _env_file at runtime; mypy doesn't type it.
     # For production, fail fast if SECRET_KEY is not provided.
-    if not os.path.exists(env_file):  # pragma: no cover - defensive
+    if env_file and not os.path.exists(env_file):  # pragma: no cover - defensive
         # Only provide a dev fallback in non-production environments
         if env == "development":
             os.environ.setdefault("SECRET_KEY", "dev-test-secret")

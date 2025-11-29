@@ -1,0 +1,312 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "16765832024051032265"
+    }
+  },
+  "parameters": {
+    "environmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Container Apps environment"
+      }
+    },
+    "backendAppName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the backend Container App"
+      }
+    },
+    "location": {
+      "type": "string",
+      "metadata": {
+        "description": "The location where the Container Apps will be deployed"
+      }
+    },
+    "containerImage": {
+      "type": "string",
+      "metadata": {
+        "description": "The container image for the backend app"
+      }
+    },
+    "minReplicas": {
+      "type": "int",
+      "defaultValue": 0,
+      "metadata": {
+        "description": "Minimum number of replicas"
+      }
+    },
+    "maxReplicas": {
+      "type": "int",
+      "defaultValue": 5,
+      "metadata": {
+        "description": "Maximum number of replicas"
+      }
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "metadata": {
+        "description": "The URI of the Key Vault containing secrets"
+      }
+    },
+    "registryServer": {
+      "type": "string",
+      "metadata": {
+        "description": "The container registry server"
+      }
+    },
+    "registryUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "The container registry username"
+      }
+    },
+    "registryPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The container registry password"
+      }
+    },
+    "tags": {
+      "type": "object",
+      "defaultValue": {},
+      "metadata": {
+        "description": "Tags to be applied to the resources"
+      }
+    },
+    "corsOrigins": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Allowed CORS origins for the backend API"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[format('{0}-logs', parameters('environmentName'))]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "sku": {
+          "name": "PerGB2018"
+        },
+        "retentionInDays": 30,
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-10-02-preview",
+      "name": "[parameters('environmentName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "workloadProfiles": [
+          {
+            "workloadProfileType": "Consumption",
+            "name": "Consumption"
+          }
+        ],
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName'))), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName'))), '2023-09-01').primarySharedKey]"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-10-02-preview",
+      "name": "[parameters('backendAppName')]",
+      "location": "[parameters('location')]",
+      "tags": "[parameters('tags')]",
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]",
+        "configuration": {
+          "ingress": {
+            "external": true,
+            "targetPort": 8000,
+            "transport": "auto",
+            "allowInsecure": false,
+            "corsPolicy": {
+              "allowCredentials": true,
+              "allowedOrigins": "[if(empty(parameters('corsOrigins')), createArray('*'), parameters('corsOrigins'))]",
+              "allowedMethods": [
+                "GET",
+                "POST",
+                "PUT",
+                "DELETE",
+                "OPTIONS",
+                "PATCH"
+              ],
+              "allowedHeaders": [
+                "*"
+              ]
+            }
+          },
+          "registries": "[if(empty(parameters('registryServer')), createArray(), createArray(createObject('server', parameters('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'acr-password')))]",
+          "secrets": "[concat(if(empty(parameters('registryPassword')), createArray(), createArray(createObject('name', 'acr-password', 'value', parameters('registryPassword')))), createArray(createObject('name', 'database-connection-string', 'keyVaultUrl', format('{0}secrets/dbConnectionString', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'secret-key', 'keyVaultUrl', format('{0}secrets/secretKey', parameters('keyVaultUri')), 'identity', 'system')))]"
+        },
+        "template": {
+          "containers": [
+            {
+              "image": "[parameters('containerImage')]",
+              "name": "pantrypilot-backend",
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
+              "env": [
+                {
+                  "name": "DATABASE_URL",
+                  "secretRef": "database-connection-string"
+                },
+                {
+                  "name": "SECRET_KEY",
+                  "secretRef": "secret-key"
+                },
+                {
+                  "name": "ENVIRONMENT",
+                  "value": "[if(contains(parameters('environmentName'), 'prod'), 'production', 'development')]"
+                },
+                {
+                  "name": "LOG_LEVEL",
+                  "value": "INFO"
+                },
+                {
+                  "name": "API_V1_STR",
+                  "value": "/api/v1"
+                },
+                {
+                  "name": "PROJECT_NAME",
+                  "value": "PantryPilot"
+                },
+                {
+                  "name": "VERSION",
+                  "value": "0.1.0"
+                },
+                {
+                  "name": "ALGORITHM",
+                  "value": "HS256"
+                },
+                {
+                  "name": "ACCESS_TOKEN_EXPIRE_MINUTES",
+                  "value": "30"
+                },
+                {
+                  "name": "PORT",
+                  "value": "8000"
+                },
+                {
+                  "name": "PYTHONPATH",
+                  "value": "/app/src"
+                },
+                {
+                  "name": "CORS_ORIGINS",
+                  "value": "[join(parameters('corsOrigins'), ',')]"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/api/v1/health",
+                    "port": 8000,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 30,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/api/v1/health",
+                    "port": 8000,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 3,
+                  "failureThreshold": 3
+                }
+              ]
+            }
+          ],
+          "scale": {
+            "minReplicas": "[parameters('minReplicas')]",
+            "maxReplicas": "[parameters('maxReplicas')]",
+            "rules": [
+              {
+                "name": "http-scaling-rule",
+                "http": {
+                  "metadata": {
+                    "concurrentRequests": "10"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "backendUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "The fully qualified domain name of the backend app"
+      },
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', parameters('backendAppName')), '2024-10-02-preview').configuration.ingress.fqdn)]"
+    },
+    "backendAppId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource ID of the backend Container App"
+      },
+      "value": "[resourceId('Microsoft.App/containerApps', parameters('backendAppName'))]"
+    },
+    "backendPrincipalId": {
+      "type": "string",
+      "metadata": {
+        "description": "The system-assigned principal ID of the backend app"
+      },
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('backendAppName')), '2024-10-02-preview', 'full').identity.principalId]"
+    },
+    "environmentName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Container Apps environment"
+      },
+      "value": "[parameters('environmentName')]"
+    },
+    "environmentId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource ID of the Container Apps environment"
+      },
+      "value": "[resourceId('Microsoft.App/managedEnvironments', parameters('environmentName'))]"
+    }
+  }
+}

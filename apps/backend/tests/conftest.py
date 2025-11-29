@@ -24,6 +24,8 @@ from sqlalchemy.ext.asyncio import (
 
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
+# Set ENVIRONMENT to 'test' so CORS middleware is enabled (not handled by Azure infra)
+os.environ.setdefault("ENVIRONMENT", "test")
 
 from core.config import get_settings
 from core.security import get_password_hash
