@@ -60,6 +60,8 @@ var resourceNames = {
   containerAppsEnv: 'pantrypilot-env-${environmentName}-${uniqueSuffix}'
   containerAppBackend: 'pantrypilot-backend-${environmentName}'
   staticWebApp: 'pantrypilot-frontend-${environmentName}-${uniqueSuffix}'
+  emailService: 'pantrypilot-email-${environmentName}-${uniqueSuffix}'
+  communicationService: 'pantrypilot-acs-${environmentName}-${uniqueSuffix}'
 }
 
 // Tags for resource organization
@@ -117,6 +119,38 @@ var containerImage = useQuickstartImage
 // Reference existing ACR to get admin credentials (only needed when using ACR image)
 resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
   name: resourceNames.acr
+}
+
+// Azure Communication Services for transactional email
+module communication 'modules/communication.bicep' = {
+  params: {
+    emailServiceName: resourceNames.emailService
+    communicationServiceName: resourceNames.communicationService
+    location: 'global'
+    dataLocation: 'United States'
+    domainManagement: environmentName == 'prod' ? 'CustomerManaged' : 'AzureManaged'
+    customDomainName: environmentName == 'prod' ? 'mail.pantrypilot.com' : ''
+    tags: commonTags
+  }
+}
+
+// Reference the existing Communication Service to get connection string for Key Vault
+resource communicationServiceResource 'Microsoft.Communication/communicationServices@2023-04-01' existing = {
+  name: resourceNames.communicationService
+  dependsOn: [communication]
+}
+
+// Store ACS connection string in Key Vault (after both Key Vault and ACS are created)
+resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVaultResource
+  name: 'acs-connection-string'
+  properties: {
+    value: communicationServiceResource.listKeys().primaryConnectionString
+    attributes: {
+      enabled: true
+    }
+  }
+  dependsOn: [keyVault, communication]
 }
 
 // Deploy Static Web App FIRST to get its actual hostname for CORS
@@ -204,3 +238,6 @@ output databaseFqdn string = postgresql.outputs.fqdn
 output backendUrl string = containerApps.outputs.backendUrl
 output staticWebAppUrl string = staticWebApp.outputs.defaultHostname
 output staticWebAppName string = staticWebApp.outputs.name
+output communicationServiceName string = communication.outputs.communicationServiceName
+output emailServiceName string = communication.outputs.emailServiceName
+output emailFromDomain string? = communication.?outputs.?fromSenderDomain
