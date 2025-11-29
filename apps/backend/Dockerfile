@@ -132,6 +132,7 @@ EXPOSE 8000
 
 # Production command with gunicorn + uvicorn workers via uv (consistent toolchain; .venv now isolated by .dockerignore)
 # --forwarded-allow-ips="*" enables X-Forwarded-* header processing for reverse proxies (Azure Container Apps, nginx)
+# --workers=2 optimizes for Azure Container Apps 0.5 CPU allocation (2 workers = 1 per 0.25 CPU)
 CMD ["uv", "run", "gunicorn", "src.main:app", \
     "--workers", "2", \
     "--worker-class", "uvicorn.workers.UvicornWorker", \
