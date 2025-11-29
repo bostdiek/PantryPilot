@@ -129,7 +129,7 @@ module communication 'modules/communication.bicep' = {
     location: 'global'
     dataLocation: 'United States'
     domainManagement: environmentName == 'prod' ? 'CustomerManaged' : 'AzureManaged'
-    customDomainName: environmentName == 'prod' ? 'mail.pantrypilot.com' : ''
+    customDomainName: environmentName == 'prod' ? 'mail.smartmealplanner.app' : ''
     tags: commonTags
   }
 }
