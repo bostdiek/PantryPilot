@@ -54,7 +54,7 @@ app = FastAPI(
 
 # Add proxy headers middleware for Azure Container Apps / reverse proxy support
 # This ensures redirects use HTTPS when behind a proxy that terminates TLS
-if settings.ENVIRONMENT in ("development", "production"):
+if settings.ENVIRONMENT in ("development", "production"):  # pragma: no cover
     app.add_middleware(ProxyHeadersMiddleware)
     logging.info("ProxyHeadersMiddleware enabled for reverse proxy support")
 
@@ -78,7 +78,7 @@ if settings.ENVIRONMENT not in ("production",):
         allow_headers=["*"],
     )
     logging.info(f"CORS middleware enabled for origins: {origins}")
-else:
+else:  # pragma: no cover - production only
     logging.info("CORS middleware disabled - handled by Azure Container Apps")
 
 # Include API routes
