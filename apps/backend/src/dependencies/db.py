@@ -39,6 +39,33 @@ def _load_env_files() -> None:  # pragma: no cover - side-effect only
                 return
 
 
+def _normalize_asyncpg_url(url: str) -> str:
+    """Convert a postgres URL to asyncpg format and fix SSL parameters.
+
+    asyncpg requires 'ssl=require' instead of 'sslmode=require'.
+    """
+    # Normalize to async driver if a plain postgres URL is provided
+    # Accept common prefixes and coerce to asyncpg so we don't require psycopg2
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://") :]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    elif url.startswith("postgresql+psycopg2://") or url.startswith(
+        "postgresql+psycopg://"
+    ):
+        url = "postgresql+asyncpg://" + url.split("://", 1)[1]
+
+    # asyncpg doesn't accept 'sslmode' parameter, convert to 'ssl'
+    # sslmode=require -> ssl=require (for Azure PostgreSQL compatibility)
+    url = url.replace("sslmode=require", "ssl=require")
+    url = url.replace("sslmode=verify-full", "ssl=verify-full")
+    url = url.replace("sslmode=verify-ca", "ssl=verify-ca")
+    url = url.replace("sslmode=prefer", "ssl=prefer")
+    url = url.replace("sslmode=disable", "ssl=disable")
+
+    return url
+
+
 def _get_database_url() -> str:
     # Try to load env files for local CLI/dev first
     _load_env_files()
@@ -46,17 +73,7 @@ def _get_database_url() -> str:
     # 1) Direct DATABASE_URL
     url = os.getenv("DATABASE_URL")
     if url:
-        # Normalize to async driver if a plain postgres URL is provided
-        # Accept common prefixes and coerce to asyncpg so we don't require psycopg2
-        if url.startswith("postgres://"):
-            return "postgresql+asyncpg://" + url[len("postgres://") :]
-        if url.startswith("postgresql://"):
-            return "postgresql+asyncpg://" + url[len("postgresql://") :]
-        if url.startswith("postgresql+psycopg2://") or url.startswith(
-            "postgresql+psycopg://"
-        ):
-            return "postgresql+asyncpg://" + url.split("://", 1)[1]
-        return url
+        return _normalize_asyncpg_url(url)
 
     # 2) Construct from POSTGRES_* variables if present
     user = os.getenv("POSTGRES_USER")

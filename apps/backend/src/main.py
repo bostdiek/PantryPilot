@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from api.v1.api import api_router
 from core.config import get_settings
@@ -51,6 +52,12 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# Add proxy headers middleware for Azure Container Apps / reverse proxy support
+# This ensures redirects use HTTPS when behind a proxy that terminates TLS
+if settings.ENVIRONMENT in ("development", "production"):
+    app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+    logging.info("ProxyHeadersMiddleware enabled for reverse proxy support")
+
 # Add correlation ID middleware and final exception normalization safety net
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(ExceptionNormalizationMiddleware)
@@ -59,16 +66,20 @@ app.add_middleware(ExceptionNormalizationMiddleware)
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(RequestValidationError, global_exception_handler)
 
-# Configure CORS
-origins = validate_cors_origins(settings.CORS_ORIGINS)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=settings.ALLOW_CREDENTIALS,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure CORS - only for local/sandbox development
+# In Azure, CORS is handled by Azure Container Apps at the infrastructure level
+if settings.ENVIRONMENT not in ("development", "production"):
+    origins = validate_cors_origins(settings.CORS_ORIGINS)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=settings.ALLOW_CREDENTIALS,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    logging.info(f"CORS middleware enabled for origins: {origins}")
+else:
+    logging.info("CORS middleware disabled - handled by Azure Container Apps")
 
 # Include API routes
 app.include_router(api_router, prefix="/api/v1")
