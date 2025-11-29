@@ -41,7 +41,8 @@ validate_env() {
 # Get database connection string from Key Vault
 get_connection_string() {
     local env="${1:-dev}"
-    local vault_name="kv-pantrypilot-${env}001"
+    # Key Vault name follows Bicep naming: ppkv${environmentName}${uniqueSuffix}
+    local vault_name="ppkv${env}${env}001"
 
     log_info "Fetching database connection string from Key Vault: ${vault_name}"
 

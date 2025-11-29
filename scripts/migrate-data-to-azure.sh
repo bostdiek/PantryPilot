@@ -370,27 +370,35 @@ import_data() {
 
     log_info "Importing data..."
 
+    local import_errors=0
+    local import_output
+
     # Use Docker PostgreSQL container for psql client if psql not available locally
     if command -v psql &>/dev/null; then
-        PGPASSWORD="$AZURE_PASSWORD" psql \
+        import_output=$(PGPASSWORD="$AZURE_PASSWORD" psql \
             -h "$AZURE_HOST" \
             -p "$AZURE_PORT" \
             -U "$AZURE_USER" \
             -d "$AZURE_DATABASE" \
-            --set ON_ERROR_STOP=off \
-            -f "$EXPORT_FILE" 2>&1 | grep -v "^SET\|^$" | head -50 || true
+            -f "$EXPORT_FILE" 2>&1) || import_errors=1
+        echo "$import_output" | grep -v "^SET\|^$" | head -50 || true
     else
         log_info "Using Docker container for psql client..."
         # Copy export file to container and run psql
         docker cp "$EXPORT_FILE" pantrypilot-dev-db-1:/tmp/import.sql
-        docker exec -e PGPASSWORD="$AZURE_PASSWORD" pantrypilot-dev-db-1 psql \
+        import_output=$(docker exec -e PGPASSWORD="$AZURE_PASSWORD" pantrypilot-dev-db-1 psql \
             -h "$AZURE_HOST" \
             -p "$AZURE_PORT" \
             -U "$AZURE_USER" \
             -d "$AZURE_DATABASE" \
-            --set ON_ERROR_STOP=off \
-            -f /tmp/import.sql 2>&1 | grep -v "^SET\|^$" | head -50 || true
+            -f /tmp/import.sql 2>&1) || import_errors=1
+        echo "$import_output" | grep -v "^SET\|^$" | head -50 || true
         docker exec pantrypilot-dev-db-1 rm /tmp/import.sql
+    fi
+
+    if [[ $import_errors -eq 1 ]]; then
+        log_warn "Some errors occurred during import. Check the output above for details."
+        log_warn "Continuing with verification - partial data may have been imported."
     fi
 
     # Verify import
@@ -469,9 +477,23 @@ main() {
     echo ""
 
     if [[ "$SKIP_IMPORT" == "false" ]]; then
+        # Dynamically fetch URLs from Azure resources
+        local resource_group="rg-pantrypilot-${TARGET_ENV}"
+        local frontend_url backend_url
+
+        frontend_url=$(az staticwebapp show \
+            --name "pantrypilot-frontend-${TARGET_ENV}-${TARGET_ENV}001" \
+            --resource-group "$resource_group" \
+            --query "defaultHostname" -o tsv 2>/dev/null) || frontend_url="(unable to fetch)"
+
+        backend_url=$(az containerapp show \
+            --name "pantrypilot-backend-${TARGET_ENV}" \
+            --resource-group "$resource_group" \
+            --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null) || backend_url="(unable to fetch)"
+
         echo "You can verify the data at:"
-        echo "  Frontend: https://lively-hill-0ee74371e.3.azurestaticapps.net"
-        echo "  Backend:  https://pantrypilot-backend-${TARGET_ENV}.bravegrass-64b8c55f.centralus.azurecontainerapps.io/api/v1/health"
+        echo "  Frontend: https://${frontend_url}"
+        echo "  Backend:  https://${backend_url}/api/v1/health"
     fi
 
     if [[ -n "$EXPORT_FILE" && -f "$EXPORT_FILE" ]]; then
