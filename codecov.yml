@@ -1,0 +1,23 @@
+# Codecov configuration for PantryPilot
+# https://docs.codecov.com/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        # Require overall project coverage to not drop more than 1%
+        threshold: 1%
+    patch:
+      default:
+        # Disable patch coverage requirement - infrastructure/deployment code
+        # is often environment-specific and validated through integration tests
+        # rather than unit tests
+        informational: true
+
+# Ignore infrastructure and configuration files from coverage
+ignore:
+  - "apps/backend/src/main.py"  # App initialization with env-specific middleware
+  - "apps/backend/src/dependencies/db.py"  # Database connection setup
+  - "apps/backend/src/core/config.py"  # Configuration loading
+  - "**/__init__.py"
+  - "**/tests/**"
