@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     UPSTASH_REDIS_REST_TOKEN: str | None = None
 
     # Rate limit settings (requests per window)
+    # Default: 10 requests per 60 seconds - conservative to prevent abuse.
+    # For production with higher traffic, increase via environment variables:
+    #   RATE_LIMIT_REQUESTS=100 RATE_LIMIT_WINDOW_SECONDS=60
+    # Auth endpoints benefit from stricter limits (brute-force protection).
+    # AI endpoints benefit from moderate limits (cost protection).
     RATE_LIMIT_REQUESTS: int = 10
     RATE_LIMIT_WINDOW_SECONDS: int = 60
 

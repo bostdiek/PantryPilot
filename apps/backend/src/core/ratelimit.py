@@ -38,6 +38,10 @@ def get_ratelimiter() -> Ratelimit | None:
 
     Returns None if Upstash is not configured, allowing the application
     to run without rate limiting in development/test environments.
+
+    Note: The rate limiter is cached with @lru_cache for efficiency.
+    Changes to rate limit configuration (RATE_LIMIT_REQUESTS,
+    RATE_LIMIT_WINDOW_SECONDS) require application restart to take effect.
     """
     # Import here to avoid import errors if upstash packages aren't used
     from upstash_ratelimit import Ratelimit, SlidingWindow
@@ -63,7 +67,7 @@ def get_ratelimiter() -> Ratelimit | None:
                 max_requests=settings.RATE_LIMIT_REQUESTS,
                 window=settings.RATE_LIMIT_WINDOW_SECONDS,
             ),
-            prefix="pantrypilot:ratelimit",
+            prefix=f"{settings.APP_NAME.lower()}:ratelimit",
         )
         logger.info(
             "Rate limiting enabled: %d requests per %d seconds",
