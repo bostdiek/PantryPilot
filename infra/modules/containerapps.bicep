@@ -129,6 +129,11 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             keyVaultUrl: '${keyVaultUri}secrets/secretKey'
             identity: 'system'
           }
+          {
+            name: 'gemini-api-key'
+            keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
+            identity: 'system'
+          }
         ]
       )
     }
@@ -149,6 +154,10 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             {
               name: 'SECRET_KEY'
               secretRef: 'secret-key' // pragma: allowlist secret
+            }
+            {
+              name: 'GEMINI_API_KEY'
+              secretRef: 'gemini-api-key' // pragma: allowlist secret
             }
             {
               name: 'ENVIRONMENT'
