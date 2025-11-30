@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     # GEMINI_API_KEY is optional; prefer storing secrets in .env.dev/.env.prod
     GEMINI_API_KEY: str | None = None
 
+    # Upstash Rate Limiting
+    # REST URL and token for Upstash Redis; optional in development/test
+    UPSTASH_REDIS_REST_URL: str | None = None
+    UPSTASH_REDIS_REST_TOKEN: str | None = None
+
+    # Rate limit settings (requests per window)
+    RATE_LIMIT_REQUESTS: int = 10
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: object) -> list[str]:

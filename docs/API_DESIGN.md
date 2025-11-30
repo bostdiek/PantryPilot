@@ -118,6 +118,65 @@ Response envelope: `ApiResponse<T>` with `success`, `data`, `message`, `error`.
 
 **Note**: The `details` field is only included in non-production environments.
 
+## Rate Limiting
+
+The API implements rate limiting to protect against abuse and ensure fair usage.
+
+### Configuration
+
+Rate limiting is implemented using Upstash Redis with a sliding window algorithm:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `RATE_LIMIT_REQUESTS` | 10 | Maximum requests per window |
+| `RATE_LIMIT_WINDOW_SECONDS` | 60 | Window duration in seconds |
+
+### Rate-Limited Endpoints
+
+The following endpoints are protected by rate limiting:
+
+| Endpoint | Reason |
+|----------|--------|
+| `POST /api/v1/auth/login` | Prevent brute-force attacks |
+| `POST /api/v1/auth/register` | Prevent account enumeration and spam |
+| `POST /api/v1/ai/extract-recipe-from-url` | AI API costs money |
+| `POST /api/v1/ai/extract-recipe-from-image` | AI API costs money |
+| `GET /api/v1/ai/extract-recipe-stream` | AI API costs money |
+| `GET /api/v1/ai/extract-recipe-image-stream` | AI API costs money |
+
+### Bypass Paths
+
+The following paths are **not** rate limited:
+
+| Path | Reason |
+|------|--------|
+| `/api/v1/health` | Health checks for load balancers and monitoring |
+| `/health` | Alternative health check path |
+
+### Rate Limit Response
+
+When the rate limit is exceeded, the API returns:
+
+**HTTP Status**: `429 Too Many Requests`
+
+**Response Headers**:
+
+- `Retry-After`: Seconds until the rate limit resets
+- `X-RateLimit-Limit`: Maximum requests allowed per window
+- `X-RateLimit-Remaining`: Remaining requests in current window
+
+**Response Body**:
+
+```json
+{
+  "detail": "Too many requests. Please try again later."
+}
+```
+
+### Development/Test Mode
+
+If Upstash Redis is not configured (`UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are not set), rate limiting is **disabled**. This allows local development and testing without an Upstash account.
+
 ## OpenAPI
 
 - Swagger UI: `/api/v1/docs`

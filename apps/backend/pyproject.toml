@@ -22,6 +22,8 @@ dependencies = [
     "google-generativeai>=0.8.5",
     "openai>=1.109.1",
     "pillow>=11.3.0",
+    "upstash-ratelimit>=1.1.0",
+    "upstash-redis>=1.5.0",
 ]
 
 [dependency-groups]
