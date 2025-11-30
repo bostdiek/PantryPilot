@@ -129,7 +129,10 @@ output mailFromSenderDomain string? = domainManagement == 'AzureManaged'
   ? azureManagedDomain.?properties.mailFromSenderDomain
   : customerManagedDomain.?properties.mailFromSenderDomain
 
-@description('DNS verification records for Customer Managed Domain (empty for Azure Managed).')
+// WARNING: Contains sensitive DNS verification data for domain ownership.
+// Only use in secure contexts. Records include SPF, DKIM, and DMARC values.
+// Do NOT log or store these outputs in unsecured locations.
+@description('DNS verification records for Customer Managed Domain (empty for Azure Managed). Handle securely.')
 output verificationRecords object = domainManagement == 'CustomerManaged' && !empty(customDomainName)
   ? customerManagedDomain.?properties.?verificationRecords ?? {}
   : {}

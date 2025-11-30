@@ -141,9 +141,10 @@ resource communicationServiceResource 'Microsoft.Communication/communicationServ
 }
 
 // Store ACS connection string in Key Vault (after both Key Vault and ACS are created)
+// The secret is stored as 'acsConnectionString' for backend email integration
 resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVaultResource
-  name: 'acs-connection-string'
+  name: 'acsConnectionString'
   properties: {
     value: communicationServiceResource.listKeys().primaryConnectionString
     attributes: {
@@ -238,6 +239,10 @@ output databaseFqdn string = postgresql.outputs.fqdn
 output backendUrl string = containerApps.outputs.backendUrl
 output staticWebAppUrl string = staticWebApp.outputs.defaultHostname
 output staticWebAppName string = staticWebApp.outputs.name
+
+// The ACS connection string is stored in Key Vault as 'acsConnectionString' for backend email consumption
+@description('The name of the Communication Service for backend email integration.')
 output communicationServiceName string = communication.outputs.communicationServiceName
+@description('The name of the Email Service (for Azure portal reference).')
 output emailServiceName string = communication.outputs.emailServiceName
-output emailFromDomain string? = communication.?outputs.?fromSenderDomain
+output emailFromDomain string? = communication.outputs.?fromSenderDomain
