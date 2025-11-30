@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from functools import lru_cache
 from typing import TYPE_CHECKING, Annotated
 
@@ -91,7 +92,9 @@ def _get_client_identifier(request: Request) -> str:
     if request.client and request.client.host:
         return request.client.host
 
-    return "unknown"
+    # If no IP can be determined, generate a unique identifier per request
+    # to avoid rate limit bucket collision between unidentifiable clients
+    return f"unknown:{uuid.uuid4()}"
 
 
 async def check_rate_limit(
@@ -124,17 +127,17 @@ async def check_rate_limit(
         response = ratelimiter.limit(identifier)
 
         if not response.allowed:
+            # Calculate reset time in seconds from now
+            current_time_ms = int(time.time() * 1000)
+            reset_in_seconds = max(1, (response.reset - current_time_ms) // 1000)
             logger.warning(
                 "Rate limit exceeded for %s on %s. Reset in %d seconds.",
                 identifier,
                 path,
-                response.reset - int(request.state._request_time * 1000)
-                if hasattr(request.state, "_request_time")
-                else response.reset,
+                reset_in_seconds,
             )
-            # Calculate retry delay in seconds
-            current_time_ms = int(time.time() * 1000)
-            retry_after = max(1, (response.reset - current_time_ms) // 1000)
+            # Use the same calculation for Retry-After header
+            retry_after = reset_in_seconds
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Too many requests. Please try again later.",
