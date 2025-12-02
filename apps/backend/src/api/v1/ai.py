@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.ratelimit import check_rate_limit
 from crud.ai_drafts import get_draft_by_id
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
@@ -94,6 +95,7 @@ def _ensure_aware_utc_or_404(dt: datetime) -> datetime:
 @router.post(
     "/extract-recipe-from-url",
     response_model=ApiResponse[AIDraftResponse],
+    dependencies=[Depends(check_rate_limit)],
 )
 async def extract_recipe_from_url(
     request: AIRecipeFromUrlRequest,
@@ -167,6 +169,7 @@ async def extract_recipe_from_url(
 @router.post(
     "/extract-recipe-from-image",
     response_model=ApiResponse[AIDraftResponse],
+    dependencies=[Depends(check_rate_limit)],
 )
 async def extract_recipe_from_image(
     files: Annotated[list[UploadFile], File(description="Recipe image files")],
@@ -272,6 +275,7 @@ async def extract_recipe_from_image(
 @router.get(
     "/extract-recipe-stream",
     summary="Stream AI recipe extraction progress via Server-Sent Events",
+    dependencies=[Depends(check_rate_limit)],
 )
 async def extract_recipe_stream(
     source_url: str,
@@ -294,6 +298,7 @@ async def extract_recipe_stream(
 @router.get(
     "/extract-recipe-image-stream",
     summary="Stream AI recipe extraction progress from images via Server-Sent Events",
+    dependencies=[Depends(check_rate_limit)],
 )
 async def extract_recipe_image_stream(
     draft_id: UUID,

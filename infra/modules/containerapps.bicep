@@ -134,6 +134,16 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
             identity: 'system'
           }
+          {
+            name: 'upstash-redis-url'
+            keyVaultUrl: '${keyVaultUri}secrets/upstashRedisRestUrl'
+            identity: 'system'
+          }
+          {
+            name: 'upstash-redis-token'
+            keyVaultUrl: '${keyVaultUri}secrets/upstashRedisRestToken'
+            identity: 'system'
+          }
         ]
       )
     }
@@ -158,6 +168,14 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             {
               name: 'GEMINI_API_KEY'
               secretRef: 'gemini-api-key' // pragma: allowlist secret
+            }
+            {
+              name: 'UPSTASH_REDIS_REST_URL'
+              secretRef: 'upstash-redis-url' // pragma: allowlist secret
+            }
+            {
+              name: 'UPSTASH_REDIS_REST_TOKEN'
+              secretRef: 'upstash-redis-token' // pragma: allowlist secret
             }
             {
               name: 'ENVIRONMENT'

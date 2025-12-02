@@ -21,6 +21,13 @@ param dbAdminPassword string
 @secure()
 param secretKey string
 
+@description('Upstash Redis REST URL for rate limiting (optional)')
+param upstashRedisRestUrl string = ''
+
+@description('Upstash Redis REST Token for rate limiting (optional)')
+@secure()
+param upstashRedisRestToken string = ''
+
 @description('Use Microsoft quickstart placeholder image for initial deployment (before CI/CD pushes real image)')
 param useQuickstartImage bool = false
 
@@ -93,6 +100,8 @@ module keyVault 'modules/keyvault.bicep' = {
       dbAdminPassword: dbAdminPassword
       secretKey: secretKey
       dbConnectionString: 'postgresql://${dbAdminUsername}:${dbAdminPassword}@${postgresql.outputs.fqdn}:5432/pantrypilot?sslmode=require'
+      upstashRedisRestUrl: upstashRedisRestUrl
+      upstashRedisRestToken: upstashRedisRestToken
     }
   }
 }
