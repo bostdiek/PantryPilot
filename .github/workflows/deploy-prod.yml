@@ -54,7 +54,7 @@ jobs:
         run: |
           az group create \
             --name ${{ env.AZURE_RESOURCE_GROUP }} \
-            --location "East US 2" \
+            --location "Central US" \
             --tags environment=prod project=pantrypilot
 
       - name: Deploy Bicep infrastructure
@@ -67,7 +67,7 @@ jobs:
           deploymentName: pantrypilot-prod-${{ github.run_number }}
           failOnStdErr: false
         env:
-          AZURE_LOCATION: "East US 2"
+          AZURE_LOCATION: "Central US"
           AZURE_UNIQUE_SUFFIX: prod001
           DB_ADMIN_PASSWORD: ${{ secrets.DB_ADMIN_PASSWORD }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
