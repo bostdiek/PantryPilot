@@ -46,3 +46,57 @@ class UserRegister(BaseModel):
     last_name: str | None = Field(
         default=None, max_length=50, description="Optional last name"
     )
+
+
+class RegisterResponse(BaseModel):
+    """Response model for registration (no token, just confirmation)."""
+
+    message: str = Field(
+        ..., description="Confirmation message about email verification"
+    )
+    email: str = Field(..., description="Email address to verify")
+
+
+class VerifyEmailRequest(BaseModel):
+    """Request model for email verification."""
+
+    token: str = Field(..., description="Email verification token from the link")
+
+
+class VerifyEmailResponse(BaseModel):
+    """Response model for successful email verification."""
+
+    message: str = Field(..., description="Success message")
+    access_token: str = Field(..., description="Access token for authentication")
+    token_type: str = Field(default="bearer", description="Type of the token")
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request model for forgot password."""
+
+    email: EmailStr = Field(..., description="Email address for password reset")
+
+
+class ForgotPasswordResponse(BaseModel):
+    """Response model for forgot password."""
+
+    message: str = Field(
+        ..., description="Confirmation that reset email was sent if account exists"
+    )
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request model for password reset."""
+
+    token: str = Field(..., description="Password reset token from the email link")
+    new_password: str = Field(
+        ...,
+        min_length=12,
+        description="New password with minimum length of 12 characters",
+    )
+
+
+class ResetPasswordResponse(BaseModel):
+    """Response model for successful password reset."""
+
+    message: str = Field(..., description="Success message")

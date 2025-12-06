@@ -81,13 +81,16 @@ async def auth_client() -> AsyncGenerator[tuple[AsyncClient, AsyncSession], None
     await engine.dispose()
 
 
-async def _create_user(db: AsyncSession, username: str = "alice") -> User:
+async def _create_user(
+    db: AsyncSession, username: str = "alice", is_verified: bool = True
+) -> User:
     user = User(
         username=username,
         email=f"{username}@example.test",
         hashed_password=get_password_hash("secret"),
         first_name="A",
         last_name="User",
+        is_verified=is_verified,
     )
     db.add(user)
     await db.commit()
@@ -122,6 +125,21 @@ async def test_login_wrong_password(auth_client: tuple[AsyncClient, AsyncSession
     )
     assert resp.status_code == status.HTTP_401_UNAUTHORIZED
     assert resp.json()["detail"] == "Incorrect username or password"
+
+
+@pytest.mark.asyncio
+async def test_login_unverified_email(auth_client: tuple[AsyncClient, AsyncSession]):
+    """Login fails for users who haven't verified their email."""
+    client, db = auth_client
+    user = await _create_user(db, username="unverified", is_verified=False)
+
+    resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": user.username, "password": "secret"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    assert resp.status_code == status.HTTP_403_FORBIDDEN
+    assert "not verified" in resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio

@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # GEMINI_API_KEY is optional; prefer storing secrets in .env.dev/.env.prod
     GEMINI_API_KEY: str | None = None
 
+    # Azure Communication Services for email
+    AZURE_COMMUNICATION_CONNECTION_STRING: str | None = None
+    EMAIL_SENDER_ADDRESS: str = "DoNotReply@notify.pantrypilot.com"
+
+    # Frontend URL for email links (verification, password reset)
+    FRONTEND_URL: str = "http://localhost:5173"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: object) -> list[str]:

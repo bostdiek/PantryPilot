@@ -75,6 +75,22 @@ class UserCRUD:
 
         return db_user
 
+    async def set_verified(self, db: AsyncSession, user: User) -> User:
+        """Mark a user's email as verified."""
+        user.is_verified = True
+        await db.commit()
+        await db.refresh(user)
+        return user
+
+    async def update_password(
+        self, db: AsyncSession, user: User, hashed_password: str
+    ) -> User:
+        """Update a user's password."""
+        user.hashed_password = hashed_password
+        await db.commit()
+        await db.refresh(user)
+        return user
+
 
 # Create singleton instance
 user_crud = UserCRUD()

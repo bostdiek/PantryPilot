@@ -40,6 +40,9 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=false()
     )
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=false()
+    )
     first_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(50), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
