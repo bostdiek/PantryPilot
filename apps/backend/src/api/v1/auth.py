@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from core.email import send_password_reset_email, send_verification_email
 from core.exceptions import DuplicateUserError
+from core.ratelimit import check_rate_limit
 from core.security import (
     create_access_token,
     generate_password_reset_token,
@@ -39,7 +40,7 @@ PasswordForm = Annotated[OAuth2PasswordRequestForm, Depends()]
 _logger = logging.getLogger(__name__)
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, dependencies=[Depends(check_rate_limit)])
 async def login(form_data: PasswordForm, db: DbSession) -> Token:
     """
     OAuth2-compatible token login, get an access token for future requests.
@@ -69,7 +70,12 @@ async def login(form_data: PasswordForm, db: DbSession) -> Token:
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.post("/register", response_model=RegisterResponse, status_code=201)
+@router.post(
+    "/register",
+    response_model=RegisterResponse,
+    status_code=201,
+    dependencies=[Depends(check_rate_limit)],
+)
 async def register(payload: UserRegister, db: DbSession) -> RegisterResponse:
     """
     Register a new user account.
