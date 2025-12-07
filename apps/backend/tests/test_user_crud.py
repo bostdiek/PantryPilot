@@ -91,3 +91,123 @@ async def test_user_crud_helpers(db_user_only: AsyncSession):  # noqa: D103
     assert await get_user_by_id(db_user_only, user.id) is not None
     assert await get_user_by_username(db_user_only, "missing") is None
     assert await get_user_by_email(db_user_only, "missing@example.com") is None
+
+
+@pytest.mark.asyncio
+async def test_user_crud_set_verified(db_user_only: AsyncSession):
+    """Test set_verified marks user as verified."""
+    from crud.user import user_crud
+
+    # Create unverified user
+    user = await create_user(
+        db_user_only,
+        email="verify@example.com",
+        username="verifyuser",
+        hashed_password=get_password_hash("testpass123"),
+    )
+    assert user.is_verified is False
+
+    # Mark as verified
+    updated_user = await user_crud.set_verified(db_user_only, user)
+
+    assert updated_user.is_verified is True
+    assert updated_user.id == user.id
+
+
+@pytest.mark.asyncio
+async def test_user_crud_update_password(db_user_only: AsyncSession):
+    """Test update_password changes the user's password hash."""
+    from core.security import verify_password
+    from crud.user import user_crud
+
+    # Create user with original password
+    user = await create_user(
+        db_user_only,
+        email="pwchange@example.com",
+        username="pwchangeuser",
+        hashed_password=get_password_hash("originalpass123"),
+    )
+
+    # Verify original password works
+    assert verify_password("originalpass123", user.hashed_password)
+
+    # Update password
+    new_hash = get_password_hash("newpassword456")
+    updated_user = await user_crud.update_password(db_user_only, user, new_hash)
+
+    # Verify new password works and old doesn't
+    assert verify_password("newpassword456", updated_user.hashed_password)
+    assert not verify_password("originalpass123", updated_user.hashed_password)
+
+
+@pytest.mark.asyncio
+async def test_user_crud_update_profile(db_user_only: AsyncSession):
+    """Test update method for user profile changes."""
+    from crud.user import user_crud
+    from schemas.user_preferences import UserProfileUpdate
+
+    # Create user
+    user = await create_user(
+        db_user_only,
+        email="profile@example.com",
+        username="profileuser",
+        hashed_password=get_password_hash("testpass123"),
+        first_name="Original",
+        last_name="Name",
+    )
+
+    # Update profile
+    update_data = UserProfileUpdate(first_name="Updated", last_name="Person")
+    updated_user = await user_crud.update(db_user_only, user, update_data)
+
+    assert updated_user.first_name == "Updated"
+    assert updated_user.last_name == "Person"
+    assert updated_user.id == user.id
+
+
+@pytest.mark.asyncio
+async def test_user_crud_duplicate_user_raises_error(db_user_only: AsyncSession):
+    """Test creating duplicate user raises DuplicateUserError."""
+    from core.exceptions import DuplicateUserError
+    from crud.user import user_crud
+
+    # Create first user
+    await user_crud.create(
+        db_user_only,
+        email="dupe@example.com",
+        username="dupeuser",
+        hashed_password=get_password_hash("testpass123"),
+    )
+
+    # Try to create with same email
+    with pytest.raises(DuplicateUserError):
+        await user_crud.create(
+            db_user_only,
+            email="dupe@example.com",
+            username="different",
+            hashed_password=get_password_hash("testpass123"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_user_crud_duplicate_username_raises_error(db_user_only: AsyncSession):
+    """Test creating user with duplicate username raises DuplicateUserError."""
+    from core.exceptions import DuplicateUserError
+    from crud.user import user_crud
+
+    # Create first user
+    await user_crud.create(
+        db_user_only,
+        email="first@example.com",
+        username="sameusername",
+        hashed_password=get_password_hash("testpass123"),
+    )
+
+    # Try to create with same username
+    with pytest.raises(DuplicateUserError):
+        await user_crud.create(
+            db_user_only,
+            email="second@example.com",
+            username="sameusername",
+            hashed_password=get_password_hash("testpass123"),
+        )

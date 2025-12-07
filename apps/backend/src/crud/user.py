@@ -77,18 +77,26 @@ class UserCRUD:
 
     async def set_verified(self, db: AsyncSession, user: User) -> User:
         """Mark a user's email as verified."""
-        user.is_verified = True
-        await db.commit()
-        await db.refresh(user)
+        try:
+            user.is_verified = True
+            await db.commit()
+            await db.refresh(user)
+        except Exception:
+            await db.rollback()
+            raise
         return user
 
     async def update_password(
         self, db: AsyncSession, user: User, hashed_password: str
     ) -> User:
         """Update a user's password."""
-        user.hashed_password = hashed_password
-        await db.commit()
-        await db.refresh(user)
+        try:
+            user.hashed_password = hashed_password
+            await db.commit()
+            await db.refresh(user)
+        except Exception:
+            await db.rollback()
+            raise
         return user
 
 

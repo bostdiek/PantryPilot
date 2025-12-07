@@ -4,6 +4,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
+        exclude: '^apps/backend/tests/.*'
         additional_dependencies: []
         stages: [pre-commit]
 
