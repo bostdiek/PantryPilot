@@ -195,6 +195,8 @@ module containerApps 'modules/containerapps.bicep' = {
     minReplicas: currentSettings.containerMinReplicas
     maxReplicas: currentSettings.containerMaxReplicas
     keyVaultUri: keyVault.outputs.vaultUri
+    upstashRedisRestUrl: upstashRedisRestUrl
+    upstashRedisRestToken: upstashRedisRestToken
     registryServer: useQuickstartImage ? '' : acr.outputs.loginServer
     registryUsername: useQuickstartImage ? '' : acrResource.listCredentials().username
     registryPassword: useQuickstartImage ? '' : acrResource.listCredentials().passwords[0].value

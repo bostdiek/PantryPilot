@@ -35,6 +35,13 @@ param tags object = {}
 @description('Allowed CORS origins for the backend API')
 param corsOrigins array = []
 
+@description('Upstash Redis REST URL for rate limiting (optional)')
+param upstashRedisRestUrl string = ''
+
+@description('Upstash Redis REST Token for rate limiting (optional)')
+@secure()
+param upstashRedisRestToken string = ''
+
 // Log Analytics Workspace for Container Apps
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${environmentName}-logs'
@@ -117,34 +124,39 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                 value: registryPassword
               }
             ],
-        // Key Vault secrets always needed
-        [
-          {
-            name: 'database-connection-string'
-            keyVaultUrl: '${keyVaultUri}secrets/dbConnectionString'
-            identity: 'system'
-          }
-          {
-            name: 'secret-key'
-            keyVaultUrl: '${keyVaultUri}secrets/secretKey'
-            identity: 'system'
-          }
-          {
-            name: 'gemini-api-key'
-            keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
-            identity: 'system'
-          }
-          {
-            name: 'upstash-redis-url'
-            keyVaultUrl: '${keyVaultUri}secrets/upstashRedisRestUrl'
-            identity: 'system'
-          }
-          {
-            name: 'upstash-redis-token'
-            keyVaultUrl: '${keyVaultUri}secrets/upstashRedisRestToken'
-            identity: 'system'
-          }
-        ]
+        // Key Vault secrets always needed, and optionally Upstash secrets if provided
+        concat(
+          [
+            {
+              name: 'database-connection-string'
+              keyVaultUrl: '${keyVaultUri}secrets/dbConnectionString'
+              identity: 'system'
+            },
+            {
+              name: 'secret-key'
+              keyVaultUrl: '${keyVaultUri}secrets/secretKey'
+              identity: 'system'
+            },
+            {
+              name: 'gemini-api-key'
+              keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
+              identity: 'system'
+            }
+          ]
+          ,
+          empty(upstashRedisRestUrl)
+            ? []
+            : [
+                {
+                  name: 'upstash-redis-url'
+                  value: upstashRedisRestUrl
+                },
+                {
+                  name: 'upstash-redis-token'
+                  value: upstashRedisRestToken
+                }
+              ]
+        )
       )
     }
     template: {
@@ -156,68 +168,74 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             cpu: json('0.5')
             memory: '1Gi'
           }
-          env: [
-            {
-              name: 'DATABASE_URL'
-              secretRef: 'database-connection-string' // pragma: allowlist secret
-            }
-            {
-              name: 'SECRET_KEY'
-              secretRef: 'secret-key' // pragma: allowlist secret
-            }
-            {
-              name: 'GEMINI_API_KEY'
-              secretRef: 'gemini-api-key' // pragma: allowlist secret
-            }
-            {
-              name: 'UPSTASH_REDIS_REST_URL'
-              secretRef: 'upstash-redis-url' // pragma: allowlist secret
-            }
-            {
-              name: 'UPSTASH_REDIS_REST_TOKEN'
-              secretRef: 'upstash-redis-token' // pragma: allowlist secret
-            }
-            {
-              name: 'ENVIRONMENT'
-              value: contains(environmentName, 'prod') ? 'production' : 'development'
-            }
-            {
-              name: 'LOG_LEVEL'
-              value: 'INFO'
-            }
-            {
-              name: 'API_V1_STR'
-              value: '/api/v1'
-            }
-            {
-              name: 'PROJECT_NAME'
-              value: 'PantryPilot'
-            }
-            {
-              name: 'VERSION'
-              value: '0.1.0'
-            }
-            {
-              name: 'ALGORITHM'
-              value: 'HS256'
-            }
-            {
-              name: 'ACCESS_TOKEN_EXPIRE_MINUTES'
-              value: '30'
-            }
-            {
-              name: 'PORT'
-              value: '8000'
-            }
-            {
-              name: 'PYTHONPATH'
-              value: '/app/src'
-            }
-            {
-              name: 'CORS_ORIGINS'
-              value: join(corsOrigins, ',')
-            }
-          ]
+          env: concat(
+            [
+              {
+                name: 'DATABASE_URL'
+                secretRef: 'database-connection-string' // pragma: allowlist secret
+              }
+              {
+                name: 'SECRET_KEY'
+                secretRef: 'secret-key' // pragma: allowlist secret
+              }
+              {
+                name: 'GEMINI_API_KEY'
+                secretRef: 'gemini-api-key' // pragma: allowlist secret
+              }
+              {
+                name: 'ENVIRONMENT'
+                value: contains(environmentName, 'prod') ? 'production' : 'development'
+              }
+              {
+                name: 'LOG_LEVEL'
+                value: 'INFO'
+              }
+              {
+                name: 'API_V1_STR'
+                value: '/api/v1'
+              }
+              {
+                name: 'PROJECT_NAME'
+                value: 'PantryPilot'
+              }
+              {
+                name: 'VERSION'
+                value: '0.1.0'
+              }
+              {
+                name: 'ALGORITHM'
+                value: 'HS256'
+              }
+              {
+                name: 'ACCESS_TOKEN_EXPIRE_MINUTES'
+                value: '30'
+              }
+              {
+                name: 'PORT'
+                value: '8000'
+              }
+              {
+                name: 'PYTHONPATH'
+                value: '/app/src'
+              }
+              {
+                name: 'CORS_ORIGINS'
+                value: join(corsOrigins, ',')
+              }
+            ],
+            empty(upstashRedisRestUrl)
+              ? []
+              : [
+                  {
+                    name: 'UPSTASH_REDIS_REST_URL'
+                    secretRef: 'upstash-redis-url' // pragma: allowlist secret
+                  }
+                  {
+                    name: 'UPSTASH_REDIS_REST_TOKEN'
+                    secretRef: 'upstash-redis-token' // pragma: allowlist secret
+                  }
+                ]
+          )
           probes: [
             {
               type: 'Liveness'
