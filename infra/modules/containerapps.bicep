@@ -142,8 +142,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
               identity: 'system'
             }
-          ],
-          empty(upstashRedisRestUrl)
+          ], empty(upstashRedisRestUrl)
             ? []
             : [
                 {
