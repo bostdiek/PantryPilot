@@ -6,3 +6,5 @@ param uniqueSuffix = readEnvironmentVariable('AZURE_UNIQUE_SUFFIX', 'prod001')
 param dbAdminUsername = 'pantrypilot_admin'
 param dbAdminPassword = readEnvironmentVariable('DB_ADMIN_PASSWORD')
 param secretKey = readEnvironmentVariable('SECRET_KEY')
+param upstashRedisRestUrl = readEnvironmentVariable('UPSTASH_REDIS_REST_URL', '')
+param upstashRedisRestToken = readEnvironmentVariable('UPSTASH_REDIS_REST_TOKEN', '')
