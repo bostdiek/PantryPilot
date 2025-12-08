@@ -6,6 +6,7 @@ from uuid import UUID
 from argon2 import PasswordHasher
 from argon2.exceptions import HashingError, VerifyMismatchError
 from fastapi import HTTPException, status
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from jose import JWTError, jwt
 
 from core.config import Settings, get_settings
@@ -21,6 +22,14 @@ _password_hasher = PasswordHasher()
 
 # Module logger for security helpers
 _logger = logging.getLogger(__name__)
+
+# Token salts for different purposes
+EMAIL_VERIFICATION_SALT = "email-verification"
+PASSWORD_RESET_SALT = "password-reset"  # pragma: allowlist secret
+
+# Token expiration times (in seconds)
+EMAIL_VERIFICATION_EXPIRATION = 86400  # 24 hours
+PASSWORD_RESET_EXPIRATION = 3600  # 1 hour
 
 
 def create_access_token(
@@ -164,3 +173,90 @@ def decode_draft_token(token: str) -> dict[str, Any]:
         )
 
     return payload
+
+
+def _get_serializer() -> URLSafeTimedSerializer:
+    """Get a URLSafeTimedSerializer instance using the app secret key."""
+    return URLSafeTimedSerializer(_settings().SECRET_KEY)
+
+
+def generate_verification_token(email: str) -> str:
+    """Generate a URL-safe token for email verification.
+
+    Args:
+        email: The email address to encode in the token.
+
+    Returns:
+        A URL-safe token string.
+    """
+    serializer = _get_serializer()
+    return serializer.dumps(email, salt=EMAIL_VERIFICATION_SALT)
+
+
+def verify_email_token(token: str) -> str | None:
+    """Verify an email verification token and extract the email.
+
+    Args:
+        token: The token to verify.
+
+    Returns:
+        The email address if the token is valid, None otherwise.
+    """
+    serializer = _get_serializer()
+    try:
+        email: str = serializer.loads(
+            token,
+            salt=EMAIL_VERIFICATION_SALT,
+            max_age=EMAIL_VERIFICATION_EXPIRATION,
+        )
+        return email
+    except SignatureExpired:
+        _logger.warning("Email verification token expired")
+        return None
+    except BadSignature:
+        _logger.warning("Invalid email verification token signature")
+        return None
+    except Exception as exc:
+        _logger.exception("Unexpected error verifying email token: %s", exc)
+        return None
+
+
+def generate_password_reset_token(email: str) -> str:
+    """Generate a URL-safe token for password reset.
+
+    Args:
+        email: The email address to encode in the token.
+
+    Returns:
+        A URL-safe token string.
+    """
+    serializer = _get_serializer()
+    return serializer.dumps(email, salt=PASSWORD_RESET_SALT)
+
+
+def verify_password_reset_token(token: str) -> str | None:
+    """Verify a password reset token and extract the email.
+
+    Args:
+        token: The token to verify.
+
+    Returns:
+        The email address if the token is valid, None otherwise.
+    """
+    serializer = _get_serializer()
+    try:
+        email: str = serializer.loads(
+            token,
+            salt=PASSWORD_RESET_SALT,
+            max_age=PASSWORD_RESET_EXPIRATION,
+        )
+        return email
+    except SignatureExpired:
+        _logger.warning("Password reset token expired")
+        return None
+    except BadSignature:
+        _logger.warning("Invalid password reset token signature")
+        return None
+    except Exception as exc:
+        _logger.exception("Unexpected error verifying password reset token: %s", exc)
+        return None

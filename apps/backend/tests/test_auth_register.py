@@ -15,9 +15,7 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-)
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
 from core.security import verify_password
@@ -62,11 +60,11 @@ async def test_register_success(auth_client: tuple[AsyncClient, AsyncSession]):
     # Verify 201 status code
     assert resp.status_code == status.HTTP_201_CREATED
 
-    # Verify response contains access_token and token_type
+    # Verify response contains confirmation message (no token - requires verification)
     payload = resp.json()
-    assert "access_token" in payload
-    assert payload["access_token"]
-    assert payload["token_type"] == "bearer"
+    assert "message" in payload
+    assert "verify" in payload["message"].lower()
+    assert payload["email"] == "newuser@test.com"
 
     # Verify user is created in database
     result = await db.execute(select(User).where(User.username == "newuser123"))
@@ -76,6 +74,8 @@ async def test_register_success(auth_client: tuple[AsyncClient, AsyncSession]):
     assert created_user.email == "newuser@test.com"
     assert created_user.first_name == "New"
     assert created_user.last_name == "User"
+    # User should not be verified yet
+    assert created_user.is_verified is False
 
     # Verify password is properly hashed (not stored as plaintext)
     assert created_user.hashed_password != "securepassword123"
@@ -99,8 +99,8 @@ async def test_register_success_minimal_data(
 
     assert resp.status_code == status.HTTP_201_CREATED
     payload = resp.json()
-    assert payload["access_token"]
-    assert payload["token_type"] == "bearer"
+    assert "message" in payload
+    assert payload["email"] == "minimal@test.com"
 
     # Verify user is created with optional fields as None
     result = await db.execute(select(User).where(User.username == "minimaluser"))
@@ -108,6 +108,7 @@ async def test_register_success_minimal_data(
     assert created_user is not None
     assert created_user.first_name is None
     assert created_user.last_name is None
+    assert created_user.is_verified is False
 
 
 @pytest.mark.asyncio
@@ -208,8 +209,11 @@ async def test_register_password_various_short_lengths(
 async def test_register_token_grants_access(
     auth_client: tuple[AsyncClient, AsyncSession],
 ):
-    """Test returned token works on protected endpoint."""
-    client, _ = auth_client
+    """Test that registered user must verify email before accessing protected endpoint.
+
+    The user should not be able to login or access protected resources until verified.
+    """
+    client, db = auth_client
 
     registration_data = {
         "username": "tokenuser",
@@ -217,20 +221,25 @@ async def test_register_token_grants_access(
         "password": "securepassword123",
     }
 
-    # Register user and get token
+    # Register user (no token returned - must verify first)
     resp = await client.post("/api/v1/auth/register", json=registration_data)
     assert resp.status_code == status.HTTP_201_CREATED
+    assert "message" in resp.json()
 
-    token = resp.json()["access_token"]
+    # Verify user exists and is not verified
+    result = await db.execute(select(User).where(User.username == "tokenuser"))
+    user = result.scalar_one_or_none()
+    assert user is not None
+    assert user.is_verified is False
 
-    # Use token to access protected endpoint
-    protected_resp = await client.get(
-        "/api/v1/mealplans/weekly?start=2025-01-14",
-        headers={"Authorization": f"Bearer {token}"},
+    # Trying to login should fail because email is not verified
+    login_resp = await client.post(
+        "/api/v1/auth/login",
+        data={"username": "tokenuser", "password": "securepassword123"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
     )
-
-    # Should not be unauthorized (token works)
-    assert protected_resp.status_code != status.HTTP_401_UNAUTHORIZED
+    assert login_resp.status_code == status.HTTP_403_FORBIDDEN
+    assert "not verified" in login_resp.json()["detail"].lower()
 
 
 @pytest.mark.asyncio
@@ -373,8 +382,8 @@ async def test_register_password_exactly_12_chars(
 
     assert resp.status_code == status.HTTP_201_CREATED
     payload = resp.json()
-    assert payload["access_token"]
-    assert payload["token_type"] == "bearer"
+    assert "message" in payload
+    assert payload["email"] == "exact@test.com"
 
 
 @pytest.mark.asyncio
@@ -466,17 +475,20 @@ async def test_register_success_unit_token_path(
     auth_client: tuple[AsyncClient, AsyncSession],
 ):
     """
-    Unit-level success test that mocks create_user and create_access_token
-    to ensure the token creation/return lines are covered in register().
+    Unit-level success test that mocks create_user and verification email
+    to ensure the registration flow is covered in register().
     """
     import uuid
     from types import SimpleNamespace
 
     import api.v1.auth as auth_mod  # type: ignore
 
-    # Patch hashing and token creation
+    # Patch hashing and email sending
     monkeypatch.setattr(auth_mod, "get_password_hash", lambda pw: "hashed_pw")
-    monkeypatch.setattr(auth_mod, "create_access_token", lambda data: "unit-token")
+    monkeypatch.setattr(
+        auth_mod, "generate_verification_token", lambda email: "verification-token"
+    )
+    monkeypatch.setattr(auth_mod, "send_verification_email", lambda email, token: True)
 
     class _DummyUser:
         def __init__(self):
@@ -496,9 +508,9 @@ async def test_register_success_unit_token_path(
         last_name=None,
     )
 
-    token = await auth_mod.register(payload, db)
-    assert token.access_token == "unit-token"
-    assert token.token_type == "bearer"
+    result = await auth_mod.register(payload, db)
+    assert "verify" in result.message.lower()
+    assert result.email == "unitok@example.com"
 
 
 @pytest.mark.asyncio
@@ -553,11 +565,12 @@ async def test_login_success_unit(
         lambda data: "unit-login-token",
     )
 
-    # Build a dummy user with a valid hashed password
+    # Build a dummy user with a valid hashed password and is_verified=True
     class _DummyUser:
         def __init__(self):
             self.id = uuid.uuid4()
             self.hashed_password = auth_mod.get_password_hash("goodpass")
+            self.is_verified = True
 
     async def _user_ok(db, username: str):
         return _DummyUser()
