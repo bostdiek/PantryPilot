@@ -8,6 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import context
+from dependencies.db import _normalize_asyncpg_url
 
 
 # this is the Alembic Config object, which provides
@@ -74,14 +75,8 @@ def run_migrations_online() -> None:
             "or provide sqlalchemy.url in alembic.ini."
         )
 
-    # Ensure we use the asyncpg driver when a plain PostgreSQL URL is provided
-    # The GitHub Actions secrets typically provide a standard 'postgresql://' URL.
-    # SQLAlchemy's async engine requires an async driver; map to asyncpg automatically.
-    if url.startswith("postgresql://") or url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    elif url.startswith("postgresql+psycopg2://"):
-        url = url.replace("postgresql+psycopg2://", "postgresql+asyncpg://", 1)
+    # Normalize the URL to use asyncpg driver and fix SSL parameters
+    url = _normalize_asyncpg_url(url)
 
     connectable: AsyncEngine = create_async_engine(url, poolclass=pool.NullPool)
 
