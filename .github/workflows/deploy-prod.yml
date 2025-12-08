@@ -125,7 +125,7 @@ jobs:
       - name: Run Alembic migrations
         working-directory: apps/backend
         run: |
-          uv run alembic upgrade head
+          uv run alembic -c src/alembic.ini upgrade head
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
 
