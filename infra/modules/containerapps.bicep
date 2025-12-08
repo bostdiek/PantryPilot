@@ -35,6 +35,13 @@ param tags object = {}
 @description('Allowed CORS origins for the backend API')
 param corsOrigins array = []
 
+@description('Upstash Redis REST URL for rate limiting (optional)')
+param upstashRedisRestUrl string = ''
+
+@description('Upstash Redis REST Token for rate limiting (optional)')
+@secure()
+param upstashRedisRestToken string = ''
+
 // Log Analytics Workspace for Container Apps
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${environmentName}-logs'
@@ -136,13 +143,11 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
           }
           {
             name: 'upstash-redis-url'
-            keyVaultUrl: '${keyVaultUri}secrets/upstashRedisRestUrl'
-            identity: 'system'
+            value: upstashRedisRestUrl
           }
           {
             name: 'upstash-redis-token'
-            keyVaultUrl: '${keyVaultUri}secrets/upstashRedisRestToken'
-            identity: 'system'
+            value: upstashRedisRestToken
           }
         ]
       )

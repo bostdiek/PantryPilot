@@ -71,6 +71,8 @@ jobs:
           AZURE_UNIQUE_SUFFIX: dev001
           DB_ADMIN_PASSWORD: ${{ secrets.DB_ADMIN_PASSWORD }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
 
       - name: Output deployment info
         run: |
