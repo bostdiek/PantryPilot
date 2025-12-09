@@ -32,6 +32,7 @@ jobs:
   determine-environment:
     name: Determine Environment
     runs-on: ubuntu-latest
+    permissions: {} # No permissions needed for this job
     outputs:
       environment: ${{ steps.env.outputs.environment }}
     steps:
