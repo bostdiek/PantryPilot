@@ -8,6 +8,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from alembic import context
+from dependencies.db import _normalize_asyncpg_url
 
 
 # this is the Alembic Config object, which provides
@@ -73,6 +74,9 @@ def run_migrations_online() -> None:
             "No database URL configured. Set the DATABASE_URL environment variable "
             "or provide sqlalchemy.url in alembic.ini."
         )
+
+    # Normalize the URL to use asyncpg driver and fix SSL parameters
+    url = _normalize_asyncpg_url(url)
 
     connectable: AsyncEngine = create_async_engine(url, poolclass=pool.NullPool)
 
