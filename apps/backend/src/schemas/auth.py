@@ -100,3 +100,15 @@ class ResetPasswordResponse(BaseModel):
     """Response model for successful password reset."""
 
     message: str = Field(..., description="Success message")
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request model for resending verification email."""
+
+    email: EmailStr = Field(..., description="Email address to resend verification to")
+
+
+class ResendVerificationResponse(BaseModel):
+    """Response model for resend verification."""
+
+    message: str = Field(..., description="Confirmation message")

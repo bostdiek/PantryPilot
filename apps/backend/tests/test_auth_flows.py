@@ -401,3 +401,154 @@ class TestResetPasswordUnit:
 
         assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
         assert exc.value.detail == "Password must be at least 12 characters"
+
+
+class TestResendVerificationEndpoint:
+    """Tests for POST /auth/resend-verification endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_resend_verification_unverified_user(
+        self,
+        auth_client: tuple[AsyncClient, AsyncSession],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Resend verification for unverified user should send email."""
+        client, db = auth_client
+
+        await _create_user(
+            db, username="unverified", email="unverified@test.com", is_verified=False
+        )
+
+        # Mock email sending
+        import api.v1.auth as auth_mod
+
+        email_sent_to: list[str] = []
+
+        def mock_send_verification(email: str, token: str) -> bool:
+            email_sent_to.append(email)
+            return True
+
+        monkeypatch.setattr(auth_mod, "send_verification_email", mock_send_verification)
+
+        resp = await client.post(
+            "/api/v1/auth/resend-verification", json={"email": "unverified@test.com"}
+        )
+
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert "verification link has been sent" in data["message"]
+        assert email_sent_to == ["unverified@test.com"]
+
+    @pytest.mark.asyncio
+    async def test_resend_verification_already_verified_user(
+        self, auth_client: tuple[AsyncClient, AsyncSession]
+    ):
+        """Already verified user gets success but no email sent."""
+        client, db = auth_client
+
+        await _create_user(
+            db, username="verified", email="verified@test.com", is_verified=True
+        )
+
+        resp = await client.post(
+            "/api/v1/auth/resend-verification", json={"email": "verified@test.com"}
+        )
+
+        # Should return success to prevent email enumeration
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert "verification link has been sent" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_resend_verification_nonexistent_email(
+        self, auth_client: tuple[AsyncClient, AsyncSession]
+    ):
+        """Non-existent email returns success to prevent enumeration."""
+        client, _ = auth_client
+
+        resp = await client.post(
+            "/api/v1/auth/resend-verification", json={"email": "nonexistent@test.com"}
+        )
+
+        # Should return success to prevent email enumeration
+        assert resp.status_code == status.HTTP_200_OK
+        data = resp.json()
+        assert "verification link has been sent" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_resend_verification_email_normalized(
+        self,
+        auth_client: tuple[AsyncClient, AsyncSession],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Email should be normalized to lowercase."""
+        client, db = auth_client
+
+        await _create_user(
+            db, username="casetest", email="casetest@test.com", is_verified=False
+        )
+
+        import api.v1.auth as auth_mod
+
+        email_sent_to: list[str] = []
+
+        def mock_send_verification(email: str, token: str) -> bool:
+            email_sent_to.append(email)
+            return True
+
+        monkeypatch.setattr(auth_mod, "send_verification_email", mock_send_verification)
+
+        # Send with uppercase email
+        resp = await client.post(
+            "/api/v1/auth/resend-verification", json={"email": "CASETEST@TEST.COM"}
+        )
+
+        assert resp.status_code == status.HTTP_200_OK
+        # Email should be normalized to lowercase when sent
+        assert email_sent_to == ["casetest@test.com"]
+
+
+class TestResendVerificationUnit:
+    """Unit-level tests for resend_verification() function."""
+
+    @pytest.mark.asyncio
+    async def test_resend_verification_email_send_failure_logs_warning(
+        self,
+        auth_client: tuple[AsyncClient, AsyncSession],
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """When email sending fails, should log warning but still return success."""
+        import api.v1.auth as auth_mod
+
+        _, db = auth_client
+
+        # Create unverified user
+        user = User(
+            id=uuid4(),
+            username="emailfailresend",
+            email="emailfailresend@test.com",
+            hashed_password="hash",  # pragma: allowlist secret
+            is_verified=False,
+        )
+        db.add(user)
+        await db.commit()
+
+        # Mock to find user and fail email send
+        async def mock_get_user(db, email):
+            return user
+
+        monkeypatch.setattr(auth_mod, "get_user_by_email", mock_get_user)
+        monkeypatch.setattr(
+            auth_mod,
+            "generate_verification_token",
+            lambda email: "token",  # pragma: allowlist secret
+        )
+        monkeypatch.setattr(
+            auth_mod, "send_verification_email", lambda email, token: False
+        )
+
+        payload = SimpleNamespace(email="emailfailresend@test.com")
+        result = await auth_mod.resend_verification(payload, db)
+
+        # Should still return success message
+        assert "verification link has been sent" in result.message
