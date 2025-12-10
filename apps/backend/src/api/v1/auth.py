@@ -47,12 +47,17 @@ async def login(form_data: PasswordForm, db: DbSession) -> Token:
     """
     OAuth2-compatible token login, get an access token for future requests.
 
-    - **username**: The user's username
+    - **username**: The user's username or email address
     - **password**: The user's password
 
     Note: Users must verify their email before logging in.
     """
+    # Try to find user by username first, then by email
     user = await get_user_by_username(db=db, username=form_data.username)
+    if not user:
+        # If not found by username, try email (case-insensitive)
+        user = await get_user_by_email(db=db, email=form_data.username.lower())
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

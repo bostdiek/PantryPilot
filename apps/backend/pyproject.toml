@@ -24,6 +24,8 @@ dependencies = [
     "pillow>=11.3.0",
     "azure-communication-email>=1.1.0",
     "itsdangerous>=2.2.0",
+    "upstash-ratelimit>=1.1.0",
+    "upstash-redis>=1.5.0",
 ]
 
 [dependency-groups]
@@ -89,3 +91,7 @@ warn_unused_ignores = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = ["upstash_ratelimit", "upstash_redis"]
+ignore_missing_imports = true
