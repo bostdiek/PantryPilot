@@ -44,3 +44,44 @@ export interface AuthState {
   setUser: (user: AuthUser | null) => void;
   getDisplayName: () => string;
 }
+
+// Email verification response (from /auth/verify-email)
+export interface VerifyEmailResponse {
+  message: string;
+  access_token: string;
+  token_type: 'bearer';
+}
+
+// Forgot password request/response
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+// Reset password request/response
+export interface ResetPasswordRequest {
+  token: string;
+  new_password: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
+// Resend verification request/response
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+export interface ResendVerificationResponse {
+  message: string;
+}
+
+// Register response (no token, just confirmation)
+export interface RegisterResponse {
+  message: string;
+  email: string;
+}
