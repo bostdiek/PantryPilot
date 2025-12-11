@@ -54,6 +54,9 @@ class ApiClient {
       : `/${endpoint}`;
     const url = `${this.baseUrl}${normalizedEndpoint}`;
 
+    // Auth endpoints should not trigger logout on 401 (those are credential errors, not session expiry)
+    const isAuthEndpoint = normalizedEndpoint.startsWith('/api/v1/auth/');
+
     logger.debug(`API Request: ${options?.method || 'GET'} ${url}`);
 
     try {
@@ -103,7 +106,8 @@ class ApiClient {
         }
 
         // Check if this error should trigger logout before throwing
-        if (shouldLogoutOnError(body, resp.status)) {
+        // Skip logout for auth endpoints - 401 there means wrong credentials, not session expiry
+        if (!isAuthEndpoint && shouldLogoutOnError(body, resp.status)) {
           // Log logout event with correlation ID for debugging
           const correlationId = (body as any)?.error?.correlation_id;
           if (correlationId) {
@@ -144,7 +148,11 @@ class ApiClient {
               ? rawMessageStr
               : `Request failed (${resp.status})`;
 
-          if (shouldLogoutOnError(apiResponse, resp.status)) {
+          // Skip logout for auth endpoints - 401 there means wrong credentials, not session expiry
+          if (
+            !isAuthEndpoint &&
+            shouldLogoutOnError(apiResponse, resp.status)
+          ) {
             // Log logout event with correlation ID for debugging
             const correlationId = (apiResponse as any)?.error?.correlation_id;
             if (correlationId) {

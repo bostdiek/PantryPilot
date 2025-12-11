@@ -21,6 +21,9 @@ const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = lazy(() => import('./pages/RecipesPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
+const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
 // Loader functions for protected routes
 const homeLoader = async () => {
@@ -170,6 +173,30 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<LoadingSpinner />}>
             <RegisterPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'verify-email',
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <VerifyEmailPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'forgot-password',
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <ForgotPasswordPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'reset-password',
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <ResetPasswordPage />
           </Suspense>
         ),
       },

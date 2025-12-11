@@ -1,11 +1,10 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import RegisterPage from '../RegisterPage';
-import { useAuthStore } from '../../stores/useAuthStore';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as authApi from '../../api/endpoints/auth';
-import type { TokenResponse } from '../../types/auth';
+import { useAuthStore } from '../../stores/useAuthStore';
+import RegisterPage from '../RegisterPage';
 
 // Mock the auth API
 vi.mock('../../api/endpoints/auth', () => ({
@@ -319,12 +318,13 @@ describe('RegisterPage', () => {
       });
     });
 
-    it('updates auth store and navigates on successful registration', async () => {
+    it('shows success state on successful registration', async () => {
       const user = userEvent.setup();
       const mockRegister = vi.mocked(authApi.register);
       mockRegister.mockResolvedValueOnce({
-        access_token: 'test-token',
-        token_type: 'bearer',
+        message:
+          'Registration successful. Please check your email to verify your account.',
+        email: 'test@example.com',
       });
 
       renderRegisterPage();
@@ -348,10 +348,14 @@ describe('RegisterPage', () => {
       });
       await user.click(submitButton);
 
+      // Should show success state with "Check Your Email" message
       await waitFor(() => {
-        expect(mockSetToken).toHaveBeenCalledWith('test-token');
-        expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+        expect(screen.getByText(/check your email/i)).toBeDefined();
+        expect(screen.getByText(/test@example.com/i)).toBeDefined();
       });
+
+      // Should NOT call setToken (no auto-login)
+      expect(mockSetToken).not.toHaveBeenCalled();
     });
 
     it('shows loading state during registration', async () => {
@@ -359,10 +363,12 @@ describe('RegisterPage', () => {
       const mockRegister = vi.mocked(authApi.register);
 
       // Create a promise that we can control
-      let resolveRegister: (value: TokenResponse) => void;
-      const registerPromise = new Promise<TokenResponse>((resolve) => {
-        resolveRegister = resolve;
-      });
+      let resolveRegister: (value: { message: string; email: string }) => void;
+      const registerPromise = new Promise<{ message: string; email: string }>(
+        (resolve) => {
+          resolveRegister = resolve;
+        }
+      );
       mockRegister.mockReturnValueOnce(registerPromise);
 
       renderRegisterPage();
@@ -398,14 +404,13 @@ describe('RegisterPage', () => {
 
       // Resolve the promise
       resolveRegister!({
-        access_token: 'test-token',
-        token_type: 'bearer',
+        message: 'Registration successful.',
+        email: 'test@example.com',
       });
 
+      // Should show success state after resolving
       await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /create account/i })
-        ).toBeDefined();
+        expect(screen.getByText(/check your email/i)).toBeDefined();
       });
     });
 
