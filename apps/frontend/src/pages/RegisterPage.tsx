@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { register } from '../api/endpoints/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
-import { useAuthStore } from '../stores/useAuthStore';
 import type { RegisterFormData } from '../types/auth';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
@@ -32,13 +31,8 @@ const RegisterPage: React.FC = () => {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const navigate = useNavigate();
-  const location = useLocation();
-  const authStore = useAuthStore();
-
-  // Get the intended destination or default to home
-  const from = (location.state as { from?: string })?.from || '/';
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState('');
 
   // Validation functions
   const validateUsername = (username: string): string | undefined => {
@@ -185,11 +179,10 @@ const RegisterPage: React.FC = () => {
 
     try {
       const response = await register(formData);
-      // Store token using auth store
-      authStore.setToken(response.access_token);
-      // Navigate to intended page or home
-      navigate(from, { replace: true });
-    } catch (err: any) {
+      // Show success state - user needs to verify email before logging in
+      setRegistrationSuccess(true);
+      setRegisteredEmail(response.email);
+    } catch (err: unknown) {
       // Use centralized error message handling
       const friendlyMessage = getUserFriendlyErrorMessage(err, {
         action: 'register',
@@ -200,6 +193,52 @@ const RegisterPage: React.FC = () => {
       setIsLoading(false);
     }
   };
+
+  // Show success message after registration
+  if (registrationSuccess) {
+    return (
+      <Container size="sm">
+        <div className="flex min-h-screen flex-col items-center justify-center">
+          <Card variant="default" className="w-full max-w-md p-6">
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                <svg
+                  className="h-6 w-6 text-green-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              </div>
+              <h1 className="mb-2 text-2xl font-bold text-gray-900">
+                Check Your Email
+              </h1>
+              <p className="mb-6 text-gray-600">
+                We sent a verification link to{' '}
+                <span className="font-medium">{registeredEmail}</span>
+              </p>
+              <p className="mb-6 text-sm text-gray-500">
+                Click the link in the email to verify your account and start
+                using PantryPilot.
+              </p>
+              <Link
+                to="/login"
+                className="inline-block rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-500"
+              >
+                Go to Login
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </Container>
+    );
+  }
 
   return (
     <Container size="sm">

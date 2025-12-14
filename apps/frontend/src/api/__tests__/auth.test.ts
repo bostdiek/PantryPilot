@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { login, register } from '../endpoints/auth';
 import type { LoginFormData, RegisterFormData } from '../../types/auth';
+import {
+  forgotPassword,
+  login,
+  register,
+  resendVerification,
+  resetPassword,
+  verifyEmail,
+} from '../endpoints/auth';
 
 describe('Auth API', () => {
   const fetchMock = vi.fn();
@@ -93,6 +100,101 @@ describe('Auth API', () => {
       message: 'Request failed (500)',
       status: 500,
     });
+  });
+
+  it('calls verifyEmail with correct payload', async () => {
+    const mockResponse = {
+      message: 'ok',
+      access_token: 'token-123', // pragma: allowlist secret
+      token_type: 'bearer',
+    };
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+    });
+
+    const result = await verifyEmail('abc');
+    expect(result).toEqual(mockResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/auth/verify-email'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: 'abc' }),
+      })
+    );
+  });
+
+  it('calls forgotPassword with correct payload', async () => {
+    const mockResponse = { message: 'ok' };
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+    });
+
+    const result = await forgotPassword('test@example.com');
+    expect(result).toEqual(mockResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/auth/forgot-password'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'test@example.com' }),
+      })
+    );
+  });
+
+  it('calls resetPassword with correct payload', async () => {
+    const mockResponse = { message: 'ok' };
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+    });
+
+    const result = await resetPassword('tkn', 'newpassword123456');
+    expect(result).toEqual(mockResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/auth/reset-password'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: 'tkn',
+          new_password: 'newpassword123456', // pragma: allowlist secret
+        }),
+      })
+    );
+  });
+
+  it('calls resendVerification with correct payload', async () => {
+    const mockResponse = { message: 'ok' };
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: vi.fn().mockResolvedValue(JSON.stringify(mockResponse)),
+    });
+
+    const result = await resendVerification('test@example.com');
+    expect(result).toEqual(mockResponse);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/auth/resend-verification'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'test@example.com' }),
+      })
+    );
   });
 });
 

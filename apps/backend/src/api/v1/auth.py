@@ -24,6 +24,8 @@ from schemas.auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     RegisterResponse,
+    ResendVerificationRequest,
+    ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
     Token,
@@ -45,12 +47,17 @@ async def login(form_data: PasswordForm, db: DbSession) -> Token:
     """
     OAuth2-compatible token login, get an access token for future requests.
 
-    - **username**: The user's username
+    - **username**: The user's username or email address
     - **password**: The user's password
 
     Note: Users must verify their email before logging in.
     """
+    # Try to find user by username first, then by email
     user = await get_user_by_username(db=db, username=form_data.username)
+    if not user:
+        # If not found by username, try email (case-insensitive)
+        user = await get_user_by_email(db=db, email=form_data.username.lower())
+
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -277,3 +284,40 @@ async def reset_password(
     await user_crud.update_password(db=db, user=user, hashed_password=hashed_password)
 
     return ResetPasswordResponse(message="Password reset successfully")
+
+
+@router.post(
+    "/resend-verification",
+    response_model=ResendVerificationResponse,
+    dependencies=[Depends(check_rate_limit)],
+)
+async def resend_verification(
+    payload: ResendVerificationRequest, db: DbSession
+) -> ResendVerificationResponse:
+    """
+    Resend the verification email to a user.
+
+    - **email**: The email address to resend verification to
+
+    For security, this endpoint always returns success even if the email
+    is not registered or already verified. Rate limited to prevent abuse.
+    """
+    email = payload.email.lower()
+    user = await get_user_by_email(db=db, email=email)
+
+    if user and not user.is_verified:
+        verification_token = generate_verification_token(email)
+        email_sent = send_verification_email(email, verification_token)
+        if not email_sent:
+            _logger.warning("Failed to resend verification email to %s", email)
+    else:
+        _logger.info(
+            "Resend verification requested for %s (not found or already verified)",
+            email,
+        )
+
+    # Always return success to prevent email enumeration
+    return ResendVerificationResponse(
+        message="If an unverified account exists with that email, "
+        "a new verification link has been sent."
+    )
