@@ -33,7 +33,7 @@ function sanitizeErrorMessage(
   fallback = 'An unexpected error occurred. Please try again.'
 ) {
   // Only log full error in development mode to avoid leaking sensitive info in production
-  if (process.env.NODE_ENV === 'development') {
+  if (import.meta.env.DEV) {
     logger.error('Sanitized error (original):', err);
   }
 
