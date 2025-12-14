@@ -17,7 +17,8 @@ const VerifyEmailPage: FC = () => {
 
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const authStore = useAuthStore();
+  const setToken = useAuthStore((s) => s.setToken);
+  const setUser = useAuthStore((s) => s.setUser);
 
   const token = searchParams.get('token');
 
@@ -35,7 +36,7 @@ const VerifyEmailPage: FC = () => {
         const response = await verifyEmail(token);
 
         // Store token in auth store
-        authStore.setToken(response.access_token);
+        setToken(response.access_token);
 
         // Fetch user profile after successful verification
         try {
@@ -47,7 +48,7 @@ const VerifyEmailPage: FC = () => {
             first_name: profile.first_name,
             last_name: profile.last_name,
           };
-          authStore.setUser(user);
+          setUser(user);
         } catch (profileErr) {
           logger.error(
             'Failed to fetch user profile after verification:',
@@ -69,7 +70,7 @@ const VerifyEmailPage: FC = () => {
     };
 
     verifyToken();
-  }, [token, authStore]);
+  }, [token, setToken, setUser]);
 
   // Countdown and redirect after success
   useEffect(() => {
