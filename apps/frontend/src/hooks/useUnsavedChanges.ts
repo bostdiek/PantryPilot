@@ -30,11 +30,11 @@ export function useUnsavedChanges(
   // Update ref when hasUnsavedChanges changes
   hasUnsavedChangesRef.current = hasUnsavedChanges;
 
-  // Use environment detection for test behavior, but always call useBlocker
+  // Use Vite's env flags for test behavior, but always call useBlocker
   const isTestEnv =
     typeof window === 'undefined' ||
-    (typeof globalThis !== 'undefined' &&
-      globalThis.process?.env?.NODE_ENV === 'test');
+    import.meta.env.MODE === 'test' ||
+    import.meta.env.VITEST;
 
   // Always call useBlocker to satisfy React hooks rules
   const routerBlocker = useBlocker(

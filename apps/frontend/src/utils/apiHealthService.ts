@@ -141,10 +141,8 @@ export class ApiHealthService {
 export const apiHealthService = new ApiHealthService();
 
 // Auto-start in browser environments, but skip when running in a test environment
-// where import.meta.env.MODE === 'test' or NODE_ENV === 'test' to allow controlled testing.
-const nodeEnv =
-  typeof process !== 'undefined' ? process.env.NODE_ENV : undefined;
-const isTestMode = import.meta.env?.MODE === 'test' || nodeEnv === 'test';
+// where import.meta.env.MODE === 'test' to allow controlled testing.
+const isTestMode = import.meta.env.MODE === 'test' || import.meta.env.VITEST;
 if (typeof window !== 'undefined' && !isTestMode) {
   apiHealthService.start();
 }
