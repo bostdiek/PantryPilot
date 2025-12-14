@@ -95,6 +95,8 @@ describe('VerifyEmailPage', () => {
       intervalCallback?.();
       intervalCallback?.();
       intervalCallback?.();
+      intervalCallback?.();
+      intervalCallback?.();
     });
 
     await waitFor(() => {

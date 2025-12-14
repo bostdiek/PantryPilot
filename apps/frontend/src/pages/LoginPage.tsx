@@ -102,6 +102,9 @@ const LoginPage: FC = () => {
       logger.error('Failed to resend verification email:', err);
       // Still show success to prevent enumeration
       setResendSuccess(true);
+      // Set 60 second cooldown (still persist to prevent refresh bypass)
+      const endTime = Date.now() + 60000;
+      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
       setCooldown(60);
     } finally {
       setResendLoading(false);

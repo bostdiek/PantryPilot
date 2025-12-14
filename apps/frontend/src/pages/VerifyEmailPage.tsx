@@ -13,7 +13,7 @@ const VerifyEmailPage: FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [countdown, setCountdown] = useState(3);
+  const [countdown, setCountdown] = useState(5);
 
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -23,12 +23,16 @@ const VerifyEmailPage: FC = () => {
   const token = searchParams.get('token');
 
   useEffect(() => {
+    let ignore = false;
+
     const verifyToken = async () => {
       if (!token) {
-        setError(
-          'No verification token provided. Please check your email link.'
-        );
-        setIsLoading(false);
+        if (!ignore) {
+          setError(
+            'No verification token provided. Please check your email link.'
+          );
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -57,19 +61,29 @@ const VerifyEmailPage: FC = () => {
           // Continue - user is verified, profile will be fetched later
         }
 
-        setSuccess(true);
+        if (!ignore) {
+          setSuccess(true);
+        }
       } catch (err) {
         const friendlyMessage = getUserFriendlyErrorMessage(err, {
           action: 'verify',
           resource: 'email',
         });
-        setError(friendlyMessage);
+        if (!ignore) {
+          setError(friendlyMessage);
+        }
       } finally {
-        setIsLoading(false);
+        if (!ignore) {
+          setIsLoading(false);
+        }
       }
     };
 
-    verifyToken();
+    void verifyToken();
+
+    return () => {
+      ignore = true;
+    };
   }, [token, setToken, setUser]);
 
   // Countdown and redirect after success

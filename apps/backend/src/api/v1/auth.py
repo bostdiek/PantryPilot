@@ -144,7 +144,11 @@ async def register(payload: UserRegister, db: DbSession) -> RegisterResponse:
     )
 
 
-@router.post("/verify-email", response_model=VerifyEmailResponse)
+@router.post(
+    "/verify-email",
+    response_model=VerifyEmailResponse,
+    dependencies=[Depends(check_rate_limit)],
+)
 async def verify_email(
     payload: VerifyEmailRequest, db: DbSession
 ) -> VerifyEmailResponse:
@@ -238,7 +242,11 @@ async def forgot_password(
     )
 
 
-@router.post("/reset-password", response_model=ResetPasswordResponse)
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponse,
+    dependencies=[Depends(check_rate_limit)],
+)
 async def reset_password(
     payload: ResetPasswordRequest, db: DbSession
 ) -> ResetPasswordResponse:
