@@ -11,6 +11,8 @@ Helps families plan the weekly meals and grocery list
 
 PantryPilot collects code coverage in CI for both backend (pytest + coverage.py) and frontend (Vitest). Reports are uploaded to Codecov.
 
+Note: The exact CI check names shown in GitHub PRs may be used as required status checks in branch rulesets.
+
 - CI workflow: see `.github/workflows/ci.yml` for steps uploading `apps/backend/coverage.xml` and `apps/frontend/coverage/lcov.info`.
 - Project dashboard: <https://codecov.io/gh/bryanostdiek/pantrypilot>
 
