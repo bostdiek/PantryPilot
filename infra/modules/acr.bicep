@@ -42,12 +42,5 @@ output id string = acr.id
 @description('The name of the Azure Container Registry')
 output name string = acr.name
 
-@description('Admin username (only valid if adminUserEnabled=true)')
-output adminUsername string = adminUserEnabled ? acr.listCredentials().username : ''
-
-@description('Admin password (only valid if adminUserEnabled=true)')
-#disable-next-line outputs-should-not-contain-secrets
-output adminPassword string = adminUserEnabled ? acr.listCredentials().passwords[0].value : ''
-
 @description('The principal ID of the ACR for role assignments')
 output principalId string = acr.identity.principalId

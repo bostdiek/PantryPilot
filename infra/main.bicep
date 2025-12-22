@@ -125,19 +125,20 @@ var containerImage = useQuickstartImage
   ? 'mcr.microsoft.com/k8se/quickstart:latest'
   : '${acr.outputs.loginServer}/pantrypilot-backend:latest'
 
-// Azure Communication Services for transactional email
-// NOTE: Custom domain for prod requires manual verification in Azure Portal first.
-// Set useCustomDomain=true after completing Phase 5 (domain verification).
-var useCustomDomain = false // TODO: Enable after domain verification in Phase 5
+// Reference existing ACR to get admin credentials (only needed when using ACR image)
+resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
+  name: resourceNames.acr
+}
 
+// Azure Communication Services for transactional email
 module communication 'modules/communication.bicep' = {
   params: {
     emailServiceName: resourceNames.emailService
     communicationServiceName: resourceNames.communicationService
     location: 'global'
     dataLocation: 'United States'
-    domainManagement: (environmentName == 'prod' && useCustomDomain) ? 'CustomerManaged' : 'AzureManaged'
-    customDomainName: (environmentName == 'prod' && useCustomDomain) ? 'mail.smartmealplanner.app' : ''
+    domainManagement: environmentName == 'prod' ? 'CustomerManaged' : 'AzureManaged'
+    customDomainName: environmentName == 'prod' ? 'mail.smartmealplanner.app' : ''
     tags: commonTags
   }
 }
@@ -197,8 +198,8 @@ module containerApps 'modules/containerapps.bicep' = {
     upstashRedisRestUrl: upstashRedisRestUrl
     upstashRedisRestToken: upstashRedisRestToken
     registryServer: useQuickstartImage ? '' : acr.outputs.loginServer
-    registryUsername: useQuickstartImage ? '' : acr.outputs.adminUsername
-    registryPassword: useQuickstartImage ? '' : acr.outputs.adminPassword
+    registryUsername: useQuickstartImage ? '' : acrResource.listCredentials().username
+    registryPassword: useQuickstartImage ? '' : acrResource.listCredentials().passwords[0].value
     corsOrigins: corsOrigins
     tags: commonTags
   }

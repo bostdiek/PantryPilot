@@ -44,7 +44,7 @@ Follow these steps in order until all task plan phases and tasks are complete.
    * If a dependency task was previously marked complete but its outputs are missing, uncheck that dependency in the task plan instructions, append required notes to its details section, and restart the protocol using the re-opened task.
 
 4. **Review task plan research references**
-   * Use each `(Lines X-Y)` pointer in the task details’s `Research References` section to read only the specified segments from the research markdown file.
+   * Use each `(Lines X-Y)` pointer in the task detail's `Research References` section to read only the specified segments from the research markdown file.
    * Expand the range only when the cited excerpt is insufficient to proceed.
 
 5. **Gather project context and implement the task**
