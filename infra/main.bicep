@@ -131,14 +131,17 @@ resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existin
 }
 
 // Azure Communication Services for transactional email
+// Custom domain for prod is pre-verified in Azure Portal (mail.smartmealplanner.app)
+var useCustomDomain = true
+
 module communication 'modules/communication.bicep' = {
   params: {
     emailServiceName: resourceNames.emailService
     communicationServiceName: resourceNames.communicationService
     location: 'global'
     dataLocation: 'United States'
-    domainManagement: environmentName == 'prod' ? 'CustomerManaged' : 'AzureManaged'
-    customDomainName: environmentName == 'prod' ? 'mail.smartmealplanner.app' : ''
+    domainManagement: (environmentName == 'prod' && useCustomDomain) ? 'CustomerManaged' : 'AzureManaged'
+    customDomainName: (environmentName == 'prod' && useCustomDomain) ? 'mail.smartmealplanner.app' : ''
     tags: commonTags
   }
 }
