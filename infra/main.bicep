@@ -183,11 +183,20 @@ module staticWebApp 'modules/staticwebapp.bicep' = {
 
 // CORS origins for the backend API
 // Use the ACTUAL Static Web App hostname (not the resource name pattern)
-var corsOrigins = [
-  'https://${staticWebApp.outputs.defaultHostname}'
-  'http://localhost:5173'
-  'http://127.0.0.1:5173'
-]
+var corsOrigins = concat(
+  [
+    'https://${staticWebApp.outputs.defaultHostname}'
+    'http://localhost:5173'
+    'http://127.0.0.1:5173'
+  ],
+  // Production-specific custom domains
+  environmentName == 'prod'
+    ? [
+        'https://smartmealplanner.app'
+        'https://www.smartmealplanner.app'
+      ]
+    : []
+)
 
 module containerApps 'modules/containerapps.bicep' = {
   params: {
