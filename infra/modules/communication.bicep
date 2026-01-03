@@ -74,15 +74,11 @@ resource azureManagedDomain 'Microsoft.Communication/emailServices/domains@2023-
   }
 }
 
-// Customer Managed Domain - for production with custom domain
-resource customerManagedDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' = if (domainManagement == 'CustomerManaged' && !empty(customDomainName)) {
+// Customer Managed Domain - reference existing verified domain for production
+// The domain must be manually created and verified in Azure Portal before deployment
+resource customerManagedDomain 'Microsoft.Communication/emailServices/domains@2023-04-01' existing = if (domainManagement == 'CustomerManaged' && !empty(customDomainName)) {
   parent: emailService
   name: customDomainName
-  location: location
-  properties: {
-    domainManagement: 'CustomerManaged'
-    userEngagementTracking: userEngagementTracking ? 'Enabled' : 'Disabled'
-  }
 }
 
 // Communication Service - links to email domain for sending
