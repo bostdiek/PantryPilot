@@ -186,16 +186,19 @@ module staticWebApp 'modules/staticwebapp.bicep' = {
 var corsOrigins = concat(
   [
     'https://${staticWebApp.outputs.defaultHostname}'
-    'http://localhost:5173'
-    'http://127.0.0.1:5173'
   ],
-  // Production-specific custom domains
+  // Environment-specific additional origins
   environmentName == 'prod'
     ? [
+        // Production-specific custom domains (HTTPS only)
         'https://smartmealplanner.app'
         'https://www.smartmealplanner.app'
       ]
-    : []
+    : [
+        // Development localhost origins (excluded from production)
+        'http://localhost:5173'
+        'http://127.0.0.1:5173'
+      ]
 )
 
 module containerApps 'modules/containerapps.bicep' = {
