@@ -134,6 +134,14 @@ resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existin
 // Custom domain for prod is pre-verified in Azure Portal (mail.smartmealplanner.app)
 var useCustomDomain = true
 
+// Frontend custom domains for production CORS
+// Custom domains must be configured in Azure Static Web Apps before enabling
+var useFrontendCustomDomains = true
+var frontendCustomDomains = [
+  'https://smartmealplanner.app'
+  'https://www.smartmealplanner.app'
+]
+
 module communication 'modules/communication.bicep' = {
   params: {
     emailServiceName: resourceNames.emailService
@@ -189,11 +197,9 @@ var corsOrigins = concat(
   ],
   // Environment-specific additional origins
   environmentName == 'prod'
-    ? [
-        // Production-specific custom domains (HTTPS only)
-        'https://smartmealplanner.app'
-        'https://www.smartmealplanner.app'
-      ]
+    ? (useFrontendCustomDomains
+        ? frontendCustomDomains
+        : [])
     : [
         // Development localhost origins (excluded from production)
         'http://localhost:5173'
