@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { register, resendVerification } from '../api/endpoints/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -22,14 +22,6 @@ interface ValidationErrors {
 }
 
 const RegisterPage: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const location = useLocation();
-
-  // Check if we're in "verify mode" - showing success screen for resend
-  const verifyMode = searchParams.get('verify') === 'true';
-  const emailFromParams = searchParams.get('email') || '';
-  const emailFromState = (location.state as { email?: string })?.email || '';
-
   const [formData, setFormData] = useState<RegisterFormData>({
     username: '',
     email: '',
@@ -45,14 +37,6 @@ const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
-
-  // Initialize success state based on verify mode
-  useEffect(() => {
-    if (verifyMode && (emailFromParams || emailFromState)) {
-      setRegistrationSuccess(true);
-      setRegisteredEmail(emailFromParams || emailFromState);
-    }
-  }, [verifyMode, emailFromParams, emailFromState]);
 
   // Resend verification state
   const [resendLoading, setResendLoading] = useState(false);
@@ -299,13 +283,8 @@ const RegisterPage: React.FC = () => {
                 </svg>
               </div>
               <h1 className="mb-2 text-2xl font-bold text-gray-900">
-                {verifyMode ? 'Verify Your Email' : 'Check Your Email'}
+                Check Your Email
               </h1>
-              {verifyMode && (
-                <p className="mb-4 text-sm text-yellow-700 bg-yellow-50 p-3 rounded-md">
-                  You need to verify your email before you can log in.
-                </p>
-              )}
               <p className="mb-6 text-gray-600">
                 We sent a verification link to{' '}
                 <span className="font-medium">{registeredEmail}</span>

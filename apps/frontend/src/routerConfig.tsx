@@ -22,6 +22,7 @@ const RecipesPage = lazy(() => import('./pages/RecipesPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
+const ResendVerificationPage = lazy(() => import('./pages/ResendVerificationPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 
@@ -181,6 +182,14 @@ export const router = createBrowserRouter([
         element: (
           <Suspense fallback={<LoadingSpinner />}>
             <VerifyEmailPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'resend-verification',
+        element: (
+          <Suspense fallback={<LoadingSpinner />}>
+            <ResendVerificationPage />
           </Suspense>
         ),
       },

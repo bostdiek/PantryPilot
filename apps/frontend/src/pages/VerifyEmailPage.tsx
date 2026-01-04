@@ -129,10 +129,10 @@ const VerifyEmailPage: FC = () => {
                   Need a new verification link?
                 </p>
                 <Link
-                  to="/login"
+                  to="/resend-verification"
                   className="font-medium text-blue-600 transition-colors hover:text-blue-500"
                 >
-                  Go to Login
+                  Resend Verification Email
                 </Link>
               </div>
             </div>

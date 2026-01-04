@@ -81,14 +81,14 @@ const LoginPage: FC = () => {
         errorObj.status === 403 &&
         errorObj.message?.toLowerCase().includes('not verified')
       ) {
-        // Redirect to register page with verify mode to show resend functionality
+        // Redirect to dedicated resend verification page
         // Use the username (which could be email or username) to populate the email field
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const email = emailRegex.test(formData.username)
           ? formData.username
           : '';
         
-        navigate(`/register?verify=true&email=${encodeURIComponent(email)}`, {
+        navigate(`/resend-verification?email=${encodeURIComponent(email)}`, {
           replace: true,
           state: { email },
         });

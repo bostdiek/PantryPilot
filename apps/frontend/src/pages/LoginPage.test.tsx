@@ -179,7 +179,7 @@ describe('LoginPage', () => {
     });
   });
 
-  test('redirects to register page for unverified users with email', async () => {
+  test('redirects to resend verification page for unverified users with email', async () => {
     vi.mocked(login).mockRejectedValue({
       status: 403,
       message:
@@ -202,7 +202,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith(
-        '/register?verify=true&email=test%40example.com',
+        '/resend-verification?email=test%40example.com',
         expect.objectContaining({
           replace: true,
           state: { email: 'test@example.com' },
@@ -211,7 +211,7 @@ describe('LoginPage', () => {
     });
   });
 
-  test('redirects to register page for unverified users without email', async () => {
+  test('redirects to resend verification page for unverified users without email', async () => {
     vi.mocked(login).mockRejectedValue({
       status: 403,
       message: 'Email not verified',
@@ -233,7 +233,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith(
-        '/register?verify=true&email=',
+        '/resend-verification?email=',
         expect.objectContaining({
           replace: true,
           state: { email: '' },
