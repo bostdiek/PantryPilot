@@ -9,6 +9,7 @@ import RegisterPage from '../RegisterPage';
 // Mock the auth API
 vi.mock('../../api/endpoints/auth', () => ({
   register: vi.fn(),
+  resendVerification: vi.fn(),
 }));
 
 // Mock the auth store
@@ -41,6 +42,7 @@ describe('RegisterPage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear(); // Clear localStorage to reset cooldown state
     (useAuthStore as any).mockReturnValue(mockAuthStore);
   });
 
@@ -479,6 +481,204 @@ describe('RegisterPage', () => {
     });
   });
 
+  describe('Resend Verification Tests', () => {
+    it('shows resend verification button on success screen', async () => {
+      const user = userEvent.setup();
+      const mockRegister = vi.mocked(authApi.register);
+      mockRegister.mockResolvedValueOnce({
+        message:
+          'Registration successful. Please check your email to verify your account.',
+        email: 'test@example.com',
+      });
+
+      renderRegisterPage();
+
+      // Fill in valid form data and submit
+      await user.type(screen.getByLabelText(/username/i), 'testuser');
+      await user.type(screen.getByLabelText(/email/i), 'test@example.com');
+      await user.type(
+        screen.getByLabelText(/^password\b/i, {
+          selector: 'input[name="password"]',
+        }),
+        'password123456'
+      );
+      await user.type(
+        screen.getByLabelText(/confirm password/i),
+        'password123456'
+      );
+
+      const submitButton = screen.getByRole('button', {
+        name: /create account/i,
+      });
+      await user.click(submitButton);
+
+      // Should show success state with resend button
+      await waitFor(() => {
+        expect(screen.getByText(/check your email/i)).toBeDefined();
+        expect(screen.getByText(/didn't receive the email\?/i)).toBeDefined();
+        expect(
+          screen.getByRole('button', { name: /resend verification email/i })
+        ).toBeDefined();
+      });
+    });
+
+    it('calls resendVerification API when resend button is clicked', async () => {
+      const user = userEvent.setup();
+      const mockRegister = vi.mocked(authApi.register);
+      const mockResendVerification = vi.mocked(authApi.resendVerification);
+      
+      mockRegister.mockResolvedValueOnce({
+        message: 'Registration successful.',
+        email: 'test@example.com',
+      });
+      mockResendVerification.mockResolvedValueOnce({
+        message: 'Verification email sent.',
+      });
+
+      renderRegisterPage();
+
+      // Register successfully first
+      await user.type(screen.getByLabelText(/username/i), 'testuser');
+      await user.type(screen.getByLabelText(/email/i), 'test@example.com');
+      await user.type(
+        screen.getByLabelText(/^password\b/i, {
+          selector: 'input[name="password"]',
+        }),
+        'password123456'
+      );
+      await user.type(
+        screen.getByLabelText(/confirm password/i),
+        'password123456'
+      );
+
+      const submitButton = screen.getByRole('button', {
+        name: /create account/i,
+      });
+      await user.click(submitButton);
+
+      // Wait for success screen
+      await waitFor(() => {
+        expect(screen.getByText(/check your email/i)).toBeDefined();
+      });
+
+      // Click resend button
+      const resendButton = screen.getByRole('button', {
+        name: /resend verification email/i,
+      });
+      await user.click(resendButton);
+
+      await waitFor(() => {
+        expect(mockResendVerification).toHaveBeenCalledWith('test@example.com');
+        expect(
+          screen.getByText(/verification email sent/i)
+        ).toBeDefined();
+      });
+    });
+
+    it('shows cooldown timer after resending verification email', async () => {
+      const user = userEvent.setup();
+      const mockRegister = vi.mocked(authApi.register);
+      const mockResendVerification = vi.mocked(authApi.resendVerification);
+      
+      mockRegister.mockResolvedValueOnce({
+        message: 'Registration successful.',
+        email: 'test@example.com',
+      });
+      mockResendVerification.mockResolvedValueOnce({
+        message: 'Verification email sent.',
+      });
+
+      renderRegisterPage();
+
+      // Register successfully first
+      await user.type(screen.getByLabelText(/username/i), 'testuser');
+      await user.type(screen.getByLabelText(/email/i), 'test@example.com');
+      await user.type(
+        screen.getByLabelText(/^password\b/i, {
+          selector: 'input[name="password"]',
+        }),
+        'password123456'
+      );
+      await user.type(
+        screen.getByLabelText(/confirm password/i),
+        'password123456'
+      );
+
+      const submitButton = screen.getByRole('button', {
+        name: /create account/i,
+      });
+      await user.click(submitButton);
+
+      // Wait for success screen
+      await waitFor(() => {
+        expect(screen.getByText(/check your email/i)).toBeDefined();
+      });
+
+      // Get the resend button by its initial text
+      const resendButton = screen.getByRole('button', {
+        name: /resend verification email/i,
+      });
+      await user.click(resendButton);
+
+      // Should show cooldown timer - button text should change
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /resend in 60s/i })).toBeDefined();
+      });
+    });
+
+    it('disables resend button during cooldown period', async () => {
+      const user = userEvent.setup();
+      const mockRegister = vi.mocked(authApi.register);
+      const mockResendVerification = vi.mocked(authApi.resendVerification);
+      
+      mockRegister.mockResolvedValueOnce({
+        message: 'Registration successful.',
+        email: 'test@example.com',
+      });
+      mockResendVerification.mockResolvedValueOnce({
+        message: 'Verification email sent.',
+      });
+
+      renderRegisterPage();
+
+      // Register successfully first
+      await user.type(screen.getByLabelText(/username/i), 'testuser');
+      await user.type(screen.getByLabelText(/email/i), 'test@example.com');
+      await user.type(
+        screen.getByLabelText(/^password\b/i, {
+          selector: 'input[name="password"]',
+        }),
+        'password123456'
+      );
+      await user.type(
+        screen.getByLabelText(/confirm password/i),
+        'password123456'
+      );
+
+      const submitButton = screen.getByRole('button', {
+        name: /create account/i,
+      });
+      await user.click(submitButton);
+
+      // Wait for success screen
+      await waitFor(() => {
+        expect(screen.getByText(/check your email/i)).toBeDefined();
+      });
+
+      // Get the resend button by its initial text
+      const resendButton = screen.getByRole('button', {
+        name: /resend verification email/i,
+      });
+      await user.click(resendButton);
+
+      // Button should be disabled during cooldown
+      await waitFor(() => {
+        const cooldownButton = screen.getByRole('button', { name: /resend in 60s/i });
+        expect(cooldownButton.hasAttribute('disabled')).toBe(true);
+      });
+    });
+  });
+
   describe('Accessibility Tests', () => {
     it('has proper form labels', () => {
       renderRegisterPage();
@@ -525,6 +725,11 @@ describe('RegisterPage', () => {
 // to increase RegisterPage.tsx coverage (target ≥95%).
 
 describe('RegisterPage - Additional Error Handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear(); // Clear localStorage to reset cooldown state
+  });
+
   const renderRegisterPage = (initialEntries = ['/register']) => {
     return render(
       <MemoryRouter initialEntries={initialEntries}>
