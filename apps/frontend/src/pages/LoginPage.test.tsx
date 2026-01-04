@@ -13,7 +13,6 @@ vi.mock('../stores/useAuthStore', () => ({
 // Mock the login API
 vi.mock('../api/endpoints/auth', () => ({
   login: vi.fn(),
-  resendVerification: vi.fn(),
 }));
 
 // Mock React Router hooks
@@ -27,7 +26,7 @@ vi.mock('react-router-dom', async () => {
 });
 
 // Import after mocking
-import { login, resendVerification } from '../api/endpoints/auth';
+import { login } from '../api/endpoints/auth';
 import { useAuthStore } from '../stores/useAuthStore';
 
 describe('LoginPage', () => {
@@ -180,7 +179,7 @@ describe('LoginPage', () => {
     });
   });
 
-  test('shows resend verification UI for unverified users', async () => {
+  test('redirects to register page for unverified users with email', async () => {
     vi.mocked(login).mockRejectedValue({
       status: 403,
       message:
@@ -194,7 +193,7 @@ describe('LoginPage', () => {
     );
 
     fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: 'testuser' },
+      target: { value: 'test@example.com' },
     });
     fireEvent.change(screen.getByLabelText(/password/i), {
       target: { value: 'password' },
@@ -202,16 +201,17 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/your email has not been verified/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: /resend verification email/i })
-      ).toBeInTheDocument();
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/register?verify=true&email=test%40example.com',
+        expect.objectContaining({
+          replace: true,
+          state: { email: 'test@example.com' },
+        })
+      );
     });
   });
 
-  test('prompts for email when username is not an email', async () => {
+  test('redirects to register page for unverified users without email', async () => {
     vi.mocked(login).mockRejectedValue({
       status: 403,
       message: 'Email not verified',
@@ -232,161 +232,13 @@ describe('LoginPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /resend verification email/i })
-      ).toBeInTheDocument();
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/register?verify=true&email=',
+        expect.objectContaining({
+          replace: true,
+          state: { email: '' },
+        })
+      );
     });
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /resend verification email/i })
-    );
-
-    await waitFor(() => {
-      expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /send/i })).toBeInTheDocument();
-    });
-  });
-
-  test('persists cooldown to localStorage on resend success', async () => {
-    const now = new Date('2025-01-01T00:00:00.000Z').valueOf();
-    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
-
-    vi.mocked(login).mockRejectedValue({
-      status: 403,
-      message: 'Email not verified',
-    });
-    vi.mocked(resendVerification).mockResolvedValue({
-      message: 'ok',
-    } as any);
-
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <LoginPage />
-      </MemoryRouter>
-    );
-
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: 'test@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: 'password' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /resend verification email/i })
-      ).toBeInTheDocument();
-    });
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /resend verification email/i })
-    );
-
-    try {
-      await waitFor(() => {
-        expect(localStorage.getItem('pantrypilot_resend_cooldown')).toBe(
-          (Date.now() + 60000).toString()
-        );
-        expect(
-          screen.getByRole('button', { name: /resend in 60s/i })
-        ).toBeInTheDocument();
-        expect(
-          screen.getByText(/a new verification link has been sent/i)
-        ).toBeInTheDocument();
-      });
-    } finally {
-      dateNowSpy.mockRestore();
-    }
-  });
-
-  test('persists cooldown to localStorage on resend failure', async () => {
-    const now = new Date('2025-01-01T00:00:00.000Z').valueOf();
-    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
-
-    vi.mocked(login).mockRejectedValue({
-      status: 403,
-      message: 'Email not verified',
-    });
-    vi.mocked(resendVerification).mockRejectedValue(new Error('boom'));
-
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <LoginPage />
-      </MemoryRouter>
-    );
-
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: 'test@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: 'password' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /resend verification email/i })
-      ).toBeInTheDocument();
-    });
-
-    fireEvent.click(
-      screen.getByRole('button', { name: /resend verification email/i })
-    );
-
-    try {
-      await waitFor(() => {
-        expect(localStorage.getItem('pantrypilot_resend_cooldown')).toBe(
-          (Date.now() + 60000).toString()
-        );
-        expect(
-          screen.getByRole('button', { name: /resend in 60s/i })
-        ).toBeInTheDocument();
-        expect(
-          screen.getByText(/a new verification link has been sent/i)
-        ).toBeInTheDocument();
-      });
-    } finally {
-      dateNowSpy.mockRestore();
-    }
-  });
-
-  test('initializes cooldown from localStorage on mount', async () => {
-    const now = new Date('2025-01-01T00:00:00.000Z').valueOf();
-    const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
-
-    localStorage.setItem(
-      'pantrypilot_resend_cooldown',
-      (Date.now() + 60000).toString()
-    );
-
-    vi.mocked(login).mockRejectedValue({
-      status: 403,
-      message: 'Email not verified',
-    });
-
-    render(
-      <MemoryRouter initialEntries={['/login']}>
-        <LoginPage />
-      </MemoryRouter>
-    );
-
-    fireEvent.change(screen.getByLabelText(/username/i), {
-      target: { value: 'test@example.com' },
-    });
-    fireEvent.change(screen.getByLabelText(/password/i), {
-      target: { value: 'password' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
-
-    try {
-      await waitFor(() => {
-        expect(
-          screen.getByRole('button', { name: /resend in 60s/i })
-        ).toBeInTheDocument();
-      });
-    } finally {
-      dateNowSpy.mockRestore();
-    }
   });
 });
