@@ -207,6 +207,12 @@ var corsOrigins = concat(
       ]
 )
 
+// Email sender address for Azure Communication Services
+// Uses the fromSenderDomain from the communication module to construct the full address
+var emailSenderAddress = communication.outputs.?fromSenderDomain != null
+  ? 'DoNotReply@${communication.outputs.?fromSenderDomain}'
+  : ''
+
 module containerApps 'modules/containerapps.bicep' = {
   params: {
     environmentName: resourceNames.containerAppsEnv
@@ -222,8 +228,10 @@ module containerApps 'modules/containerapps.bicep' = {
     registryUsername: useQuickstartImage ? '' : acrResource.listCredentials().username
     registryPassword: useQuickstartImage ? '' : acrResource.listCredentials().passwords[0].value
     corsOrigins: corsOrigins
+    emailSenderAddress: emailSenderAddress
     tags: commonTags
   }
+  dependsOn: [acsConnectionStringSecret]  // Ensure ACS secret is in Key Vault before Container App tries to reference it
 }
 
 // Reference the Key Vault resource for scoping role assignment

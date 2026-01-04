@@ -42,6 +42,9 @@ param upstashRedisRestUrl string = ''
 @secure()
 param upstashRedisRestToken string = ''
 
+@description('Email sender address for Azure Communication Services (e.g., DoNotReply@domain.com)')
+param emailSenderAddress string = ''
+
 // Log Analytics Workspace for Container Apps
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: '${environmentName}-logs'
@@ -142,6 +145,11 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
               identity: 'system'
             }
+            {
+              name: 'acs-connection-string'
+              keyVaultUrl: '${keyVaultUri}secrets/acsConnectionString'
+              identity: 'system'
+            }
           ],
           empty(upstashRedisRestUrl) || empty(upstashRedisRestToken)
             ? []
@@ -220,6 +228,14 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               {
                 name: 'CORS_ORIGINS'
                 value: join(corsOrigins, ',')
+              }
+              {
+                name: 'AZURE_COMMUNICATION_CONNECTION_STRING'
+                secretRef: 'acs-connection-string' // pragma: allowlist secret
+              }
+              {
+                name: 'EMAIL_SENDER_ADDRESS'
+                value: emailSenderAddress
               }
             ],
             empty(upstashRedisRestUrl) || empty(upstashRedisRestToken)
