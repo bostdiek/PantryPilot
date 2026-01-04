@@ -210,7 +210,7 @@ var corsOrigins = concat(
 // Email sender address for Azure Communication Services
 // Uses the fromSenderDomain from the communication module to construct the full address
 var emailSenderAddress = communication.outputs.?fromSenderDomain != null
-  ? 'DoNotReply@${communication.outputs.?fromSenderDomain ?? ''}'
+  ? 'DoNotReply@${communication.outputs.?fromSenderDomain}'
   : ''
 
 module containerApps 'modules/containerapps.bicep' = {
