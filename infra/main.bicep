@@ -207,6 +207,12 @@ var corsOrigins = concat(
       ]
 )
 
+// Frontend URL for email links (verification, password reset)
+// Use custom domain for production, Static Web App default hostname otherwise
+var frontendUrl = environmentName == 'prod' && useFrontendCustomDomains
+  ? 'https://smartmealplanner.app'
+  : 'https://${staticWebApp.outputs.defaultHostname}'
+
 // Email sender address for Azure Communication Services
 // Uses the fromSenderDomain from the communication module to construct the full address
 var emailSenderAddress = communication.outputs.?fromSenderDomain != null
@@ -229,6 +235,7 @@ module containerApps 'modules/containerapps.bicep' = {
     registryPassword: useQuickstartImage ? '' : acrResource.listCredentials().passwords[0].value
     corsOrigins: corsOrigins
     emailSenderAddress: emailSenderAddress
+    frontendUrl: frontendUrl
     tags: commonTags
   }
   dependsOn: [acsConnectionStringSecret]  // Ensure ACS secret is in Key Vault before Container App tries to reference it
