@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "16717705463626571336"
+      "templateHash": "6484707175493839749"
     }
   },
   "parameters": {
@@ -53,6 +53,20 @@
         "description": "Application secret key for JWT signing"
       }
     },
+    "upstashRedisRestUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Upstash Redis REST URL for rate limiting (optional)"
+      }
+    },
+    "upstashRedisRestToken": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Upstash Redis REST Token for rate limiting (optional)"
+      }
+    },
     "useQuickstartImage": {
       "type": "bool",
       "defaultValue": false,
@@ -89,14 +103,22 @@
       "postgreSQL": "[format('pantrypilot-db-{0}-{1}', parameters('environmentName'), parameters('uniqueSuffix'))]",
       "containerAppsEnv": "[format('pantrypilot-env-{0}-{1}', parameters('environmentName'), parameters('uniqueSuffix'))]",
       "containerAppBackend": "[format('pantrypilot-backend-{0}', parameters('environmentName'))]",
-      "staticWebApp": "[format('pantrypilot-frontend-{0}-{1}', parameters('environmentName'), parameters('uniqueSuffix'))]"
+      "staticWebApp": "[format('pantrypilot-frontend-{0}-{1}', parameters('environmentName'), parameters('uniqueSuffix'))]",
+      "emailService": "[format('pantrypilot-email-{0}-{1}', parameters('environmentName'), parameters('uniqueSuffix'))]",
+      "communicationService": "[format('pantrypilot-acs-{0}-{1}', parameters('environmentName'), parameters('uniqueSuffix'))]"
     },
     "commonTags": {
       "Environment": "[parameters('environmentName')]",
       "Project": "PantryPilot",
       "ManagedBy": "Bicep",
       "CostCenter": "Development"
-    }
+    },
+    "useCustomDomain": true,
+    "useFrontendCustomDomains": true,
+    "frontendCustomDomains": [
+      "https://smartmealplanner.app",
+      "https://www.smartmealplanner.app"
+    ]
   },
   "resources": {
     "acrResource": {
@@ -104,6 +126,30 @@
       "type": "Microsoft.ContainerRegistry/registries",
       "apiVersion": "2023-07-01",
       "name": "[variables('resourceNames').acr]"
+    },
+    "communicationServiceResource": {
+      "existing": true,
+      "type": "Microsoft.Communication/communicationServices",
+      "apiVersion": "2023-04-01",
+      "name": "[variables('resourceNames').communicationService]",
+      "dependsOn": [
+        "communication"
+      ]
+    },
+    "acsConnectionStringSecret": {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-07-01",
+      "name": "[format('{0}/{1}', variables('resourceNames').keyVault, 'acsConnectionString')]",
+      "properties": {
+        "value": "[listKeys('communicationServiceResource', '2023-04-01').primaryConnectionString]",
+        "attributes": {
+          "enabled": true
+        }
+      },
+      "dependsOn": [
+        "communication",
+        "keyVault"
+      ]
     },
     "keyVaultResource": {
       "existing": true,
@@ -298,7 +344,9 @@
             "value": {
               "dbAdminPassword": "[parameters('dbAdminPassword')]",
               "secretKey": "[parameters('secretKey')]",
-              "dbConnectionString": "[format('postgresql://{0}:{1}@{2}:5432/pantrypilot?sslmode=require', parameters('dbAdminUsername'), parameters('dbAdminPassword'), reference('postgresql').outputs.fqdn.value)]"
+              "dbConnectionString": "[format('postgresql://{0}:{1}@{2}:5432/pantrypilot?sslmode=require', parameters('dbAdminUsername'), parameters('dbAdminPassword'), reference('postgresql').outputs.fqdn.value)]",
+              "upstashRedisRestUrl": "[parameters('upstashRedisRestUrl')]",
+              "upstashRedisRestToken": "[parameters('upstashRedisRestToken')]"
             }
           }
         },
@@ -715,6 +763,232 @@
         }
       }
     },
+    "communication": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "[format('communication-{0}', uniqueString('communication', deployment().name))]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "emailServiceName": {
+            "value": "[variables('resourceNames').emailService]"
+          },
+          "communicationServiceName": {
+            "value": "[variables('resourceNames').communicationService]"
+          },
+          "location": {
+            "value": "global"
+          },
+          "dataLocation": {
+            "value": "United States"
+          },
+          "domainManagement": "[if(and(equals(parameters('environmentName'), 'prod'), variables('useCustomDomain')), createObject('value', 'CustomerManaged'), createObject('value', 'AzureManaged'))]",
+          "customDomainName": "[if(and(equals(parameters('environmentName'), 'prod'), variables('useCustomDomain')), createObject('value', 'mail.smartmealplanner.app'), createObject('value', ''))]",
+          "tags": {
+            "value": "[variables('commonTags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.39.26.7824",
+              "templateHash": "3442256222270193083"
+            },
+            "name": "Azure Communication Services",
+            "description": "Deploys Azure Communication Services and Email Services for transactional email support."
+          },
+          "parameters": {
+            "emailServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Email Service resource."
+              }
+            },
+            "communicationServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "Name of the Communication Service resource."
+              }
+            },
+            "location": {
+              "type": "string",
+              "defaultValue": "global",
+              "metadata": {
+                "description": "The geo-location where the resource lives. ACS resources use global location."
+              }
+            },
+            "dataLocation": {
+              "type": "string",
+              "defaultValue": "United States",
+              "allowedValues": [
+                "United States",
+                "Europe",
+                "UK",
+                "Australia",
+                "Japan",
+                "France",
+                "Switzerland"
+              ],
+              "metadata": {
+                "description": "The location where the service stores its data at rest."
+              }
+            },
+            "tags": {
+              "type": "object",
+              "defaultValue": {},
+              "metadata": {
+                "description": "Resource tags."
+              }
+            },
+            "domainManagement": {
+              "type": "string",
+              "defaultValue": "AzureManaged",
+              "allowedValues": [
+                "AzureManaged",
+                "CustomerManaged"
+              ],
+              "metadata": {
+                "description": "Whether to use Azure Managed Domain (for dev) or Customer Managed Domain (for prod)."
+              }
+            },
+            "customDomainName": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Custom domain name (required if domainManagement is CustomerManaged)."
+              }
+            },
+            "userEngagementTracking": {
+              "type": "bool",
+              "defaultValue": false,
+              "metadata": {
+                "description": "Enable user engagement tracking for emails."
+              }
+            }
+          },
+          "resources": {
+            "emailService": {
+              "type": "Microsoft.Communication/emailServices",
+              "apiVersion": "2023-04-01",
+              "name": "[parameters('emailServiceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataLocation": "[parameters('dataLocation')]"
+              }
+            },
+            "azureManagedDomain": {
+              "condition": "[equals(parameters('domainManagement'), 'AzureManaged')]",
+              "type": "Microsoft.Communication/emailServices/domains",
+              "apiVersion": "2023-04-01",
+              "name": "[format('{0}/{1}', parameters('emailServiceName'), 'AzureManagedDomain')]",
+              "location": "[parameters('location')]",
+              "properties": {
+                "domainManagement": "AzureManaged",
+                "userEngagementTracking": "[if(parameters('userEngagementTracking'), 'Enabled', 'Disabled')]"
+              },
+              "dependsOn": [
+                "emailService"
+              ]
+            },
+            "customerManagedDomain": {
+              "condition": "[and(equals(parameters('domainManagement'), 'CustomerManaged'), not(empty(parameters('customDomainName'))))]",
+              "existing": true,
+              "type": "Microsoft.Communication/emailServices/domains",
+              "apiVersion": "2023-04-01",
+              "name": "[format('{0}/{1}', parameters('emailServiceName'), parameters('customDomainName'))]",
+              "dependsOn": [
+                "emailService"
+              ]
+            },
+            "communicationService": {
+              "type": "Microsoft.Communication/communicationServices",
+              "apiVersion": "2023-04-01",
+              "name": "[parameters('communicationServiceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataLocation": "[parameters('dataLocation')]",
+                "linkedDomains": [
+                  "[if(equals(parameters('domainManagement'), 'AzureManaged'), resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain'), resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), parameters('customDomainName')))]"
+                ]
+              },
+              "dependsOn": [
+                "azureManagedDomain",
+                "emailService"
+              ]
+            }
+          },
+          "outputs": {
+            "emailServiceId": {
+              "type": "string",
+              "metadata": {
+                "description": "The resource ID of the Email Service."
+              },
+              "value": "[resourceId('Microsoft.Communication/emailServices', parameters('emailServiceName'))]"
+            },
+            "emailServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "The name of the Email Service."
+              },
+              "value": "[parameters('emailServiceName')]"
+            },
+            "communicationServiceId": {
+              "type": "string",
+              "metadata": {
+                "description": "The resource ID of the Communication Service."
+              },
+              "value": "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationServiceName'))]"
+            },
+            "communicationServiceName": {
+              "type": "string",
+              "metadata": {
+                "description": "The name of the Communication Service."
+              },
+              "value": "[parameters('communicationServiceName')]"
+            },
+            "emailDomainId": {
+              "type": "string",
+              "metadata": {
+                "description": "The email domain resource ID."
+              },
+              "value": "[if(equals(parameters('domainManagement'), 'AzureManaged'), resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain'), resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), parameters('customDomainName')))]"
+            },
+            "fromSenderDomain": {
+              "type": "string",
+              "nullable": true,
+              "metadata": {
+                "description": "The sender domain (from address) for emails."
+              },
+              "value": "[if(equals(parameters('domainManagement'), 'AzureManaged'), tryGet(if(equals(parameters('domainManagement'), 'AzureManaged'), reference('azureManagedDomain', '2023-04-01', 'full'), null()), 'properties', 'fromSenderDomain'), tryGet(if(and(equals(parameters('domainManagement'), 'CustomerManaged'), not(empty(parameters('customDomainName')))), reference('customerManagedDomain', '2023-04-01', 'full'), null()), 'properties', 'fromSenderDomain'))]"
+            },
+            "mailFromSenderDomain": {
+              "type": "string",
+              "nullable": true,
+              "metadata": {
+                "description": "The mail-from sender domain for the email envelope."
+              },
+              "value": "[if(equals(parameters('domainManagement'), 'AzureManaged'), tryGet(if(equals(parameters('domainManagement'), 'AzureManaged'), reference('azureManagedDomain', '2023-04-01', 'full'), null()), 'properties', 'mailFromSenderDomain'), tryGet(if(and(equals(parameters('domainManagement'), 'CustomerManaged'), not(empty(parameters('customDomainName')))), reference('customerManagedDomain', '2023-04-01', 'full'), null()), 'properties', 'mailFromSenderDomain'))]"
+            },
+            "verificationRecords": {
+              "type": "object",
+              "metadata": {
+                "description": "DNS verification records for Customer Managed Domain (empty for Azure Managed). Handle securely."
+              },
+              "value": "[if(and(equals(parameters('domainManagement'), 'CustomerManaged'), not(empty(parameters('customDomainName')))), coalesce(tryGet(tryGet(if(and(equals(parameters('domainManagement'), 'CustomerManaged'), not(empty(parameters('customDomainName')))), reference('customerManagedDomain', '2023-04-01', 'full'), null()), 'properties'), 'verificationRecords'), createObject()), createObject())]"
+            }
+          }
+        }
+      }
+    },
     "staticWebApp": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
@@ -936,15 +1210,17 @@
           "keyVaultUri": {
             "value": "[reference('keyVault').outputs.vaultUri.value]"
           },
+          "upstashRedisRestUrl": {
+            "value": "[parameters('upstashRedisRestUrl')]"
+          },
+          "upstashRedisRestToken": {
+            "value": "[parameters('upstashRedisRestToken')]"
+          },
           "registryServer": "[if(parameters('useQuickstartImage'), createObject('value', ''), createObject('value', reference('acr').outputs.loginServer.value))]",
           "registryUsername": "[if(parameters('useQuickstartImage'), createObject('value', ''), createObject('value', listCredentials('acrResource', '2023-07-01').username))]",
           "registryPassword": "[if(parameters('useQuickstartImage'), createObject('value', ''), createObject('value', listCredentials('acrResource', '2023-07-01').passwords[0].value))]",
           "corsOrigins": {
-            "value": [
-              "[format('https://{0}', reference('staticWebApp').outputs.defaultHostname.value)]",
-              "http://localhost:5173",
-              "http://127.0.0.1:5173"
-            ]
+            "value": "[concat(createArray(format('https://{0}', reference('staticWebApp').outputs.defaultHostname.value)), if(equals(parameters('environmentName'), 'prod'), if(variables('useFrontendCustomDomains'), variables('frontendCustomDomains'), createArray()), createArray('http://localhost:5173', 'http://127.0.0.1:5173')))]"
           },
           "tags": {
             "value": "[variables('commonTags')]"
@@ -957,7 +1233,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.39.26.7824",
-              "templateHash": "16765832024051032265"
+              "templateHash": "7670517266156934026"
             }
           },
           "parameters": {
@@ -1035,6 +1311,20 @@
               "defaultValue": [],
               "metadata": {
                 "description": "Allowed CORS origins for the backend API"
+              }
+            },
+            "upstashRedisRestUrl": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Upstash Redis REST URL for rate limiting (optional)"
+              }
+            },
+            "upstashRedisRestToken": {
+              "type": "securestring",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Upstash Redis REST Token for rate limiting (optional)"
               }
             }
           },
@@ -1114,7 +1404,7 @@
                     }
                   },
                   "registries": "[if(empty(parameters('registryServer')), createArray(), createArray(createObject('server', parameters('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'acr-password')))]",
-                  "secrets": "[concat(if(empty(parameters('registryPassword')), createArray(), createArray(createObject('name', 'acr-password', 'value', parameters('registryPassword')))), createArray(createObject('name', 'database-connection-string', 'keyVaultUrl', format('{0}secrets/dbConnectionString', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'secret-key', 'keyVaultUrl', format('{0}secrets/secretKey', parameters('keyVaultUri')), 'identity', 'system')))]"
+                  "secrets": "[concat(if(empty(parameters('registryPassword')), createArray(), createArray(createObject('name', 'acr-password', 'value', parameters('registryPassword')))), concat(createArray(createObject('name', 'database-connection-string', 'keyVaultUrl', format('{0}secrets/dbConnectionString', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'secret-key', 'keyVaultUrl', format('{0}secrets/secretKey', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'gemini-api-key', 'keyVaultUrl', format('{0}secrets/geminiApiKey', parameters('keyVaultUri')), 'identity', 'system')), if(or(empty(parameters('upstashRedisRestUrl')), empty(parameters('upstashRedisRestToken'))), createArray(), createArray(createObject('name', 'upstash-redis-url', 'value', parameters('upstashRedisRestUrl')), createObject('name', 'upstash-redis-token', 'value', parameters('upstashRedisRestToken'))))))]"
                 },
                 "template": {
                   "containers": [
@@ -1125,56 +1415,7 @@
                         "cpu": "[json('0.5')]",
                         "memory": "1Gi"
                       },
-                      "env": [
-                        {
-                          "name": "DATABASE_URL",
-                          "secretRef": "database-connection-string"
-                        },
-                        {
-                          "name": "SECRET_KEY",
-                          "secretRef": "secret-key"
-                        },
-                        {
-                          "name": "ENVIRONMENT",
-                          "value": "[if(contains(parameters('environmentName'), 'prod'), 'production', 'development')]"
-                        },
-                        {
-                          "name": "LOG_LEVEL",
-                          "value": "INFO"
-                        },
-                        {
-                          "name": "API_V1_STR",
-                          "value": "/api/v1"
-                        },
-                        {
-                          "name": "PROJECT_NAME",
-                          "value": "PantryPilot"
-                        },
-                        {
-                          "name": "VERSION",
-                          "value": "0.1.0"
-                        },
-                        {
-                          "name": "ALGORITHM",
-                          "value": "HS256"
-                        },
-                        {
-                          "name": "ACCESS_TOKEN_EXPIRE_MINUTES",
-                          "value": "30"
-                        },
-                        {
-                          "name": "PORT",
-                          "value": "8000"
-                        },
-                        {
-                          "name": "PYTHONPATH",
-                          "value": "/app/src"
-                        },
-                        {
-                          "name": "CORS_ORIGINS",
-                          "value": "[join(parameters('corsOrigins'), ',')]"
-                        }
-                      ],
+                      "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-connection-string'), createObject('name', 'SECRET_KEY', 'secretRef', 'secret-key'), createObject('name', 'GEMINI_API_KEY', 'secretRef', 'gemini-api-key'), createObject('name', 'ENVIRONMENT', 'value', if(contains(parameters('environmentName'), 'prod'), 'production', 'development')), createObject('name', 'LOG_LEVEL', 'value', 'INFO'), createObject('name', 'API_V1_STR', 'value', '/api/v1'), createObject('name', 'PROJECT_NAME', 'value', 'PantryPilot'), createObject('name', 'VERSION', 'value', '0.1.0'), createObject('name', 'ALGORITHM', 'value', 'HS256'), createObject('name', 'ACCESS_TOKEN_EXPIRE_MINUTES', 'value', '30'), createObject('name', 'PORT', 'value', '8000'), createObject('name', 'PYTHONPATH', 'value', '/app/src'), createObject('name', 'CORS_ORIGINS', 'value', join(parameters('corsOrigins'), ','))), if(or(empty(parameters('upstashRedisRestUrl')), empty(parameters('upstashRedisRestToken'))), createArray(), createArray(createObject('name', 'UPSTASH_REDIS_REST_URL', 'secretRef', 'upstash-redis-url'), createObject('name', 'UPSTASH_REDIS_REST_TOKEN', 'secretRef', 'upstash-redis-token'))))]",
                       "probes": [
                         {
                           "type": "Liveness",
@@ -1294,6 +1535,25 @@
     "staticWebAppName": {
       "type": "string",
       "value": "[reference('staticWebApp').outputs.name.value]"
+    },
+    "communicationServiceName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Communication Service for backend email integration."
+      },
+      "value": "[reference('communication').outputs.communicationServiceName.value]"
+    },
+    "emailServiceName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the Email Service (for Azure portal reference)."
+      },
+      "value": "[reference('communication').outputs.emailServiceName.value]"
+    },
+    "emailFromDomain": {
+      "type": "string",
+      "nullable": true,
+      "value": "[tryGet(tryGet(reference('communication').outputs, 'fromSenderDomain'), 'value')]"
     }
   }
 }
