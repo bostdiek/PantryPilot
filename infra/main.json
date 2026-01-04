@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "207797533768146858"
+      "templateHash": "8762506374355152917"
     }
   },
   "parameters": {
@@ -1222,7 +1222,7 @@
           "corsOrigins": {
             "value": "[concat(createArray(format('https://{0}', reference('staticWebApp').outputs.defaultHostname.value)), if(equals(parameters('environmentName'), 'prod'), if(variables('useFrontendCustomDomains'), variables('frontendCustomDomains'), createArray()), createArray('http://localhost:5173', 'http://127.0.0.1:5173')))]"
           },
-          "emailSenderAddress": "[if(not(equals(tryGet(tryGet(reference('communication').outputs, 'fromSenderDomain'), 'value'), null())), createObject('value', format('DoNotReply@{0}', coalesce(tryGet(tryGet(reference('communication').outputs, 'fromSenderDomain'), 'value'), ''))), createObject('value', ''))]",
+          "emailSenderAddress": "[if(not(equals(tryGet(tryGet(reference('communication').outputs, 'fromSenderDomain'), 'value'), null())), createObject('value', format('DoNotReply@{0}', tryGet(tryGet(reference('communication').outputs, 'fromSenderDomain'), 'value'))), createObject('value', ''))]",
           "tags": {
             "value": "[variables('commonTags')]"
           }
