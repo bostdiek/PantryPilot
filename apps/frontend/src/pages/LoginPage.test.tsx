@@ -202,7 +202,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith(
-        '/resend-verification?email=test%40example.com',
+        '/resend-verification',
         expect.objectContaining({
           replace: true,
           state: { email: 'test@example.com' },
@@ -233,7 +233,7 @@ describe('LoginPage', () => {
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith(
-        '/resend-verification?email=',
+        '/resend-verification',
         expect.objectContaining({
           replace: true,
           state: { email: '' },

@@ -88,7 +88,8 @@ const LoginPage: FC = () => {
           ? formData.username
           : '';
         
-        navigate(`/resend-verification?email=${encodeURIComponent(email)}`, {
+        // Only use navigation state to pass email (not URL params) for security
+        navigate('/resend-verification', {
           replace: true,
           state: { email },
         });

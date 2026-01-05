@@ -1,73 +1,42 @@
 import { useEffect, useState, type FC } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { resendVerification } from '../api/endpoints/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
-import { logger } from '../lib/logger';
-
-// LocalStorage key for cooldown persistence
-const RESEND_COOLDOWN_KEY = 'pantrypilot_resend_verification_cooldown';
+import { useResendCooldown } from '../hooks/useResendCooldown';
+import { validateEmail as validateEmailUtil } from '../utils/emailValidation';
+import { handleResendVerification } from '../utils/resendVerification';
 
 const ResendVerificationPage: FC = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
 
-  // Get email from URL params or navigation state
+  // Get email from navigation state (preferred) or URL params
+  // URL params are immediately cleared to prevent leakage
   const emailFromParams = searchParams.get('email') || '';
   const emailFromState = (location.state as { email?: string })?.email || '';
-  const initialEmail = emailFromParams || emailFromState;
+  const initialEmail = emailFromState || emailFromParams;
 
   const [email, setEmail] = useState(initialEmail);
   const [emailError, setEmailError] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
+  
+  const { cooldown, startCooldown } = useResendCooldown();
 
-  // Initialize cooldown from localStorage on mount
+  // Clear email from URL query params after mounting to prevent leakage
   useEffect(() => {
-    const storedCooldown = localStorage.getItem(RESEND_COOLDOWN_KEY);
-    if (storedCooldown) {
-      const endTime = parseInt(storedCooldown, 10);
-      const remaining = Math.ceil((endTime - Date.now()) / 1000);
-      if (remaining > 0) {
-        setCooldown(remaining);
-      } else {
-        localStorage.removeItem(RESEND_COOLDOWN_KEY);
-      }
+    if (searchParams.has('email')) {
+      // Replace URL without email param to prevent exposure in logs/referrer
+      setSearchParams({}, { replace: true });
     }
-  }, []);
-
-  // Cooldown timer effect
-  useEffect(() => {
-    if (cooldown <= 0) return;
-
-    const timer = setInterval(() => {
-      setCooldown((prev) => {
-        if (prev <= 1) {
-          localStorage.removeItem(RESEND_COOLDOWN_KEY);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [cooldown]);
+  }, [searchParams, setSearchParams]);
 
   const validateEmail = (emailToValidate: string): boolean => {
-    if (!emailToValidate) {
-      setEmailError('Email is required');
-      return false;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailToValidate)) {
-      setEmailError('Please enter a valid email address');
-      return false;
-    }
-    setEmailError('');
-    return true;
+    const error = validateEmailUtil(emailToValidate);
+    setEmailError(error);
+    return error === '';
   };
 
   const handleResend = async () => {
@@ -78,25 +47,11 @@ const ResendVerificationPage: FC = () => {
     setResendLoading(true);
     setResendSuccess(false);
 
-    try {
-      await resendVerification(email);
-      setResendSuccess(true);
-
-      // Set 60 second cooldown
-      const endTime = Date.now() + 60000;
-      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
-      setCooldown(60);
-    } catch (err) {
-      logger.error('Failed to resend verification email:', err);
-      // Still show success to prevent enumeration
-      setResendSuccess(true);
-      // Set 60 second cooldown (still persist to prevent refresh bypass)
-      const endTime = Date.now() + 60000;
-      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
-      setCooldown(60);
-    } finally {
-      setResendLoading(false);
-    }
+    await handleResendVerification(email);
+    
+    setResendSuccess(true);
+    startCooldown(60);
+    setResendLoading(false);
   };
 
   const handleEmailChange = (value: string) => {

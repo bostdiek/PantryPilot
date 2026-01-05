@@ -3,23 +3,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import ResendVerificationPage from '../ResendVerificationPage';
 
-// Mock the resendVerification API
-vi.mock('../../api/endpoints/auth', () => ({
-  resendVerification: vi.fn(),
+// Mock the resendVerification utility
+vi.mock('../../utils/resendVerification', () => ({
+  handleResendVerification: vi.fn(),
 }));
 
-// Mock React Router hooks
-const mockNavigate = vi.fn();
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  };
-});
-
 // Import after mocking
-import { resendVerification } from '../../api/endpoints/auth';
+import { handleResendVerification } from '../../utils/resendVerification';
 
 describe('ResendVerificationPage', () => {
   beforeEach(() => {
@@ -91,9 +81,7 @@ describe('ResendVerificationPage', () => {
   });
 
   test('sends verification email successfully', async () => {
-    vi.mocked(resendVerification).mockResolvedValue({
-      message: 'Verification email sent',
-    } as any);
+    vi.mocked(handleResendVerification).mockResolvedValue();
 
     render(
       <MemoryRouter initialEntries={['/resend-verification']}>
@@ -110,15 +98,13 @@ describe('ResendVerificationPage', () => {
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(resendVerification).toHaveBeenCalledWith('test@example.com');
+      expect(handleResendVerification).toHaveBeenCalledWith('test@example.com');
       expect(screen.getByText(/verification email sent!/i)).toBeInTheDocument();
     });
   });
 
   test('shows cooldown after sending email', async () => {
-    vi.mocked(resendVerification).mockResolvedValue({
-      message: 'ok',
-    } as any);
+    vi.mocked(handleResendVerification).mockResolvedValue();
 
     render(
       <MemoryRouter initialEntries={['/resend-verification']}>
@@ -143,9 +129,7 @@ describe('ResendVerificationPage', () => {
     const now = new Date('2025-01-01T00:00:00.000Z').valueOf();
     const dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(now);
 
-    vi.mocked(resendVerification).mockResolvedValue({
-      message: 'ok',
-    } as any);
+    vi.mocked(handleResendVerification).mockResolvedValue();
 
     render(
       <MemoryRouter initialEntries={['/resend-verification']}>
@@ -173,7 +157,7 @@ describe('ResendVerificationPage', () => {
   });
 
   test('shows success message even on API failure (prevents enumeration)', async () => {
-    vi.mocked(resendVerification).mockRejectedValue(new Error('boom'));
+    vi.mocked(handleResendVerification).mockResolvedValue();
 
     render(
       <MemoryRouter initialEntries={['/resend-verification']}>

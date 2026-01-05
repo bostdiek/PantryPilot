@@ -1,16 +1,15 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { register, resendVerification } from '../api/endpoints/auth';
+import { register } from '../api/endpoints/auth';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
-import { logger } from '../lib/logger';
+import { useResendCooldown } from '../hooks/useResendCooldown';
 import type { RegisterFormData } from '../types/auth';
+import { validateEmail as validateEmailUtil } from '../utils/emailValidation';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
-
-// LocalStorage key for cooldown persistence
-const RESEND_COOLDOWN_KEY = 'pantrypilot_register_resend_cooldown';
+import { handleResendVerification } from '../utils/resendVerification';
 
 interface ValidationErrors {
   username?: string;
@@ -41,63 +40,19 @@ const RegisterPage: React.FC = () => {
   // Resend verification state
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-
-  // Initialize cooldown from localStorage on mount
-  useEffect(() => {
-    const storedCooldown = localStorage.getItem(RESEND_COOLDOWN_KEY);
-    if (storedCooldown) {
-      const endTime = parseInt(storedCooldown, 10);
-      const remaining = Math.ceil((endTime - Date.now()) / 1000);
-      if (remaining > 0) {
-        setCooldown(remaining);
-      } else {
-        localStorage.removeItem(RESEND_COOLDOWN_KEY);
-      }
-    }
-  }, []);
-
-  // Cooldown timer effect
-  useEffect(() => {
-    if (cooldown <= 0) return;
-
-    const timer = setInterval(() => {
-      setCooldown((prev) => {
-        if (prev <= 1) {
-          localStorage.removeItem(RESEND_COOLDOWN_KEY);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [cooldown]);
+  
+  const { cooldown, startCooldown } = useResendCooldown();
 
   // Handler for resending verification email
   const handleResend = async () => {
     setResendLoading(true);
     setResendSuccess(false);
     
-    try {
-      await resendVerification(registeredEmail);
-      setResendSuccess(true);
-
-      // Set 60 second cooldown
-      const endTime = Date.now() + 60000;
-      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
-      setCooldown(60);
-    } catch (err) {
-      logger.error('Failed to resend verification email:', err);
-      // Still show success to prevent enumeration
-      setResendSuccess(true);
-      // Set 60 second cooldown (still persist to prevent refresh bypass)
-      const endTime = Date.now() + 60000;
-      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
-      setCooldown(60);
-    } finally {
-      setResendLoading(false);
-    }
+    await handleResendVerification(registeredEmail);
+    
+    setResendSuccess(true);
+    startCooldown(60);
+    setResendLoading(false);
   };
 
   // Validation functions
@@ -113,10 +68,8 @@ const RegisterPage: React.FC = () => {
   };
 
   const validateEmail = (email: string): string | undefined => {
-    if (!email) return 'Email is required';
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) return 'Please enter a valid email address';
-    return undefined;
+    const error = validateEmailUtil(email);
+    return error || undefined;
   };
 
   const validatePassword = (password: string): string | undefined => {
