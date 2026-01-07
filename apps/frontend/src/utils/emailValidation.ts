@@ -1,6 +1,6 @@
 /**
  * Email validation utility
- * 
+ *
  * Validates email addresses using a standard regex pattern.
  * This ensures consistent validation across the application.
  */

@@ -22,7 +22,7 @@ const ResendVerificationPage: FC = () => {
   const [emailError, setEmailError] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
-  
+
   const { cooldown, startCooldown } = useResendCooldown();
 
   // Clear email from URL query params after mounting to prevent leakage
@@ -48,7 +48,7 @@ const ResendVerificationPage: FC = () => {
     setResendSuccess(false);
 
     await handleResendVerification(email);
-    
+
     setResendSuccess(true);
     startCooldown(60);
     setResendLoading(false);

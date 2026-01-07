@@ -87,7 +87,7 @@ const LoginPage: FC = () => {
         const email = emailRegex.test(formData.username)
           ? formData.username
           : '';
-        
+
         // Only use navigation state to pass email (not URL params) for security
         navigate('/resend-verification', {
           replace: true,

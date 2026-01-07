@@ -5,12 +5,12 @@ const RESEND_COOLDOWN_KEY = 'pantrypilot_resend_verification_cooldown';
 
 /**
  * Custom hook for managing resend verification email cooldown
- * 
+ *
  * This hook handles:
  * - Cooldown timer state
  * - localStorage persistence (survives page refresh)
  * - Automatic countdown
- * 
+ *
  * @returns Object with cooldown state and setter function
  */
 export function useResendCooldown() {

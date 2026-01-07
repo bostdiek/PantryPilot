@@ -40,16 +40,16 @@ const RegisterPage: React.FC = () => {
   // Resend verification state
   const [resendLoading, setResendLoading] = useState(false);
   const [resendSuccess, setResendSuccess] = useState(false);
-  
+
   const { cooldown, startCooldown } = useResendCooldown();
 
   // Handler for resending verification email
   const handleResend = async () => {
     setResendLoading(true);
     setResendSuccess(false);
-    
+
     await handleResendVerification(registeredEmail);
-    
+
     setResendSuccess(true);
     startCooldown(60);
     setResendLoading(false);

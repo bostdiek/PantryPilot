@@ -3,12 +3,12 @@ import { logger } from '../lib/logger';
 
 /**
  * Handles resending verification email with proper error handling
- * 
+ *
  * This function:
  * - Calls the resend verification API
  * - Handles errors gracefully (shows success even on failure for enumeration protection)
  * - Always returns success to prevent email enumeration attacks
- * 
+ *
  * @param email - The email address to send verification to
  * @returns Promise that resolves when operation completes
  */

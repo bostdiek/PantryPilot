@@ -22,7 +22,9 @@ const RecipesPage = lazy(() => import('./pages/RecipesPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
-const ResendVerificationPage = lazy(() => import('./pages/ResendVerificationPage'));
+const ResendVerificationPage = lazy(
+  () => import('./pages/ResendVerificationPage')
+);
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 

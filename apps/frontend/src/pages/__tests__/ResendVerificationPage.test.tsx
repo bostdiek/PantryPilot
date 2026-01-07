@@ -24,7 +24,9 @@ describe('ResendVerificationPage', () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('heading', { name: /verify your email/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /verify your email/i })
+    ).toBeInTheDocument();
     expect(screen.getByLabelText(/email address/i)).toBeInTheDocument();
     expect(
       screen.getByRole('button', { name: /send verification email/i })
@@ -40,7 +42,9 @@ describe('ResendVerificationPage', () => {
       </MemoryRouter>
     );
 
-    const emailInput = screen.getByLabelText(/email address/i) as HTMLInputElement;
+    const emailInput = screen.getByLabelText(
+      /email address/i
+    ) as HTMLInputElement;
     expect(emailInput.value).toBe('test@example.com');
   });
 
@@ -121,7 +125,9 @@ describe('ResendVerificationPage', () => {
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /resend in 60s/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /resend in 60s/i })
+      ).toBeInTheDocument();
     });
   });
 
@@ -147,9 +153,9 @@ describe('ResendVerificationPage', () => {
 
     try {
       await waitFor(() => {
-        expect(localStorage.getItem('pantrypilot_resend_verification_cooldown')).toBe(
-          (Date.now() + 60000).toString()
-        );
+        expect(
+          localStorage.getItem('pantrypilot_resend_verification_cooldown')
+        ).toBe((Date.now() + 60000).toString());
       });
     } finally {
       dateNowSpy.mockRestore();

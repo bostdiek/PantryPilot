@@ -526,7 +526,7 @@ describe('RegisterPage', () => {
       const user = userEvent.setup();
       const mockRegister = vi.mocked(authApi.register);
       const mockResendVerification = vi.mocked(authApi.resendVerification);
-      
+
       mockRegister.mockResolvedValueOnce({
         message: 'Registration successful.',
         email: 'test@example.com',
@@ -569,9 +569,7 @@ describe('RegisterPage', () => {
 
       await waitFor(() => {
         expect(mockResendVerification).toHaveBeenCalledWith('test@example.com');
-        expect(
-          screen.getByText(/verification email sent/i)
-        ).toBeDefined();
+        expect(screen.getByText(/verification email sent/i)).toBeDefined();
       });
     });
 
@@ -579,7 +577,7 @@ describe('RegisterPage', () => {
       const user = userEvent.setup();
       const mockRegister = vi.mocked(authApi.register);
       const mockResendVerification = vi.mocked(authApi.resendVerification);
-      
+
       mockRegister.mockResolvedValueOnce({
         message: 'Registration successful.',
         email: 'test@example.com',
@@ -622,7 +620,9 @@ describe('RegisterPage', () => {
 
       // Should show cooldown timer - button text should change
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: /resend in 60s/i })).toBeDefined();
+        expect(
+          screen.getByRole('button', { name: /resend in 60s/i })
+        ).toBeDefined();
       });
     });
 
@@ -630,7 +630,7 @@ describe('RegisterPage', () => {
       const user = userEvent.setup();
       const mockRegister = vi.mocked(authApi.register);
       const mockResendVerification = vi.mocked(authApi.resendVerification);
-      
+
       mockRegister.mockResolvedValueOnce({
         message: 'Registration successful.',
         email: 'test@example.com',
@@ -673,7 +673,9 @@ describe('RegisterPage', () => {
 
       // Button should be disabled during cooldown
       await waitFor(() => {
-        const cooldownButton = screen.getByRole('button', { name: /resend in 60s/i });
+        const cooldownButton = screen.getByRole('button', {
+          name: /resend in 60s/i,
+        });
         expect(cooldownButton.hasAttribute('disabled')).toBe(true);
       });
     });
