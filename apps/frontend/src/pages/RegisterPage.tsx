@@ -5,8 +5,11 @@ import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
 import { Input } from '../components/ui/Input';
+import { useResendCooldown } from '../hooks/useResendCooldown';
 import type { RegisterFormData } from '../types/auth';
+import { validateEmail as validateEmailUtil } from '../utils/emailValidation';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
+import { handleResendVerification } from '../utils/resendVerification';
 
 interface ValidationErrors {
   username?: string;
@@ -34,6 +37,24 @@ const RegisterPage: React.FC = () => {
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
 
+  // Resend verification state
+  const [resendLoading, setResendLoading] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
+  const { cooldown, startCooldown } = useResendCooldown();
+
+  // Handler for resending verification email
+  const handleResend = async () => {
+    setResendLoading(true);
+    setResendSuccess(false);
+
+    await handleResendVerification(registeredEmail);
+
+    setResendSuccess(true);
+    startCooldown(60);
+    setResendLoading(false);
+  };
+
   // Validation functions
   const validateUsername = (username: string): string | undefined => {
     if (!username) return 'Username is required';
@@ -47,10 +68,8 @@ const RegisterPage: React.FC = () => {
   };
 
   const validateEmail = (email: string): string | undefined => {
-    if (!email) return 'Email is required';
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) return 'Please enter a valid email address';
-    return undefined;
+    const error = validateEmailUtil(email);
+    return error || undefined;
   };
 
   const validatePassword = (password: string): string | undefined => {
@@ -227,6 +246,31 @@ const RegisterPage: React.FC = () => {
                 Click the link in the email to verify your account and start
                 using PantryPilot.
               </p>
+
+              {/* Resend verification section */}
+              <div className="mb-6 space-y-3">
+                <p className="text-sm text-gray-600">
+                  Didn&apos;t receive the email?
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleResend}
+                  disabled={cooldown > 0 || resendLoading}
+                  loading={resendLoading}
+                >
+                  {cooldown > 0
+                    ? `Resend in ${cooldown}s`
+                    : 'Resend Verification Email'}
+                </Button>
+                {resendSuccess && (
+                  <p className="text-sm font-medium text-green-600">
+                    Verification email sent! Please check your inbox.
+                  </p>
+                )}
+              </div>
+
               <Link
                 to="/login"
                 className="inline-block rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-500"
