@@ -40,16 +40,20 @@ var environmentSettings = {
     dbStorageSize: 32
     containerMinReplicas: 0
     containerMaxReplicas: 5
+    containerCpu: '0.25'
+    containerMemory: '0.5Gi'
     staticWebAppSku: 'Free'
     keyVaultSku: 'standard'
   }
   prod: {
     // Production-optimized settings
     acrSku: 'Standard'
-    dbSku: 'Standard_B2s'
-    dbStorageSize: 128
+    dbSku: 'Standard_B1ms'
+    dbStorageSize: 64
     containerMinReplicas: 1
-    containerMaxReplicas: 10
+    containerMaxReplicas: 3
+    containerCpu: '0.25'
+    containerMemory: '0.5Gi'
     staticWebAppSku: 'Free'
     keyVaultSku: 'standard'
   }
@@ -227,6 +231,8 @@ module containerApps 'modules/containerapps.bicep' = {
     containerImage: containerImage
     minReplicas: currentSettings.containerMinReplicas
     maxReplicas: currentSettings.containerMaxReplicas
+    containerCpu: currentSettings.containerCpu
+    containerMemory: currentSettings.containerMemory
     keyVaultUri: keyVault.outputs.vaultUri
     upstashRedisRestUrl: upstashRedisRestUrl
     upstashRedisRestToken: upstashRedisRestToken
