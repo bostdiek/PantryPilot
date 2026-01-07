@@ -1,6 +1,6 @@
-import { useEffect, useState, type FC, type FormEvent } from 'react';
+import { useState, type FC, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { login, resendVerification } from '../api/endpoints/auth';
+import { login } from '../api/endpoints/auth';
 import { userProfileApi } from '../api/endpoints/userProfile';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -11,9 +11,6 @@ import { useAuthStore } from '../stores/useAuthStore';
 import type { AuthUser, LoginFormData } from '../types/auth';
 import { getUserFriendlyErrorMessage } from '../utils/errorMessages';
 
-// LocalStorage key for cooldown persistence
-const RESEND_COOLDOWN_KEY = 'pantrypilot_resend_cooldown';
-
 const LoginPage: FC = () => {
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
@@ -22,14 +19,6 @@ const LoginPage: FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Resend verification state
-  const [isUnverifiedError, setIsUnverifiedError] = useState(false);
-  const [resendEmail, setResendEmail] = useState('');
-  const [showEmailInput, setShowEmailInput] = useState(false);
-  const [resendSuccess, setResendSuccess] = useState(false);
-  const [resendLoading, setResendLoading] = useState(false);
-  const [cooldown, setCooldown] = useState(0);
-
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const authStore = useAuthStore();
@@ -37,77 +26,11 @@ const LoginPage: FC = () => {
   // Get the intended destination from query parameter or default to home
   const from = searchParams.get('next') || '/';
 
-  // Initialize cooldown from localStorage on mount
-  useEffect(() => {
-    const storedCooldown = localStorage.getItem(RESEND_COOLDOWN_KEY);
-    if (storedCooldown) {
-      const endTime = parseInt(storedCooldown, 10);
-      const remaining = Math.ceil((endTime - Date.now()) / 1000);
-      if (remaining > 0) {
-        setCooldown(remaining);
-      } else {
-        localStorage.removeItem(RESEND_COOLDOWN_KEY);
-      }
-    }
-  }, []);
-
-  // Cooldown timer effect
-  useEffect(() => {
-    if (cooldown <= 0) return;
-
-    const timer = setInterval(() => {
-      setCooldown((prev) => {
-        if (prev <= 1) {
-          localStorage.removeItem(RESEND_COOLDOWN_KEY);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [cooldown]);
-
   const handleInputChange = (name: string) => (value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
     // Clear error when user starts typing
     if (error) {
       setError(null);
-      setIsUnverifiedError(false);
-      setResendSuccess(false);
-    }
-  };
-
-  const handleResend = async () => {
-    // Determine email to use
-    const emailToUse = showEmailInput ? resendEmail : formData.username;
-
-    // Check if we need to show email input (username might not be an email)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailToUse)) {
-      setShowEmailInput(true);
-      return;
-    }
-
-    setResendLoading(true);
-    try {
-      await resendVerification(emailToUse);
-      setResendSuccess(true);
-
-      // Set 60 second cooldown
-      const endTime = Date.now() + 60000;
-      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
-      setCooldown(60);
-    } catch (err) {
-      logger.error('Failed to resend verification email:', err);
-      // Still show success to prevent enumeration
-      setResendSuccess(true);
-      // Set 60 second cooldown (still persist to prevent refresh bypass)
-      const endTime = Date.now() + 60000;
-      localStorage.setItem(RESEND_COOLDOWN_KEY, endTime.toString());
-      setCooldown(60);
-    } finally {
-      setResendLoading(false);
     }
   };
 
@@ -121,8 +44,6 @@ const LoginPage: FC = () => {
 
     setIsLoading(true);
     setError(null);
-    setIsUnverifiedError(false);
-    setResendSuccess(false);
 
     try {
       const response = await login(formData);
@@ -160,8 +81,19 @@ const LoginPage: FC = () => {
         errorObj.status === 403 &&
         errorObj.message?.toLowerCase().includes('not verified')
       ) {
-        setIsUnverifiedError(true);
-        setError('Your email has not been verified.');
+        // Redirect to dedicated resend verification page
+        // Use the username (which could be email or username) to populate the email field
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const email = emailRegex.test(formData.username)
+          ? formData.username
+          : '';
+
+        // Only use navigation state to pass email (not URL params) for security
+        navigate('/resend-verification', {
+          replace: true,
+          state: { email },
+        });
+        return;
       } else {
         // Use centralized error message handling
         const friendlyMessage = getUserFriendlyErrorMessage(err, {
@@ -206,64 +138,9 @@ const LoginPage: FC = () => {
               disabled={isLoading}
             />
 
-            {error && !isUnverifiedError && (
+            {error && (
               <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
                 {error}
-              </div>
-            )}
-
-            {isUnverifiedError && (
-              <div className="space-y-3 rounded-md bg-yellow-50 p-4">
-                <p className="text-sm font-medium text-yellow-800">
-                  Your email has not been verified.
-                </p>
-                <p className="text-sm text-yellow-700">
-                  Please check your inbox for the verification link, or request
-                  a new one below.
-                </p>
-
-                {!showEmailInput ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={handleResend}
-                    disabled={cooldown > 0 || resendLoading}
-                    loading={resendLoading}
-                  >
-                    {cooldown > 0
-                      ? `Resend in ${cooldown}s`
-                      : 'Resend Verification Email'}
-                  </Button>
-                ) : (
-                  <div className="space-y-2">
-                    <Input
-                      label="Email Address"
-                      type="email"
-                      value={resendEmail}
-                      onChange={setResendEmail}
-                      placeholder="Enter your email"
-                      disabled={resendLoading}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleResend}
-                      disabled={cooldown > 0 || resendLoading || !resendEmail}
-                      loading={resendLoading}
-                    >
-                      {cooldown > 0 ? `Resend in ${cooldown}s` : 'Send'}
-                    </Button>
-                  </div>
-                )}
-
-                {resendSuccess && (
-                  <p className="text-sm font-medium text-green-600">
-                    If an unverified account exists with that email, a new
-                    verification link has been sent.
-                  </p>
-                )}
               </div>
             )}
 
