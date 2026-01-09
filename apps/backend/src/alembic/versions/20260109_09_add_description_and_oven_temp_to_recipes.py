@@ -38,8 +38,7 @@ def upgrade() -> None:
             sa.Integer(),
             nullable=True,
             comment=(
-                "Oven temperature in Fahrenheit "
-                "(0-550 range enforced at app layer)"
+                "Oven temperature in Fahrenheit (0-550 range enforced at app layer)"
             ),
         ),
     )
