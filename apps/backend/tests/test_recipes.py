@@ -74,6 +74,7 @@ async def test_create_recipe(async_client):
     assert data["difficulty"] == payload["difficulty"]
     assert data["category"] == payload["category"]
     assert data["ethnicity"] == payload["ethnicity"]
+    assert data["oven_temperature_f"] == payload["oven_temperature_f"]
     assert data["user_notes"] == payload["user_notes"]
 
     # Validate ingredients
