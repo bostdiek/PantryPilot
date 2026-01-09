@@ -16,6 +16,12 @@ param minReplicas int = 0
 @description('Maximum number of replicas')
 param maxReplicas int = 5
 
+@description('vCPU allocation for the container (e.g., 0.25, 0.5, 1)')
+param containerCpu string = '0.5'
+
+@description('Memory allocation for the container (e.g., 0.5Gi, 1Gi)')
+param containerMemory string = '1Gi'
+
 @description('The URI of the Key Vault containing secrets')
 param keyVaultUri string
 
@@ -57,7 +63,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09
     sku: {
       name: 'PerGB2018'
     }
-    retentionInDays: 30
+    retentionInDays: 14
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
@@ -175,8 +181,8 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
           image: containerImage
           name: 'pantrypilot-backend'
           resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
+            cpu: json(containerCpu)
+            memory: containerMemory
           }
           env: concat(
             [
@@ -294,7 +300,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
             name: 'http-scaling-rule'
             http: {
               metadata: {
-                concurrentRequests: '10'
+                concurrentRequests: '20'
               }
             }
           }
