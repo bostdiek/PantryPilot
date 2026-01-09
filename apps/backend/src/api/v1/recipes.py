@@ -86,6 +86,7 @@ async def create_recipe(
             id=uuid.uuid4(),
             user_id=current_user.id,  # Set owner
             name=recipe_data.title,
+            description=recipe_data.description,
             prep_time_minutes=recipe_data.prep_time_minutes,
             cook_time_minutes=recipe_data.cook_time_minutes,
             total_time_minutes=total_time,
@@ -95,6 +96,7 @@ async def create_recipe(
             difficulty=recipe_data.difficulty.value,
             # Map category to course_type
             course_type=recipe_data.category.value,
+            oven_temperature_f=recipe_data.oven_temperature_f,
             instructions=recipe_data.instructions,
             user_notes=recipe_data.user_notes,
             link_source=recipe_data.link_source,
@@ -161,7 +163,7 @@ async def create_recipe(
         response_data: dict[str, Any] = {
             "id": new_recipe.id,
             "title": new_recipe.name,
-            "description": recipe_data.description,  # Use from input data
+            "description": new_recipe.description,
             "prep_time_minutes": new_recipe.prep_time_minutes,
             "cook_time_minutes": new_recipe.cook_time_minutes,
             "total_time_minutes": new_recipe.total_time_minutes,
@@ -172,7 +174,7 @@ async def create_recipe(
             "difficulty": recipe_data.difficulty,
             "category": RecipeCategory(new_recipe.course_type),
             "ethnicity": new_recipe.ethnicity,
-            "oven_temperature_f": recipe_data.oven_temperature_f,
+            "oven_temperature_f": new_recipe.oven_temperature_f,
             "user_notes": new_recipe.user_notes,
             "link_source": new_recipe.link_source,
             # Ensure timestamps present even when DB defaults aren't applied
@@ -242,7 +244,7 @@ def _recipe_to_response(
     response_data: dict[str, Any] = {
         "id": recipe.id,
         "title": recipe.name,
-        "description": None,
+        "description": recipe.description,
         # Ensure numeric fields are present and of the correct type for Pydantic
         "prep_time_minutes": int(recipe.prep_time_minutes or 0),
         "cook_time_minutes": int(recipe.cook_time_minutes or 0),
@@ -261,7 +263,7 @@ def _recipe_to_response(
             else RecipeCategory.LUNCH
         ),
         "ethnicity": recipe.ethnicity,
-        "oven_temperature_f": getattr(recipe, "oven_temperature_f", None),
+        "oven_temperature_f": recipe.oven_temperature_f,
         "user_notes": recipe.user_notes,
         "link_source": recipe.link_source,
         "created_at": recipe.created_at or now_ts,
@@ -430,6 +432,7 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
     """
     updatable = {
         "name": recipe_data.title,
+        "description": recipe_data.description,
         "prep_time_minutes": recipe_data.prep_time_minutes,
         "cook_time_minutes": recipe_data.cook_time_minutes,
         "serving_min": recipe_data.serving_min,
@@ -437,6 +440,7 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
         "ethnicity": recipe_data.ethnicity,
         "difficulty": recipe_data.difficulty.value if recipe_data.difficulty else None,
         "course_type": recipe_data.category.value if recipe_data.category else None,
+        "oven_temperature_f": recipe_data.oven_temperature_f,
         "instructions": recipe_data.instructions,
         "user_notes": recipe_data.user_notes,
         "link_source": recipe_data.link_source,
