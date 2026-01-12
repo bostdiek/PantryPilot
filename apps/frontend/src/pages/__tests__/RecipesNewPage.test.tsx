@@ -118,9 +118,8 @@ describe('RecipesNewPage (minimal)', () => {
       }),
     }));
 
-    const { default: RecipesNewPageWithMocks } = await import(
-      '../RecipesNewPage'
-    );
+    const { default: RecipesNewPageWithMocks } =
+      await import('../RecipesNewPage');
     render((<RecipesNewPageWithMocks />) as any);
 
     await waitFor(() =>

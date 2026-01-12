@@ -16,8 +16,10 @@ export type ButtonVariant =
   | 'ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
-export interface ButtonProps
-  extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'size' | 'color'> {
+export interface ButtonProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'size' | 'color'
+> {
   /**
    * Button content
    */
