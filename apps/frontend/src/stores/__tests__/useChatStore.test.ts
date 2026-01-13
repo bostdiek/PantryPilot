@@ -128,6 +128,35 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().conversations).toHaveLength(0);
   });
 
+  test('cancelPendingAssistantReply cancels the scheduled assistant message', async () => {
+    const { result } = renderHook(() => useChatStore());
+
+    await act(async () => {
+      await result.current.createConversation('Chat');
+      await result.current.sendMessage('Hello');
+    });
+
+    const conversationId = useChatStore.getState().activeConversationId!;
+    expect(useChatStore.getState().isLoading).toBe(true);
+    expect(
+      useChatStore.getState().messagesByConversationId[conversationId]
+    ).toHaveLength(1);
+
+    act(() => {
+      result.current.cancelPendingAssistantReply();
+    });
+
+    expect(useChatStore.getState().isLoading).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(700);
+    });
+
+    expect(
+      useChatStore.getState().messagesByConversationId[conversationId]
+    ).toHaveLength(1);
+  });
+
   test('clearConversation clears messages for the given conversation', async () => {
     const { result } = renderHook(() => useChatStore());
 

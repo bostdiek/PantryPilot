@@ -14,17 +14,26 @@ export default function AssistantPage() {
   const loadConversations = useChatStore((s) => s.loadConversations);
   const createConversation = useChatStore((s) => s.createConversation);
   const switchConversation = useChatStore((s) => s.switchConversation);
+  const cancelPendingAssistantReply = useChatStore(
+    (s) => s.cancelPendingAssistantReply
+  );
   const messagesByConversationId = useChatStore(
     (s) => s.messagesByConversationId
   );
 
   const [announcement, setAnnouncement] = useState('');
   const lastAnnouncedMessageId = useRef<string | null>(null);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
 
   const messages = useMemo(() => {
     if (!activeConversationId) return [];
     return messagesByConversationId[activeConversationId] ?? [];
   }, [activeConversationId, messagesByConversationId]);
+
+  const lastMessage = useMemo(() => {
+    return messages.length > 0 ? messages[messages.length - 1] : null;
+  }, [messages]);
 
   useEffect(() => {
     void loadConversations();
@@ -42,7 +51,9 @@ export default function AssistantPage() {
       if (key === 'k') {
         e.preventDefault();
         document
-          .querySelector<HTMLTextAreaElement>('#assistant-message')
+          .querySelector<
+            HTMLInputElement | HTMLTextAreaElement
+          >('#assistant-message')
           ?.focus();
         return;
       }
@@ -56,6 +67,12 @@ export default function AssistantPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [createConversation, hasHydrated]);
+
+  useEffect(() => {
+    return () => {
+      cancelPendingAssistantReply();
+    };
+  }, [cancelPendingAssistantReply]);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -78,17 +95,37 @@ export default function AssistantPage() {
 
   useEffect(() => {
     if (!hasHydrated) return;
-    if (messages.length === 0) return;
+    if (!lastMessage) return;
 
-    const lastMessage = messages[messages.length - 1];
     if (lastMessage.id === lastAnnouncedMessageId.current) return;
-
     lastAnnouncedMessageId.current = lastMessage.id;
 
     if (lastMessage.role === 'assistant') {
       setAnnouncement(`Nibble: ${lastMessage.content}`);
     }
-  }, [hasHydrated, messages]);
+  }, [hasHydrated, lastMessage?.id, lastMessage?.role, lastMessage?.content]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (!lastMessage) return;
+
+    const container = scrollContainerRef.current;
+    const anchor = bottomAnchorRef.current;
+    if (!container || !anchor) return;
+
+    const isNearBottom =
+      container.scrollTop + container.clientHeight >=
+      container.scrollHeight - 40;
+
+    if (isNearBottom || lastMessage.role === 'assistant') {
+      if (typeof anchor.scrollIntoView === 'function') {
+        anchor.scrollIntoView({ block: 'end' });
+      } else {
+        // jsdom doesn't implement scrollIntoView; fall back to manual scroll.
+        container.scrollTop = container.scrollHeight;
+      }
+    }
+  }, [hasHydrated, lastMessage?.id, lastMessage?.role]);
 
   return (
     <Container as="main" size="xl" className="py-4 md:py-6">
@@ -138,6 +175,9 @@ export default function AssistantPage() {
           <section
             aria-label="Conversation"
             className="min-h-0 flex-1 overflow-y-auto rounded-md border border-gray-200 bg-white p-4"
+            ref={(el) => {
+              scrollContainerRef.current = el;
+            }}
           >
             {!hasHydrated ? (
               <p className="text-sm text-gray-600">Loading…</p>
@@ -160,6 +200,8 @@ export default function AssistantPage() {
                 Nibble is typing…
               </p>
             ) : null}
+
+            <div ref={bottomAnchorRef} />
           </section>
 
           <div className="shrink-0 border-t border-gray-200 pt-4">

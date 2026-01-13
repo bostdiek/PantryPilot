@@ -29,10 +29,13 @@ export interface ChatState {
   createConversation: (title?: string) => Promise<void>;
   switchConversation: (id: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
+  cancelPendingAssistantReply: () => void;
   clearConversation: (id: string) => void;
 }
 
 const MAX_MESSAGES_PER_CONVERSATION = 50;
+
+let pendingAssistantReplyTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
 function getNowIso(): string {
   return new Date().toISOString();
@@ -97,6 +100,11 @@ export const useChatStore = create<ChatState>()(
         const trimmed = text.trim();
         if (!trimmed) return;
 
+        if (pendingAssistantReplyTimeoutId) {
+          clearTimeout(pendingAssistantReplyTimeoutId);
+          pendingAssistantReplyTimeoutId = null;
+        }
+
         if (!get().activeConversationId) {
           await get().createConversation();
         }
@@ -131,7 +139,8 @@ export const useChatStore = create<ChatState>()(
           };
         });
 
-        setTimeout(() => {
+        pendingAssistantReplyTimeoutId = setTimeout(() => {
+          pendingAssistantReplyTimeoutId = null;
           const assistantNow = getNowIso();
           const assistantMessage: Message = {
             id: createId(),
@@ -162,6 +171,16 @@ export const useChatStore = create<ChatState>()(
             };
           });
         }, 700);
+      },
+
+      cancelPendingAssistantReply: () => {
+        if (pendingAssistantReplyTimeoutId) {
+          clearTimeout(pendingAssistantReplyTimeoutId);
+          pendingAssistantReplyTimeoutId = null;
+        }
+
+        // If we were showing typing state, ensure it stops when cancelled.
+        set({ isLoading: false });
       },
 
       clearConversation: (id: string) => {
