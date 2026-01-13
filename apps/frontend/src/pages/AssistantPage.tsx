@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { ChatInput } from '../components/chat/ChatInput';
 import { ChatMessage } from '../components/chat/ChatMessage';
@@ -18,6 +18,9 @@ export default function AssistantPage() {
     (s) => s.messagesByConversationId
   );
 
+  const [announcement, setAnnouncement] = useState('');
+  const lastAnnouncedMessageId = useRef<string | null>(null);
+
   const messages = useMemo(() => {
     if (!activeConversationId) return [];
     return messagesByConversationId[activeConversationId] ?? [];
@@ -26,6 +29,33 @@ export default function AssistantPage() {
   useEffect(() => {
     void loadConversations();
   }, [loadConversations]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!hasHydrated) return;
+
+      const key = e.key.toLowerCase();
+      const isModifierPressed = e.metaKey || e.ctrlKey;
+
+      if (!isModifierPressed) return;
+
+      if (key === 'k') {
+        e.preventDefault();
+        document
+          .querySelector<HTMLTextAreaElement>('#assistant-message')
+          ?.focus();
+        return;
+      }
+
+      if (key === 'n') {
+        e.preventDefault();
+        void createConversation();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [createConversation, hasHydrated]);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -46,8 +76,30 @@ export default function AssistantPage() {
     switchConversation,
   ]);
 
+  useEffect(() => {
+    if (!hasHydrated) return;
+    if (messages.length === 0) return;
+
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage.id === lastAnnouncedMessageId.current) return;
+
+    lastAnnouncedMessageId.current = lastMessage.id;
+
+    if (lastMessage.role === 'assistant') {
+      setAnnouncement(`Nibble: ${lastMessage.content}`);
+    }
+  }, [hasHydrated, messages]);
+
   return (
     <Container as="main" size="xl" className="py-4 md:py-6">
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {announcement}
+      </div>
       <div className="flex min-h-[calc(100dvh-5rem)] flex-col md:flex-row">
         <aside
           aria-label="Conversation list"
@@ -83,9 +135,9 @@ export default function AssistantPage() {
             </div>
           </header>
 
-          <article
+          <section
             aria-label="Conversation"
-            className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-md border border-gray-200 bg-white p-4"
+            className="min-h-0 flex-1 overflow-y-auto rounded-md border border-gray-200 bg-white p-4"
           >
             {!hasHydrated ? (
               <p className="text-sm text-gray-600">Loading…</p>
@@ -96,7 +148,11 @@ export default function AssistantPage() {
                 </p>
               </div>
             ) : (
-              messages.map((msg) => <ChatMessage key={msg.id} message={msg} />)
+              <ol role="list" className="space-y-4">
+                {messages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} />
+                ))}
+              </ol>
             )}
 
             {isLoading ? (
@@ -104,7 +160,7 @@ export default function AssistantPage() {
                 Nibble is typing…
               </p>
             ) : null}
-          </article>
+          </section>
 
           <div className="shrink-0 border-t border-gray-200 pt-4">
             <ChatInput />
