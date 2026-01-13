@@ -59,7 +59,7 @@ export function ChatInput() {
         placeholder="Ask Nibble about a recipe, ingredient, or meal idea…"
         aria-label="Message Nibble"
         aria-describedby="assistant-message-help"
-        className="min-h-12 flex-1"
+        className="min-h-12 flex-1 border-gray-500 bg-white shadow-sm placeholder:text-gray-500 disabled:bg-gray-100"
       />
 
       <Button
