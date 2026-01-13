@@ -11,6 +11,6 @@ def health_check() -> ApiResponse[dict[str, str]]:
     """Health check endpoint for monitoring and load balancer health checks."""
     return ApiResponse(
         success=True,
-        data={"status": "healthy", "message": "PantryPilot API is running"},
+        data={"status": "healthy", "message": "SmartMealPlanner API is running"},
         message="Health check successful",
     )

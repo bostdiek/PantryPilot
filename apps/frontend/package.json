@@ -24,11 +24,11 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@headlessui/react": "^2.2.9",
     "clsx": "^2.1.1",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-router-dom": "^7.9.5",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.12.0",
     "react-use": "^17.6.0",
-    "zustand": "^5.0.9"
+    "zustand": "^5.0.10"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
@@ -37,13 +37,13 @@
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
     "@types/node": "^25.0.3",
-    "@types/react": "^19.1.13",
+    "@types/react": "^19.2.7",
     "@types/react-dom": "^19.1.6",
     "@typescript-eslint/eslint-plugin": "^8.49.0",
     "@typescript-eslint/parser": "^8.46.3",
     "@vitejs/plugin-react": "^5.0.4",
-    "@vitest/coverage-v8": "^3.2.4",
-    "@vitest/ui": "^3.2.4",
+    "@vitest/coverage-v8": "^4.0.17",
+    "@vitest/ui": "^4.0.17",
     "eslint": "^9.39.2",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
@@ -53,12 +53,12 @@
     "jsdom-testing-mocks": "^1.16.0",
     "msw": "^2.12.4",
     "postcss": "^8.5.6",
-    "prettier": "^3.6.2",
+    "prettier": "^3.7.4",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "tailwindcss": "^4.1.18",
     "typescript": "~5.9.3",
     "vite": "^7.2.2",
     "vite-plugin-svgr": "^4.3.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.0.17"
   }
 }

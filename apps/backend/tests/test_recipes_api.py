@@ -59,6 +59,7 @@ async def test_create_recipe(async_client: AsyncClient) -> None:
 
     response_data = response_wrapper["data"]
     assert response_data["title"] == recipe_data["title"]
+    assert response_data["description"] == recipe_data["description"]
     assert response_data["prep_time_minutes"] == recipe_data["prep_time_minutes"]
     assert response_data["cook_time_minutes"] == recipe_data["cook_time_minutes"]
     assert response_data["total_time_minutes"] == (

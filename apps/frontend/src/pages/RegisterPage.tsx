@@ -244,7 +244,7 @@ const RegisterPage: React.FC = () => {
               </p>
               <p className="mb-6 text-sm text-gray-500">
                 Click the link in the email to verify your account and start
-                using PantryPilot.
+                using Smart Meal Planner.
               </p>
 
               {/* Resend verification section */}
@@ -289,7 +289,7 @@ const RegisterPage: React.FC = () => {
       <div className="flex min-h-screen flex-col items-center justify-center">
         <Card variant="default" className="w-full max-w-md p-6">
           <h1 className="mb-6 text-center text-2xl font-bold">
-            Join PantryPilot
+            Join Smart Meal Planner
           </h1>
 
           <form onSubmit={handleSubmit} className="space-y-4">

@@ -193,8 +193,8 @@ export function TabsDemo() {
         <div>
           <h3 className="text-lg font-medium">Dashboard Overview</h3>
           <p className="mt-2">
-            Welcome to your PantryPilot dashboard. Here you can see an overview
-            of your recipes, meal plans, and shopping lists.
+            Welcome to your Smart Meal Planner dashboard. Here you can see an
+            overview of your recipes, meal plans, and shopping lists.
           </p>
           <div className="mt-4 grid grid-cols-3 gap-4">
             <div className="rounded-md bg-blue-50 p-4">
@@ -249,11 +249,11 @@ export function TabsDemo() {
       content: (
         <div>
           <h3 className="text-lg font-medium">
-            Getting Started with PantryPilot
+            Getting Started with Smart Meal Planner
           </h3>
           <p className="mt-2">
-            PantryPilot makes meal planning and recipe management simple. Follow
-            these steps to get started:
+            Smart Meal Planner makes meal planning and recipe management simple.
+            Follow these steps to get started:
           </p>
           <ol className="mt-4 list-decimal space-y-2 pl-5">
             <li>Create your account or sign in</li>
@@ -284,8 +284,8 @@ export function TabsDemo() {
                 Can I import recipes from other websites?
               </h4>
               <p className="mt-1 text-gray-600">
-                Yes! PantryPilot allows you to import recipes by pasting a URL
-                from supported recipe websites.
+                Yes! Smart Meal Planner allows you to import recipes by pasting
+                a URL from supported recipe websites.
               </p>
             </div>
             <div>

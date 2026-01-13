@@ -1,8 +1,7 @@
 import clsx from 'clsx';
 import React from 'react';
 
-export interface TextareaProps
-  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   /** When true (default), apply focus styles */
   focus?: boolean;
 }

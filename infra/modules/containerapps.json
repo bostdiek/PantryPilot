@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "7670517266156934026"
+      "templateHash": "8377512633349252080"
     }
   },
   "parameters": {
@@ -45,6 +45,20 @@
       "defaultValue": 5,
       "metadata": {
         "description": "Maximum number of replicas"
+      }
+    },
+    "containerCpu": {
+      "type": "string",
+      "defaultValue": "0.5",
+      "metadata": {
+        "description": "vCPU allocation for the container (e.g., 0.25, 0.5, 1)"
+      }
+    },
+    "containerMemory": {
+      "type": "string",
+      "defaultValue": "1Gi",
+      "metadata": {
+        "description": "Memory allocation for the container (e.g., 0.5Gi, 1Gi)"
       }
     },
     "keyVaultUri": {
@@ -98,12 +112,26 @@
       "metadata": {
         "description": "Upstash Redis REST Token for rate limiting (optional)"
       }
+    },
+    "emailSenderAddress": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Email sender address for Azure Communication Services (e.g., DoNotReply@domain.com)"
+      }
+    },
+    "frontendUrl": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Frontend URL for email links (password reset, verification). Include https:// protocol."
+      }
     }
   },
   "resources": [
     {
       "type": "Microsoft.OperationalInsights/workspaces",
-      "apiVersion": "2023-09-01",
+      "apiVersion": "2025-07-01",
       "name": "[format('{0}-logs', parameters('environmentName'))]",
       "location": "[parameters('location')]",
       "tags": "[parameters('tags')]",
@@ -133,8 +161,8 @@
         "appLogsConfiguration": {
           "destination": "log-analytics",
           "logAnalyticsConfiguration": {
-            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName'))), '2023-09-01').customerId]",
-            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName'))), '2023-09-01').primarySharedKey]"
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName'))), '2025-07-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('environmentName'))), '2025-07-01').primarySharedKey]"
           }
         }
       },
@@ -176,7 +204,7 @@
             }
           },
           "registries": "[if(empty(parameters('registryServer')), createArray(), createArray(createObject('server', parameters('registryServer'), 'username', parameters('registryUsername'), 'passwordSecretRef', 'acr-password')))]",
-          "secrets": "[concat(if(empty(parameters('registryPassword')), createArray(), createArray(createObject('name', 'acr-password', 'value', parameters('registryPassword')))), concat(createArray(createObject('name', 'database-connection-string', 'keyVaultUrl', format('{0}secrets/dbConnectionString', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'secret-key', 'keyVaultUrl', format('{0}secrets/secretKey', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'gemini-api-key', 'keyVaultUrl', format('{0}secrets/geminiApiKey', parameters('keyVaultUri')), 'identity', 'system')), if(or(empty(parameters('upstashRedisRestUrl')), empty(parameters('upstashRedisRestToken'))), createArray(), createArray(createObject('name', 'upstash-redis-url', 'value', parameters('upstashRedisRestUrl')), createObject('name', 'upstash-redis-token', 'value', parameters('upstashRedisRestToken'))))))]"
+          "secrets": "[concat(if(empty(parameters('registryPassword')), createArray(), createArray(createObject('name', 'acr-password', 'value', parameters('registryPassword')))), concat(createArray(createObject('name', 'database-connection-string', 'keyVaultUrl', format('{0}secrets/dbConnectionString', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'secret-key', 'keyVaultUrl', format('{0}secrets/secretKey', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'gemini-api-key', 'keyVaultUrl', format('{0}secrets/geminiApiKey', parameters('keyVaultUri')), 'identity', 'system'), createObject('name', 'acs-connection-string', 'keyVaultUrl', format('{0}secrets/acsConnectionString', parameters('keyVaultUri')), 'identity', 'system')), if(or(empty(parameters('upstashRedisRestUrl')), empty(parameters('upstashRedisRestToken'))), createArray(), createArray(createObject('name', 'upstash-redis-url', 'value', parameters('upstashRedisRestUrl')), createObject('name', 'upstash-redis-token', 'value', parameters('upstashRedisRestToken'))))))]"
         },
         "template": {
           "containers": [
@@ -184,10 +212,10 @@
               "image": "[parameters('containerImage')]",
               "name": "pantrypilot-backend",
               "resources": {
-                "cpu": "[json('0.5')]",
-                "memory": "1Gi"
+                "cpu": "[json(parameters('containerCpu'))]",
+                "memory": "[parameters('containerMemory')]"
               },
-              "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-connection-string'), createObject('name', 'SECRET_KEY', 'secretRef', 'secret-key'), createObject('name', 'GEMINI_API_KEY', 'secretRef', 'gemini-api-key'), createObject('name', 'ENVIRONMENT', 'value', if(contains(parameters('environmentName'), 'prod'), 'production', 'development')), createObject('name', 'LOG_LEVEL', 'value', 'INFO'), createObject('name', 'API_V1_STR', 'value', '/api/v1'), createObject('name', 'PROJECT_NAME', 'value', 'PantryPilot'), createObject('name', 'VERSION', 'value', '0.1.0'), createObject('name', 'ALGORITHM', 'value', 'HS256'), createObject('name', 'ACCESS_TOKEN_EXPIRE_MINUTES', 'value', '30'), createObject('name', 'PORT', 'value', '8000'), createObject('name', 'PYTHONPATH', 'value', '/app/src'), createObject('name', 'CORS_ORIGINS', 'value', join(parameters('corsOrigins'), ','))), if(or(empty(parameters('upstashRedisRestUrl')), empty(parameters('upstashRedisRestToken'))), createArray(), createArray(createObject('name', 'UPSTASH_REDIS_REST_URL', 'secretRef', 'upstash-redis-url'), createObject('name', 'UPSTASH_REDIS_REST_TOKEN', 'secretRef', 'upstash-redis-token'))))]",
+              "env": "[concat(createArray(createObject('name', 'DATABASE_URL', 'secretRef', 'database-connection-string'), createObject('name', 'SECRET_KEY', 'secretRef', 'secret-key'), createObject('name', 'GEMINI_API_KEY', 'secretRef', 'gemini-api-key'), createObject('name', 'ENVIRONMENT', 'value', if(contains(parameters('environmentName'), 'prod'), 'production', 'development')), createObject('name', 'LOG_LEVEL', 'value', 'INFO'), createObject('name', 'API_V1_STR', 'value', '/api/v1'), createObject('name', 'PROJECT_NAME', 'value', 'PantryPilot'), createObject('name', 'VERSION', 'value', '0.1.0'), createObject('name', 'ALGORITHM', 'value', 'HS256'), createObject('name', 'ACCESS_TOKEN_EXPIRE_MINUTES', 'value', '30'), createObject('name', 'PORT', 'value', '8000'), createObject('name', 'PYTHONPATH', 'value', '/app/src'), createObject('name', 'CORS_ORIGINS', 'value', join(parameters('corsOrigins'), ',')), createObject('name', 'AZURE_COMMUNICATION_CONNECTION_STRING', 'secretRef', 'acs-connection-string'), createObject('name', 'EMAIL_SENDER_ADDRESS', 'value', parameters('emailSenderAddress')), createObject('name', 'FRONTEND_URL', 'value', parameters('frontendUrl'))), if(or(empty(parameters('upstashRedisRestUrl')), empty(parameters('upstashRedisRestToken'))), createArray(), createArray(createObject('name', 'UPSTASH_REDIS_REST_URL', 'secretRef', 'upstash-redis-url'), createObject('name', 'UPSTASH_REDIS_REST_TOKEN', 'secretRef', 'upstash-redis-token'))))]",
               "probes": [
                 {
                   "type": "Liveness",
@@ -224,7 +252,7 @@
                 "name": "http-scaling-rule",
                 "http": {
                   "metadata": {
-                    "concurrentRequests": "10"
+                    "concurrentRequests": "20"
                   }
                 }
               }
