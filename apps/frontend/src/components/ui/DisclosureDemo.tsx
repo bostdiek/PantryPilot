@@ -13,11 +13,11 @@ export function DisclosureDemo() {
       {/* Basic Disclosure */}
       <section>
         <h2 className="mb-4 text-lg font-semibold">Basic Disclosure</h2>
-        <Disclosure title="What is PantryPilot?">
+        <Disclosure title="What is Smart Meal Planner?">
           <p>
-            PantryPilot is a meal planning application that helps you organize
-            your recipes, plan your weekly meals, and generate shopping lists
-            automatically.
+            Smart Meal Planner is a meal planning application that helps you
+            organize your recipes, plan your weekly meals, and generate shopping
+            lists automatically.
           </p>
         </Disclosure>
       </section>
@@ -36,17 +36,17 @@ export function DisclosureDemo() {
 
           <Disclosure title="Can I import recipes from other websites?">
             <p>
-              Yes! PantryPilot allows you to import recipes by pasting a URL
-              from supported recipe websites. The app will automatically extract
-              the ingredients, instructions, and other recipe details.
+              Yes! Smart Meal Planner allows you to import recipes by pasting a
+              URL from supported recipe websites. The app will automatically
+              extract the ingredients, instructions, and other recipe details.
             </p>
           </Disclosure>
 
           <Disclosure title="How do I generate a shopping list?">
             <p>
               After creating your weekly meal plan, go to the Shopping List page
-              and click "Generate List". PantryPilot will automatically compile
-              all the ingredients needed for your planned meals.
+              and click "Generate List". Smart Meal Planner will automatically
+              compile all the ingredients needed for your planned meals.
             </p>
             <p className="mt-2">
               You can also manually add or remove items from the shopping list.

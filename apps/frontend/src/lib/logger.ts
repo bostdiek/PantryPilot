@@ -6,7 +6,7 @@ const isDev =
   import.meta.env.MODE === 'development' || import.meta.env.MODE === 'test';
 
 function formatMessage(level: LogLevel, args: any[]) {
-  const prefix = `[PantryPilot:${level.toUpperCase()}]`;
+  const prefix = `[SmartMealPlanner:${level.toUpperCase()}]`;
   return [prefix, ...args];
 }
 

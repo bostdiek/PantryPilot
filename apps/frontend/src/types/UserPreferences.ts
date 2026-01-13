@@ -1,4 +1,4 @@
-// User preferences types for PantryPilot application
+// User preferences types for Smart Meal Planner application
 
 export interface UserPreferences {
   // Family and serving preferences
