@@ -35,6 +35,30 @@ describe('ChatInput', () => {
     });
   });
 
+  test('uses a single-line input on mobile (voice-typing friendly)', () => {
+    const originalMatchMedia = window.matchMedia;
+
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }) as any) as any;
+
+    try {
+      render(<ChatInput />);
+      const composer = screen.getByLabelText('Message Nibble');
+      expect((composer as HTMLElement).tagName).toBe('INPUT');
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   test('disables send when empty and enables when there is input', async () => {
     const user = userEvent.setup();
 
@@ -90,14 +114,14 @@ describe('ChatInput', () => {
     expect(composer).toHaveValue('');
   });
 
-  test('disables composer when loading', () => {
+  test('keeps composer enabled when loading (dictation-friendly), but disables send', () => {
     act(() => {
       useChatStore.setState({ isLoading: true });
     });
 
     render(<ChatInput />);
 
-    expect(screen.getByLabelText('Message Nibble')).toBeDisabled();
+    expect(screen.getByLabelText('Message Nibble')).toBeEnabled();
     expect(screen.getByRole('button', { name: 'Send message' })).toBeDisabled();
   });
 
