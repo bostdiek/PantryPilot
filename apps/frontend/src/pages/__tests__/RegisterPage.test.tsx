@@ -59,7 +59,7 @@ describe('RegisterPage', () => {
       renderRegisterPage();
 
       expect(
-        screen.getByRole('heading', { name: /join pantrypilot/i })
+        screen.getByRole('heading', { name: /join smart meal planner/i })
       ).toBeDefined();
       expect(screen.getByLabelText(/username/i)).toBeDefined();
       expect(screen.getByLabelText(/email/i)).toBeDefined();
