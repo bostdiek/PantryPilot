@@ -15,6 +15,7 @@ class Recipe(Base):
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
     )  # TODO: Make NOT NULL after migration
     name = Column(String(255), nullable=False, index=True)
+    description = Column(Text, nullable=True)
     prep_time_minutes = Column(Integer, nullable=True)
     cook_time_minutes = Column(Integer, nullable=True)
     total_time_minutes = Column(Integer, nullable=True)
@@ -23,6 +24,7 @@ class Recipe(Base):
     ethnicity = Column(String(255), nullable=True)
     difficulty = Column(String(50), nullable=True)
     course_type = Column(String(255), nullable=True)
+    oven_temperature_f = Column(Integer, nullable=True)
     # Stored as a Postgres TEXT[] (list of instruction steps)
     instructions: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
     user_notes = Column(Text, nullable=True)

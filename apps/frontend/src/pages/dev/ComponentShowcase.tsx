@@ -44,7 +44,9 @@ const ComponentShowcase: FC = () => {
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar navigation */}
       <aside className="w-64 flex-shrink-0 bg-white p-6 shadow-md">
-        <h1 className="mb-6 text-xl font-bold text-blue-600">PantryPilot UI</h1>
+        <h1 className="mb-6 text-xl font-bold text-blue-600">
+          Smart Meal Planner UI
+        </h1>
         <nav>
           <ul className="space-y-2">
             {navItems.map((item) => (

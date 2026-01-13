@@ -45,7 +45,7 @@ def validate_cors_origins(origins: list[str]) -> list[str]:
 
 
 app = FastAPI(
-    title="PantryPilot API",
+    title="SmartMealPlanner API",
     description="A smart pantry management system",
     version="0.1.0",
     docs_url=None,
@@ -89,13 +89,15 @@ app.include_router(api_router, prefix="/api/v1")
 @app.get("/api/v1/docs", include_in_schema=False)
 def custom_swagger_ui_html():
     return get_swagger_ui_html(
-        openapi_url="/openapi.json", title="PantryPilot API Docs"
+        openapi_url="/openapi.json", title="SmartMealPlanner API Docs"
     )
 
 
 @app.get("/api/v1/redoc", include_in_schema=False)
 def redoc_html():
-    return get_redoc_html(openapi_url="/openapi.json", title="PantryPilot API Redoc")
+    return get_redoc_html(
+        openapi_url="/openapi.json", title="SmartMealPlanner API Redoc"
+    )
 
 
 @app.get("/")
