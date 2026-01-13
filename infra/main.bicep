@@ -49,7 +49,7 @@ var environmentSettings = {
     // Production-optimized settings
     acrSku: 'Standard'
     dbSku: 'Standard_B1ms'
-    dbStorageSize: 128  // Must be >= current size (128 GB). Azure PostgreSQL does not allow storage shrinking.
+    dbStorageSize: 128 // Must be >= current size (128 GB). Azure PostgreSQL does not allow storage shrinking.
     containerMinReplicas: 1
     containerMaxReplicas: 3
     containerCpu: '0.25'
@@ -201,9 +201,7 @@ var corsOrigins = concat(
   ],
   // Environment-specific additional origins
   environmentName == 'prod'
-    ? (useFrontendCustomDomains
-        ? frontendCustomDomains
-        : [])
+    ? (useFrontendCustomDomains ? frontendCustomDomains : [])
     : [
         // Development localhost origins (excluded from production)
         'http://localhost:5173'
@@ -244,7 +242,7 @@ module containerApps 'modules/containerapps.bicep' = {
     frontendUrl: frontendUrl
     tags: commonTags
   }
-  dependsOn: [acsConnectionStringSecret]  // Ensure ACS secret is in Key Vault before Container App tries to reference it
+  dependsOn: [acsConnectionStringSecret] // Ensure ACS secret is in Key Vault before Container App tries to reference it
 }
 
 // Reference the Key Vault resource for scoping role assignment

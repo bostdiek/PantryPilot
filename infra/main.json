@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "16702743433789414697"
+      "templateHash": "12566531019241437087"
     }
   },
   "parameters": {
@@ -91,7 +91,7 @@
       "prod": {
         "acrSku": "Standard",
         "dbSku": "Standard_B1ms",
-        "dbStorageSize": 64,
+        "dbStorageSize": 128,
         "containerMinReplicas": 1,
         "containerMaxReplicas": 3,
         "containerCpu": "0.25",
