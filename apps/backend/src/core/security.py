@@ -28,7 +28,7 @@ EMAIL_VERIFICATION_SALT = "email-verification"
 PASSWORD_RESET_SALT = "password-reset"  # pragma: allowlist secret
 
 # Token expiration times (in seconds)
-EMAIL_VERIFICATION_EXPIRATION = 86400  # 24 hours
+EMAIL_VERIFICATION_EXPIRATION = 3600  # 1 hour
 PASSWORD_RESET_EXPIRATION = 3600  # 1 hour
 
 
