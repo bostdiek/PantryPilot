@@ -160,6 +160,18 @@ class TestSendVerificationEmail:
             )
             assert expected_link in html_content
 
+    def test_send_verification_email_includes_expiry_warning(self):
+        """Verification email should mention 1 hour expiry."""
+        with (
+            patch("core.email.send_email", return_value=True) as mock_send,
+            patch("core.email.get_settings") as mock_settings,
+        ):
+            mock_settings.return_value.FRONTEND_URL = "https://example.com"
+            send_verification_email("user@example.com", "verification-token")
+            call_args = mock_send.call_args
+            html_content = call_args[0][2]
+            assert "1 hour" in html_content
+
 
 class TestSendPasswordResetEmail:
     """Tests for the send_password_reset_email function."""
