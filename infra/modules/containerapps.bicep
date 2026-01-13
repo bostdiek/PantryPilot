@@ -55,7 +55,7 @@ param emailSenderAddress string = ''
 param frontendUrl string = ''
 
 // Log Analytics Workspace for Container Apps
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
+resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-07-01' = {
   name: '${environmentName}-logs'
   location: location
   tags: tags
@@ -63,7 +63,7 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2023-09
     sku: {
       name: 'PerGB2018'
     }
-    retentionInDays: 14
+    retentionInDays: 30
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
