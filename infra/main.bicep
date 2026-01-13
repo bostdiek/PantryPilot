@@ -49,7 +49,7 @@ var environmentSettings = {
     // Production-optimized settings
     acrSku: 'Standard'
     dbSku: 'Standard_B1ms'
-    dbStorageSize: 64
+    dbStorageSize: 128  // Must be >= current size (128 GB). Azure PostgreSQL does not allow storage shrinking.
     containerMinReplicas: 1
     containerMaxReplicas: 3
     containerCpu: '0.25'
