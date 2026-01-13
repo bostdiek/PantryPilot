@@ -51,7 +51,7 @@ export default function AssistantPage() {
       <div className="flex min-h-[calc(100dvh-5rem)] flex-col md:flex-row">
         <aside
           aria-label="Conversation list"
-          className="hidden w-[300px] shrink-0 border-r border-gray-200 md:block"
+          className="hidden w-80 shrink-0 border-r border-gray-200 md:block"
         >
           <ConversationList />
         </aside>
@@ -106,7 +106,7 @@ export default function AssistantPage() {
             ) : null}
           </article>
 
-          <div className="border-t border-gray-200 pt-4">
+          <div className="shrink-0 border-t border-gray-200 pt-4">
             <ChatInput />
           </div>
         </section>
