@@ -18,7 +18,7 @@ dependencies = [
     "types-python-jose>=3.5.0.20250531",
     "httpx>=0.28.1",
     "beautifulsoup4>=4.14.0",
-    "pydantic-ai>=1.0.10",
+    "pydantic-ai>=1.42.0",
     "google-generativeai>=0.8.5",
     "openai>=1.109.1",
     "pillow>=11.3.0",
@@ -40,6 +40,7 @@ dev = [
     "mypy>=1.14.2",
     "python-json-logger>=2.0.4",
     "detect-secrets>=1.5.0",
+    "pydantic-ai-slim[web]>=1.42.0",
 ]
 
 [tool.ruff]
