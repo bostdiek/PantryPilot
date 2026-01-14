@@ -1,9 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { MessageSquare } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   useAuthStore,
-  useIsAuthenticated,
   useDisplayName,
+  useIsAuthenticated,
 } from '../../stores/useAuthStore';
 import { Button } from '../ui/Button';
 import { Brand } from './Brand';
@@ -117,6 +118,21 @@ const Navigation: React.FC = () => {
               }
             >
               Grocery List
+            </NavLink>
+            <NavLink
+              to="/assistant"
+              className={(meta: { isActive: boolean }) =>
+                `text-lg font-bold ${
+                  meta.isActive
+                    ? 'text-primary-700 border-primary-500 border-b-2'
+                    : 'hover:text-primary-600 text-gray-700 transition-colors'
+                }`
+              }
+            >
+              <span className="inline-flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" aria-hidden="true" />
+                <span>Assistant</span>
+              </span>
             </NavLink>
           </>
         )}

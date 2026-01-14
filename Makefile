@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db lan-ip frontend-lan backend-lan dev-lan dev-lan-docker check-node test-frontend-docker test-frontend-coverage-docker
 
 # Image / build targets (added)
 .PHONY: build-frontend build-backend build-all build-prod-frontend build-prod-backend build-prod-all buildx-setup buildx-push
@@ -44,6 +44,11 @@ help:
 	@echo "Development:"
 	@echo "  dev               - Alias for 'up' (development)"
 	@echo "  prod              - Alias for 'ENV=prod up' (production)"
+	@echo "  lan-ip            - Print local LAN IP + URLs for phone testing"
+	@echo "  backend-lan        - Run backend locally on 0.0.0.0:8000 (LAN accessible)"
+	@echo "  frontend-lan       - Run frontend locally on 0.0.0.0:5173 (LAN accessible)"
+	@echo "  dev-lan            - Run backend-lan + frontend-lan together (local, for mobile testing)"
+	@echo "  dev-lan-docker     - Run Docker dev stack with LAN/mobile-friendly URLs (phone testing)"
 	@echo "  install            - Install all dependencies"
 	@echo "  install-backend    - Install backend dependencies"
 	@echo "  install-frontend   - Install frontend dependencies"
@@ -68,6 +73,8 @@ help:
 	@echo "  test               - Run all tests"
 	@echo "  test-backend       - Run backend tests"
 	@echo "  test-frontend      - Run frontend tests"
+	@echo "  test-frontend-docker - Run frontend tests via Docker (Node 24 container)"
+	@echo "  test-frontend-coverage-docker - Run frontend tests with coverage via Docker"
 	@echo "  test-coverage      - Run backend tests with coverage report"
 	@echo ""
 	@echo "Cleanup and Maintenance:"
@@ -96,6 +103,7 @@ help:
 	@echo "  make db-maintenance CMD=stats  # Show database statistics"
 	@echo "  make clean-deps      # Fix dependency issues (like react-router-dom not found)"
 	@echo "  make clean-build     # Rebuild everything from scratch"
+	@echo "  make dev-lan         # Start local LAN-accessible dev servers (phone testing)"
 
 # Environment and Docker Compose targets
 validate-env:
@@ -185,7 +193,10 @@ install-backend:
 	# Install backend dependencies
 	cd apps/backend && uv sync
 
-install-frontend:
+check-node:
+	@/bin/sh scripts/check-node.sh
+
+install-frontend: check-node
 	# Install frontend dependencies
 	cd apps/frontend && npm ci
 
@@ -196,7 +207,7 @@ lint-backend:
 	# Run backend linter
 	cd apps/backend && uv run ruff check .
 
-lint-frontend:
+lint-frontend: check-node
 	# Run frontend linter
 	cd apps/frontend && npm run lint
 
@@ -208,7 +219,7 @@ type-check-backend:
 	# Run backend type checker (use MYPYPATH=src so mypy resolves runtime package names)
 	cd apps/backend && MYPYPATH=src uv run mypy -p api -p core -p crud -p dependencies -p models -p schemas
 
-type-check-frontend:
+type-check-frontend: check-node
 	# Run frontend type checker
 	cd apps/frontend && npm run type-check
 
@@ -219,9 +230,65 @@ format-backend:
 	# Format backend code
 	cd apps/backend && uv run ruff format .
 
-format-frontend:
+format-frontend: check-node
 	# Format frontend code
 	cd apps/frontend && npm run format
+
+# LAN / mobile testing (local dev servers; nginx not required)
+lan-ip:
+	@/bin/sh -lc 'set -eu; \
+	  IP="$$(ipconfig getifaddr en0 2>/dev/null || true)"; \
+	  if [ -z "$$IP" ]; then IP="$$(ipconfig getifaddr en1 2>/dev/null || true)"; fi; \
+	  if [ -z "$$IP" ]; then echo "Could not determine LAN IP (en0/en1)."; exit 1; fi; \
+	  echo "LAN IP: $$IP"; \
+	  echo "Frontend: http://$$IP:5173"; \
+	  echo "Backend:  http://$$IP:8000/api/v1/health"; \
+	  echo "Tip: ensure phone + Mac are on the same Wi-Fi."'
+
+backend-lan:
+	@/bin/sh -lc 'set -eu; \
+	  IP="$$(ipconfig getifaddr en0 2>/dev/null || true)"; \
+	  if [ -z "$$IP" ]; then IP="$$(ipconfig getifaddr en1 2>/dev/null || true)"; fi; \
+	  if [ -z "$$IP" ]; then echo "Could not determine LAN IP (en0/en1)."; exit 1; fi; \
+	  echo "Starting backend on 0.0.0.0:8000 (LAN accessible)"; \
+	  echo "Allowing CORS from http://$$IP:5173"; \
+	  export ENVIRONMENT=development; \
+	  export CORS_ORIGINS="http://$$IP:5173,http://localhost:5173,http://127.0.0.1:5173"; \
+	  export FRONTEND_URL="http://$$IP:5173"; \
+	  cd apps/backend && PYTHONPATH=./src uv run fastapi dev src/main.py --host 0.0.0.0 --port 8000'
+
+frontend-lan: check-node
+	@/bin/sh -lc 'set -eu; \
+	  IP="$$(ipconfig getifaddr en0 2>/dev/null || true)"; \
+	  if [ -z "$$IP" ]; then IP="$$(ipconfig getifaddr en1 2>/dev/null || true)"; fi; \
+	  if [ -z "$$IP" ]; then echo "Could not determine LAN IP (en0/en1)."; exit 1; fi; \
+	  echo "Starting frontend on 0.0.0.0:5173 (LAN accessible)"; \
+	  echo "Using VITE_API_URL=http://$$IP:8000"; \
+	  export VITE_API_URL="http://$$IP:8000"; \
+	  cd apps/frontend && npm run dev -- --host 0.0.0.0 --port 5173'
+
+dev-lan:
+	@echo "Starting local LAN-accessible dev servers (backend + frontend)."
+	@echo "Note: output may interleave; stop with Ctrl+C."
+	$(MAKE) -j2 backend-lan frontend-lan
+
+# LAN / mobile testing (Docker Compose dev stack)
+dev-lan-docker:
+	@/bin/sh -lc 'set -eu; \
+	  IP="$$(ipconfig getifaddr en0 2>/dev/null || true)"; \
+	  if [ -z "$$IP" ]; then IP="$$(ipconfig getifaddr en1 2>/dev/null || true)"; fi; \
+	  if [ -z "$$IP" ]; then echo "Could not determine LAN IP (en0/en1)."; exit 1; fi; \
+	  echo "Starting Docker dev stack for mobile testing..."; \
+	  echo "Frontend: http://$$IP:5173"; \
+	  echo "Backend:  http://$$IP:8000/api/v1/health"; \
+	  echo "Using VITE_API_URL=http://$$IP:8000"; \
+	  echo "Allowing CORS from http://$$IP:5173"; \
+	  VITE_API_URL="http://$$IP:8000" \
+	  VITE_HMR_HOST="$$IP" \
+	  FRONTEND_URL="http://$$IP:5173" \
+	  CORS_ORIGINS="http://$$IP:5173,http://localhost:5173,http://127.0.0.1:5173" \
+	    $(MAKE) ENV=dev up; \
+	  echo "✅ Ready. Open http://$$IP:5173 on your phone."'
 
 # Testing targets
 test: test-backend test-frontend
@@ -230,9 +297,19 @@ test-backend:
 	# Run backend tests
 	cd apps/backend && uv run pytest
 
-test-frontend:
+test-frontend: check-node
 	# Run frontend tests
 	cd apps/frontend && npm test -- --run
+
+test-frontend-docker:
+	# Run frontend tests via Docker Compose (uses Node 24 from apps/frontend/Dockerfile)
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build frontend
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) run --rm --no-deps frontend npm test -- --run
+
+test-frontend-coverage-docker:
+	# Run frontend tests with coverage via Docker Compose
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) build frontend
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) run --rm --no-deps frontend npm run test:coverage -- --run
 
 test-coverage:
 	# Run backend tests with coverage

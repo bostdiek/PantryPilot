@@ -19,6 +19,7 @@ const RecipesDetail = lazy(() => import('./pages/RecipesDetail'));
 const RecipesEditPage = lazy(() => import('./pages/RecipesEditPage'));
 const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = lazy(() => import('./pages/RecipesPage'));
+const AssistantPage = lazy(() => import('./pages/AssistantPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
@@ -288,6 +289,14 @@ export const router = createBrowserRouter([
             element: (
               <Suspense fallback={<LoadingSpinner />}>
                 <GroceryListPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'assistant',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <AssistantPage />
               </Suspense>
             ),
           },

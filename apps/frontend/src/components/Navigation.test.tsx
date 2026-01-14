@@ -80,6 +80,9 @@ describe('Navigation', () => {
       screen.getByRole('link', { name: /^recipes$/i })
     ).toBeInTheDocument();
     expect(
+      screen.getByRole('link', { name: /^assistant$/i })
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole('link', { name: /add recipe/i })
     ).toBeInTheDocument();
     expect(
