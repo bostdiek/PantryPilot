@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.user_preferences import UserPreferences
 from schemas.user_preferences import UserPreferencesCreate, UserPreferencesUpdate
+from services.geocoding import GeocodingService
 
 
 class UserPreferencesCRUD:
@@ -37,13 +38,28 @@ class UserPreferencesCRUD:
         db_preferences: UserPreferences,
         preferences_update: UserPreferencesUpdate,
     ) -> UserPreferences:
-        """Update existing user preferences."""
+        """Update existing user preferences.
+
+        If location fields change, triggers geocoding to update lat/lon/timezone.
+        """
         update_data = preferences_update.model_dump(exclude_unset=True)
+
+        # Check if location fields are being updated
+        location_fields = {"city", "state_or_region", "postal_code", "country"}
+        location_changed = bool(location_fields & update_data.keys())
+
+        # Apply updates
         for field, value in update_data.items():
             setattr(db_preferences, field, value)
 
-        await db.commit()
-        await db.refresh(db_preferences)
+        # Trigger geocoding if location changed
+        if location_changed:
+            geocoding_service = GeocodingService(db)
+            await geocoding_service.update_geocoded_fields(db_preferences)
+        else:
+            await db.commit()
+            await db.refresh(db_preferences)
+
         return db_preferences
 
     async def get_or_create(
