@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,7 +56,23 @@ class UserPreferencesCRUD:
         # Trigger geocoding if location changed
         if location_changed:
             geocoding_service = GeocodingService(db)
-            await geocoding_service.update_geocoded_fields(db_preferences)
+            geocoding_success = await geocoding_service.update_geocoded_fields(
+                db_preferences
+            )
+
+            # Inform user if geocoding failed (data inconsistency)
+            if not geocoding_success:
+                # Still return the updated preferences, but let user know
+                # geocoding failed so they can correct their location
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=(
+                        "Location fields updated but geocoding failed. "
+                        "Please verify your city, state, and postal code "
+                        "are correct. Weather features may not work until "
+                        "location is geocoded successfully."
+                    ),
+                )
         else:
             await db.commit()
             await db.refresh(db_preferences)

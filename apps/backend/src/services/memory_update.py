@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import attributes as orm_attributes
 
 from models.user_memory_documents import UserMemoryDocument
 
@@ -157,9 +158,7 @@ class MemoryUpdateService:
             current_metadata.update(update_metadata)
             memory_doc.metadata_ = current_metadata
             # Mark as modified for SQLAlchemy to detect the change
-            from sqlalchemy.orm import attributes
-
-            attributes.flag_modified(memory_doc, "metadata_")
+            orm_attributes.flag_modified(memory_doc, "metadata_")
 
         await self.db.commit()
         await self.db.refresh(memory_doc)
