@@ -12,6 +12,8 @@ if TYPE_CHECKING:  # pragma: no cover - only for type checking
     from .ai_drafts import AIDraft
     from .chat_conversations import ChatConversation
     from .chat_messages import ChatMessage
+    from .chat_pending_actions import ChatPendingAction
+    from .chat_tool_calls import ChatToolCall
     from .ingredient_names import Ingredient
     from .meal_history import Meal
     from .recipes_names import Recipe
@@ -69,4 +71,15 @@ class User(Base):
     )
     chat_messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    chat_pending_actions: Mapped[list[ChatPendingAction]] = relationship(
+        "ChatPendingAction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    chat_tool_calls: Mapped[list[ChatToolCall]] = relationship(
+        "ChatToolCall",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
