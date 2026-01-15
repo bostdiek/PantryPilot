@@ -36,7 +36,8 @@ class ChatSseEvent(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    def to_sse(self) -> str:  # pragma: no cover - trivial
+    def to_sse(self) -> str:
+        """Serialize event to SSE format with size validation."""
         payload = self.model_dump_json()
         if len(payload.encode("utf-8")) > MAX_SSE_EVENT_BYTES:
             raise ValueError(

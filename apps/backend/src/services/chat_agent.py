@@ -49,11 +49,19 @@ Tool rules:
 
 
 @lru_cache
-def get_chat_agent() -> Agent:
-    """Create and cache the chat assistant agent."""
+def get_chat_agent() -> Agent[None, AssistantMessage]:
+    """Create and cache the chat assistant agent.
+
+    Returns an agent configured with structured output type AssistantMessage.
+    Uses `instructions` instead of `system_prompt` because evaluation tooling
+    treats this as a standard chat-style agent and dynamically scores runs
+    against the full prompt. The recipe extraction agent uses `system_prompt`
+    because it is evaluated as a structured task-specific extractor rather
+    than a general chat assistant.
+    """
     agent = Agent(
         "gemini-2.5-flash",
-        instructions=CHAT_SYSTEM_PROMPT,  # Use instructions for dynamic evaluation
+        instructions=CHAT_SYSTEM_PROMPT,
         output_type=AssistantMessage,
         name="Nibble",
     )

@@ -39,9 +39,18 @@ async def stream_chat_message(
         ).to_sse()
         try:
             result = await agent.run(payload.content)
-            message = normalize_agent_output(
-                getattr(result, "output", None) or getattr(result, "data", None)
-            )
+            # Support multiple agent result shapes while keeping a clear precedence:
+            # 1) objects exposing `.output` (preferred),
+            # 2) objects exposing `.data` (legacy/alternate),
+            # 3) objects that are already in the normalized format.
+            raw_output: object
+            if hasattr(result, "output"):
+                raw_output = result.output
+            elif hasattr(result, "data"):
+                raw_output = result.data
+            else:
+                raw_output = result
+            message = normalize_agent_output(raw_output)
             for block in message.blocks:
                 if isinstance(block, TextBlock):
                     yield ChatSseEvent(
@@ -63,7 +72,7 @@ async def stream_chat_message(
                 message_id=message_id,
                 data={},
             ).to_sse()
-        except Exception as exc:  # pragma: no cover - safeguard for streaming
+        except Exception as exc:
             yield ChatSseEvent(
                 event="error",
                 conversation_id=conversation_id,
