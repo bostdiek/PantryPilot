@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -29,6 +30,8 @@ from services.chat_agent import get_chat_agent, normalize_agent_output
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,10 @@ async def _get_or_create_conversation(
 def _extract_tool_name(part: object) -> str:
     tool_name = getattr(part, "tool_name", None) or getattr(part, "name", None)
     if not tool_name:
+        logger.warning(
+            "Tool name extraction failed for tool part type=%s",
+            type(part).__name__,
+        )
         return "unknown"
     return str(tool_name)
 
@@ -138,7 +145,7 @@ async def _handle_agent_stream_event(
         db.add(
             ChatToolCall(
                 conversation_id=conversation_id,
-                message_id=None,
+                message_id=message_id,
                 user_id=user_id,
                 tool_name=tool_name,
                 arguments=arguments,
@@ -216,17 +223,14 @@ async def accept_chat_action(
         )
 
     now = datetime.now(UTC)
-    action.status = "accepted"
     action.accepted_at = now
-    action.updated_at = now
 
     # MVP: DB-mutating tool execution is intentionally not implemented yet.
     # We still record acceptance and persist an auditable tool call record.
     error_message = "Tool execution is not implemented yet."
-    finished_at = datetime.now(UTC)
     action.status = "failed"
-    action.executed_at = finished_at
-    action.updated_at = finished_at
+    action.executed_at = now
+    action.updated_at = now
     action.error = error_message
 
     tool_call = ChatToolCall(
@@ -238,7 +242,7 @@ async def accept_chat_action(
         status="error",
         error=error_message,
         started_at=now,
-        finished_at=finished_at,
+        finished_at=now,
         call_metadata={"proposal_id": str(action.id)},
     )
     db.add(tool_call)

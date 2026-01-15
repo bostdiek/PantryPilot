@@ -143,4 +143,4 @@ class ChatPendingAction(Base):
         "ChatConversation", back_populates="pending_actions"
     )
     user: Mapped[User] = relationship("User", back_populates="chat_pending_actions")
-    message: Mapped[ChatMessage | None] = relationship("ChatMessage")
+    message: Mapped[ChatMessage | None] = relationship("ChatMessage", viewonly=True)
