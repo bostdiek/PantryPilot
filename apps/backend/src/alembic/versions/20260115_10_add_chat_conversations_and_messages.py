@@ -159,6 +159,10 @@ def upgrade() -> None:
     op.create_index("ix_chat_messages_user_id", "chat_messages", ["user_id"])
     op.create_index("ix_chat_messages_created_at", "chat_messages", ["created_at"])
 
+    # NOTE: We add this foreign key after both tables exist to avoid a circular
+    # dependency during table creation:
+    # - chat_messages.conversation_id -> chat_conversations.id
+    # - chat_conversations.summary_message_id -> chat_messages.id
     op.create_foreign_key(
         "fk_chat_conversations_summary_message_id_chat_messages",
         "chat_conversations",

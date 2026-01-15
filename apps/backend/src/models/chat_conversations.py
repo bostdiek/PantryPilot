@@ -51,6 +51,10 @@ class ChatConversation(Base):
         nullable=True,
         comment="Message id the summary was derived from (best-effort)",
     )
+
+    # Intentionally not declared as an ORM-level ForeignKey() to `chat_messages.id`.
+    # The DB constraint is added in the Alembic migration after both tables exist
+    # to avoid circular DDL dependencies.
     summary_metadata: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,
