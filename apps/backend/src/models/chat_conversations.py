@@ -14,6 +14,8 @@ from .base import Base
 
 if TYPE_CHECKING:  # pragma: no cover
     from .chat_messages import ChatMessage
+    from .chat_pending_actions import ChatPendingAction
+    from .chat_tool_calls import ChatToolCall
     from .users import User
 
 
@@ -83,6 +85,17 @@ class ChatConversation(Base):
     user: Mapped[User] = relationship("User", back_populates="chat_conversations")
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+
+    pending_actions: Mapped[list[ChatPendingAction]] = relationship(
+        "ChatPendingAction",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+    tool_calls: Mapped[list[ChatToolCall]] = relationship(
+        "ChatToolCall",
         back_populates="conversation",
         cascade="all, delete-orphan",
     )

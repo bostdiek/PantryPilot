@@ -23,6 +23,7 @@ class ChatSseEvent(BaseModel):
         "message.delta",
         "message.complete",
         "blocks.append",
+        "tool.started",
         "tool.proposed",
         "tool.canceled",
         "tool.result",
