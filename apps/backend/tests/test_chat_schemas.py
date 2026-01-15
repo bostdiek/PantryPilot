@@ -95,3 +95,23 @@ def test_chat_sse_event_small_payload_ok() -> None:
     sse_output = event.to_sse()
     assert len(sse_output) > 0
     assert sse_output.startswith("data: ")
+
+
+def test_chat_sse_event_tool_started_serializes() -> None:
+    conversation_id = uuid4()
+    message_id = uuid4()
+
+    event = ChatSseEvent(
+        event="tool.started",
+        conversation_id=conversation_id,
+        message_id=message_id,
+        data={
+            "tool_call_id": "call_123",
+            "tool_name": "get_daily_weather",
+            "arguments": {"zip": "12345"},
+        },
+    )
+
+    sse_output = event.to_sse()
+    assert '"event":"tool.started"' in sse_output
+    assert '"tool_call_id":"call_123"' in sse_output
