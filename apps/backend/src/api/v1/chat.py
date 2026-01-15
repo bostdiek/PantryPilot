@@ -140,6 +140,10 @@ async def _handle_agent_stream_event(
         elif result_content is None:
             persisted_result = None
         else:
+            logger.warning(
+                "Tool result content had unexpected type %s; coercing to string",
+                type(result_content).__name__,
+            )
             persisted_result = {"content": str(result_content)}
 
         db.add(

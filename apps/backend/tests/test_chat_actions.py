@@ -95,7 +95,7 @@ async def test_accept_chat_action_happy_path_records_tool_call() -> None:
         # Endpoint should mutate the action state and persist an audit record.
         assert action.status == "failed"
         assert action.error is not None
-        assert db.commits >= 1
+        assert db.commits == 1
 
         tool_calls = [obj for obj in db.added if isinstance(obj, ChatToolCall)]
         assert len(tool_calls) == 1
@@ -168,7 +168,7 @@ async def test_cancel_chat_action_happy_path_sets_reason() -> None:
 
         assert action.status == "canceled"
         assert action.cancel_reason == "No longer needed"
-        assert db.commits >= 1
+        assert db.commits == 1
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
