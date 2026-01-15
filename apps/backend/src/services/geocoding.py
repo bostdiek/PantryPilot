@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
+from typing import Any, cast
 
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,18 @@ logger = logging.getLogger(__name__)
 # Rate limiting state for Nominatim API (1 req/sec per usage policy)
 _last_geocode_time: float = 0.0
 _geocode_lock = asyncio.Lock()
+
+
+@lru_cache
+def _get_timezone_finder() -> Any:
+    """Return a cached timezone finder instance.
+
+    Import is done lazily so this service still works in environments where the
+    optional dependency is not installed.
+    """
+    from timezonefinder import TimezoneFinder
+
+    return TimezoneFinder()
 
 
 @lru_cache
@@ -128,20 +141,24 @@ class GeocodingService:
         Returns:
             GeocodingResult or None if geocoding fails
         """
-        # Build search query
-        query_parts = []
+        # Build search query.
+        # NOTE: We intentionally do not geocode with only a country code because
+        # that can return overly broad/ambiguous results (and is not actionable
+        # as a user location).
+        query_parts: list[str] = []
         if city:
             query_parts.append(city)
         if state_or_region:
             query_parts.append(state_or_region)
         if postal_code:
             query_parts.append(postal_code)
-        if country:
-            query_parts.append(country)
 
         if not query_parts:
-            logger.warning("Cannot geocode: no location fields provided")
+            logger.warning("Cannot geocode: missing city/state_or_region/postal_code")
             return None
+
+        if country:
+            query_parts.append(country)
 
         query = ", ".join(query_parts)
 
@@ -165,17 +182,16 @@ class GeocodingService:
                 results = response.json()
 
                 if not results:
-                    logger.warning(f"No geocoding results for query: {query}")
+                    logger.warning("No geocoding results returned")
                     return None
 
                 result = results[0]
                 lat = float(result["lat"])
                 lon = float(result["lon"])
 
-                # Get timezone using lat/lon
-                # For MVP, use a simple timezone mapping based on country
-                # In production, consider using a proper timezone API
-                timezone = self._get_timezone_for_country(country or "US")
+                timezone = self._get_timezone_for_lat_lon(
+                    lat, lon
+                ) or self._get_timezone_for_country(country or "US")
 
                 return GeocodingResult(
                     latitude=lat,
@@ -191,27 +207,33 @@ class GeocodingService:
             logger.error(f"Geocoding parse error: {type(e).__name__}")
             return None
 
+    def _get_timezone_for_lat_lon(
+        self, latitude: float, longitude: float
+    ) -> str | None:
+        """Resolve an IANA timezone identifier from latitude/longitude."""
+        try:
+            finder = _get_timezone_finder()
+            tz = cast(str | None, finder.timezone_at(lat=latitude, lng=longitude))
+            if tz:
+                return tz
+            return cast(
+                str | None,
+                finder.closest_timezone_at(lat=latitude, lng=longitude),
+            )
+        except Exception:
+            return None
+
     def _get_timezone_for_country(self, country: str) -> str:
         """Get default timezone for a country code.
 
-        **MVP LIMITATION**: This uses a simplified country-level timezone mapping
-        which is inaccurate for countries spanning multiple timezones (e.g., US).
-
-        For accurate timezone resolution, a future enhancement should use a
-        timezone lookup library (e.g., timezonefinder) based on lat/lon coordinates.
-        This would provide correct timezones for all locations globally.
-
-        **Impact**: Weather data and meal planning features may show times in the
-        wrong timezone for users not in the default timezone for their country.
-        For US users, times will be in Eastern time regardless of actual location.
+        This is only used as a fallback when coordinate-based timezone lookup is
+        unavailable.
 
         Args:
             country: ISO 3166-1 alpha-2 country code
 
         Returns:
             IANA timezone identifier (default for country, or UTC if unknown)
-
-        TODO: Replace with proper timezone lookup using lat/lon (Issue #TBD)
         """
         # Basic mapping for common countries - defaults to most populous timezone
         timezone_map = {
@@ -237,14 +259,13 @@ class GeocodingService:
         Returns:
             True if geocoding succeeded and fields were updated, False otherwise
         """
-        # Only geocode if at least one location field is set
-        # (aligns with geocode_location validation on line ~80)
+        # Only geocode if at least one meaningful location field is set.
+        # (Country defaults to US and is not sufficient by itself.)
         if not any(
             [
                 preferences.city,
                 preferences.state_or_region,
                 preferences.postal_code,
-                preferences.country,
             ]
         ):
             logger.debug(
@@ -277,8 +298,8 @@ class GeocodingService:
         await self.db.refresh(preferences)
 
         logger.info(
-            f"Geocoded location for user {preferences.user_id}: "
-            f"({result.latitude}, {result.longitude}), tz={result.timezone}"
+            f"Successfully geocoded location for user {preferences.user_id}, "
+            f"timezone={result.timezone}"
         )
 
         return True

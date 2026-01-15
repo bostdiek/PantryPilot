@@ -26,6 +26,7 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "upstash-ratelimit>=1.1.0",
     "upstash-redis>=1.5.0",
+    "timezonefinder>=6.0.0",
 ]
 
 [dependency-groups]
@@ -94,5 +95,5 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
-module = ["upstash_ratelimit", "upstash_redis"]
+module = ["upstash_ratelimit", "upstash_redis", "timezonefinder"]
 ignore_missing_imports = true
