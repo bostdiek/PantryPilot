@@ -76,8 +76,7 @@ async def _rate_limit_geocoding() -> None:
         )
 
         # Use a fixed identifier for all geocoding requests
-        response = ratelimit.limit("nominatim")
-        result = await response if hasattr(response, "__await__") else response
+        result = ratelimit.limit("nominatim")
         if not result.allowed:
             # Wait for the reset time
             wait_time = (result.reset - datetime.now(UTC).timestamp()) / 1000
@@ -85,6 +84,9 @@ async def _rate_limit_geocoding() -> None:
                 await asyncio.sleep(wait_time)
     else:
         # Fall back to local rate limiting
+        # NOTE: This is process-local only. In multi-worker deployments (e.g.,
+        # multiple Gunicorn/Uvicorn workers), each process will have its own
+        # limiter state. Prefer Redis-based rate limiting in production.
         global _last_geocode_time
         async with _geocode_lock:
             now = asyncio.get_event_loop().time()

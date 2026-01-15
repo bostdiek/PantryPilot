@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.exceptions import GeocodingFailedError
 from crud.user import user_crud
 from crud.user_preferences import user_preferences_crud
 from dependencies.auth import get_current_user
@@ -91,9 +92,15 @@ async def update_current_user_preferences(
     preferences = await user_preferences_crud.get_or_create(db, current_user.id)
 
     # Update preferences
-    updated_preferences = await user_preferences_crud.update(
-        db, preferences, preferences_update
-    )
+    try:
+        updated_preferences = await user_preferences_crud.update(
+            db, preferences, preferences_update
+        )
+    except GeocodingFailedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
     return UserPreferencesResponse.model_validate(updated_preferences)
 
@@ -113,9 +120,15 @@ async def create_current_user_preferences(
     if existing_preferences:
         # Update existing preferences with new data
         update_data = UserPreferencesUpdate(**preferences_create.model_dump())
-        updated_preferences = await user_preferences_crud.update(
-            db, existing_preferences, update_data
-        )
+        try:
+            updated_preferences = await user_preferences_crud.update(
+                db, existing_preferences, update_data
+            )
+        except GeocodingFailedError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
         return UserPreferencesResponse.model_validate(updated_preferences)
     else:
         # Create new preferences
