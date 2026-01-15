@@ -5,6 +5,7 @@ from dependencies.auth import get_current_user
 from .ai import public_router as ai_public_router, router as ai_router
 from .auth import router as auth_router
 from .chat import router as chat_router
+from .chat_user_memory_doc import router as chat_user_memory_doc_router
 from .grocery_lists import router as grocery_lists_router
 from .health import router as health_router
 from .mealplans import meals_router, router as mealplans_router
@@ -29,6 +30,7 @@ api_router.include_router(ai_router, dependencies=protected_deps)
 # the global authentication dependency applied above.
 api_router.include_router(ai_public_router)
 api_router.include_router(chat_router, dependencies=protected_deps)
+api_router.include_router(chat_user_memory_doc_router, dependencies=protected_deps)
 api_router.include_router(recipes_router, dependencies=protected_deps)
 api_router.include_router(mealplans_router, dependencies=protected_deps)
 api_router.include_router(meals_router, dependencies=protected_deps)

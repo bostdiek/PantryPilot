@@ -17,6 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover - only for type checking
     from .ingredient_names import Ingredient
     from .meal_history import Meal
     from .recipes_names import Recipe
+    from .user_memory_documents import UserMemoryDocument
 
 from .base import Base
 
@@ -81,5 +82,12 @@ class User(Base):
     chat_tool_calls: Mapped[list[ChatToolCall]] = relationship(
         "ChatToolCall",
         back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    memory_document: Mapped[UserMemoryDocument | None] = relationship(
+        "UserMemoryDocument",
+        back_populates="user",
+        uselist=False,
         cascade="all, delete-orphan",
     )
