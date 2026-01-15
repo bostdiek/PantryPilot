@@ -27,6 +27,7 @@ class ChatSseEvent(BaseModel):
         "tool.canceled",
         "tool.result",
         "memory.updated",
+        "summary.updated",
         "error",
         "done",
     ]
