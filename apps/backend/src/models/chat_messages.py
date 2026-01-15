@@ -49,7 +49,8 @@ class ChatMessage(Base):
         server_default=sa.text("'[]'::jsonb"),
         comment="Canonical multimodal content blocks",
     )
-    metadata: Mapped[dict[str, Any]] = mapped_column(
+    message_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata",
         JSONB,
         nullable=False,
         default=dict,
