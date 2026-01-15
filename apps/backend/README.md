@@ -129,4 +129,16 @@ Registered in `main.py` (order matters):
 * Never log raw request bodies containing secrets; rely on structured logger sanitization.
 
 ---
+
+## Agent Playground (Dev Only)
+
+Use the PydanticAI Web UI to iterate on the chat assistant locally:
+
+1. `cd apps/backend`
+2. Ensure required model env vars are set (e.g. `GEMINI_API_KEY`).
+3. `PYTHONPATH=./src uv run --env-file ../../.env.dev python -m dev.pydanticai_ui`
+
+The UI starts on http://127.0.0.1:8021 and uses the shared chat agent tools.
+
+---
 For questions or improvements, open an issue or submit a PR with a proposed change plus tests.

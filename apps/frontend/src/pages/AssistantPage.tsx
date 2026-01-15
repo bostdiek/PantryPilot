@@ -103,7 +103,7 @@ export default function AssistantPage() {
     if (lastMessage.role === 'assistant') {
       setAnnouncement(`Nibble: ${lastMessage.content}`);
     }
-  }, [hasHydrated, lastMessage?.id, lastMessage?.role, lastMessage?.content]);
+  }, [hasHydrated, lastMessage]);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -125,7 +125,7 @@ export default function AssistantPage() {
         container.scrollTop = container.scrollHeight;
       }
     }
-  }, [hasHydrated, lastMessage?.id, lastMessage?.role]);
+  }, [hasHydrated, lastMessage]);
 
   return (
     <Container as="main" size="xl" className="py-4 md:py-6">
