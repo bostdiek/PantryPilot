@@ -20,13 +20,14 @@ from core.ratelimit import check_rate_limit
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from models.chat_conversations import ChatConversation
+from models.chat_messages import ChatMessage
 from models.chat_pending_actions import ChatPendingAction
 from models.chat_tool_calls import ChatToolCall
 from models.users import User
 from schemas.chat_content import TextBlock
 from schemas.chat_streaming import ChatSseEvent, ChatStreamRequest
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
-from services.chat_agent import get_chat_agent, normalize_agent_output
+from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -76,6 +77,33 @@ async def _get_or_create_conversation(
     db.add(conversation)
     await db.commit()
     return conversation
+
+
+async def _create_assistant_message(
+    db: AsyncSession,
+    *,
+    message_id: UUID,
+    conversation_id: UUID,
+    user_id: UUID,
+) -> ChatMessage:
+    """Create a placeholder assistant message before streaming starts.
+
+    This ensures the chat_messages record exists before any tool calls
+    are persisted, satisfying the foreign key constraint on chat_tool_calls.
+    The content_blocks will be updated with the final response when streaming
+    completes.
+    """
+    message = ChatMessage(
+        id=message_id,
+        conversation_id=conversation_id,
+        user_id=user_id,
+        role="assistant",
+        content_blocks=[],  # Will be populated when streaming completes
+        metadata={"streaming": True},
+    )
+    db.add(message)
+    await db.commit()
+    return message
 
 
 def _extract_tool_name(part: object) -> str:
@@ -331,6 +359,27 @@ async def stream_chat_message(
         user_id=current_user.id,
     )
 
+    # Save the user's message to the conversation
+    user_message = ChatMessage(
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+        role="user",
+        content_blocks=[{"type": "text", "text": payload.content}],
+        metadata={},
+    )
+    db.add(user_message)
+    await db.commit()
+
+    # Create assistant message placeholder before streaming. This ensures the
+    # chat_messages record exists before any tool calls are persisted, which
+    # satisfies the foreign key constraint on chat_tool_calls.
+    await _create_assistant_message(
+        db,
+        message_id=message_id,
+        conversation_id=conversation_id,
+        user_id=current_user.id,
+    )
+
     async def event_stream() -> AsyncGenerator[str, None]:
         yield ChatSseEvent(
             event="status",
@@ -342,7 +391,10 @@ async def stream_chat_message(
             tool_calls_by_id: dict[str, _ToolCallStart] = {}
             raw_output: object | None = None
 
-            async for agent_event in agent.run_stream_events(payload.content):
+            deps = ChatAgentDeps(db=db, user=current_user)
+            async for agent_event in agent.run_stream_events(
+                payload.content, deps=deps
+            ):
                 sse_line, result = await _handle_agent_stream_event(
                     agent_event,
                     conversation_id=conversation_id,
@@ -372,6 +424,18 @@ async def stream_chat_message(
                         message_id=message_id,
                         data={"block": block.model_dump()},
                     ).to_sse()
+
+            # Update the assistant message with the final response content
+            result = await db.execute(
+                select(ChatMessage).where(ChatMessage.id == message_id)
+            )
+            assistant_message = result.scalar_one()
+            assistant_message.content_blocks = [
+                block.model_dump() for block in message.blocks
+            ]
+            assistant_message.metadata = {"streaming": False}
+            await db.commit()
+
             yield ChatSseEvent(
                 event="message.complete",
                 conversation_id=conversation_id,

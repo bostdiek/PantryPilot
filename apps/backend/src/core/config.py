@@ -9,7 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(".env"), env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=(".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",  # Allow extra env vars not defined in Settings
+    )
 
     # App
     APP_NAME: str = "PantryPilot"
@@ -31,6 +35,9 @@ class Settings(BaseSettings):
     # AI / LLM provider configuration
     # GEMINI_API_KEY is optional; prefer storing secrets in .env.dev/.env.prod
     GEMINI_API_KEY: str | None = None
+
+    # External tool providers
+    BRAVE_SEARCH_API_KEY: str | None = None
 
     # Azure Communication Services for email
     AZURE_COMMUNICATION_CONNECTION_STRING: str | None = None
