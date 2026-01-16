@@ -453,8 +453,10 @@ async def stream_chat_message(
                     orphaned_message.metadata = {"streaming": False, "error": True}
                     await db.commit()
             except Exception:
-                # Don't mask the original exception with cleanup errors
-                pass
+                # Don't mask the original exception with cleanup errors, but do log them
+                logger.exception(
+                    "Failed to mark message as failed during error cleanup"
+                )
             yield ChatSseEvent(
                 event="error",
                 conversation_id=conversation_id,

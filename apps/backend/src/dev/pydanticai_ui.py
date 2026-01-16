@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from dataclasses import dataclass
 from typing import Any
 from uuid import UUID
 
@@ -16,7 +17,6 @@ from core.security import get_password_hash
 from crud.user import UserCRUD
 from crud.user_preferences import UserPreferencesCRUD
 from models.base import Base
-from models.users import User
 from schemas.chat_content import AssistantMessage
 from schemas.user_preferences import UserPreferencesUpdate
 from services.chat_agent import CHAT_SYSTEM_PROMPT
@@ -25,6 +25,15 @@ from services.web_search import search_web
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DetachedDevUser:
+    """Minimal user info that survives outside SQLAlchemy session scope."""
+
+    id: UUID
+    username: str
+
 
 # NOTE: Module-level mutable state for dev UI only.
 # These globals are intentionally reset in main() before starting uvicorn to ensure
@@ -53,15 +62,15 @@ def _get_local_database_url() -> str:
     return f"postgresql+asyncpg://{user}:{password}@localhost:{port}/{db}"
 
 
-async def ensure_dev_user() -> User:
+async def ensure_dev_user() -> DetachedDevUser:
     """Ensure a 'dev' user exists with location for testing weather tool.
 
     Creates the dev user and preferences within a properly managed session,
-    then returns just the User object. The session and engine are cleaned
-    up before returning to avoid resource leaks.
+    then returns a DetachedDevUser with essential attributes. The session and
+    engine are cleaned up before returning to avoid resource leaks.
 
     Returns:
-        The dev User object.
+        A DetachedDevUser with id and username attributes.
     """
     database_url = _get_local_database_url()
     logger.info("Connecting to database at localhost...")
@@ -140,14 +149,7 @@ async def ensure_dev_user() -> User:
             user_id = dev_user.id
             username = dev_user.username
 
-        # Create a minimal User-like object with the needed attributes
-        # that can survive outside the session scope
-        class DetachedDevUser:
-            def __init__(self, uid: UUID, uname: str) -> None:
-                self.id = uid
-                self.username = uname
-
-        return DetachedDevUser(user_id, username)  # type: ignore[return-value]
+        return DetachedDevUser(id=user_id, username=username)
     finally:
         await engine.dispose()
 
@@ -159,7 +161,6 @@ def _create_dev_agent(user_id: UUID) -> Agent[None, AssistantMessage]:
     so we use tool_plain decorators and create the DB session lazily
     within the same event loop that uvicorn uses.
     """
-    global _engine, _session_factory
 
     def _get_session_factory() -> async_sessionmaker[AsyncSession]:
         """Lazily create engine and session factory in the current event loop."""
