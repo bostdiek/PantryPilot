@@ -137,7 +137,7 @@ async def _fetch_open_meteo(
     location_label: str | None,
 ) -> dict[str, Any]:
     try:
-        params = {
+        params: dict[str, str | int | float] = {
             "latitude": latitude,
             "longitude": longitude,
             "daily": (
@@ -268,7 +268,7 @@ def _aggregate_weather_gov_periods(
     return results[:WEATHER_MAX_DAYS]
 
 
-def _safe_float(values: list[object], idx: int) -> float | None:
+def _safe_float(values: list[Any], idx: int) -> float | None:
     try:
         value = values[idx]
     except IndexError:
@@ -281,7 +281,7 @@ def _safe_float(values: list[object], idx: int) -> float | None:
         return None
 
 
-def _safe_int(values: list[object], idx: int) -> int | None:
+def _safe_int(values: list[Any], idx: int) -> int | None:
     try:
         value = values[idx]
     except IndexError:

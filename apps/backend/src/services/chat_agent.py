@@ -67,7 +67,7 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     because it is evaluated as a structured task-specific extractor rather
     than a general chat assistant.
     """
-    agent = Agent(
+    agent: Agent[ChatAgentDeps, AssistantMessage] = Agent(
         "gemini-2.5-flash",
         instructions=CHAT_SYSTEM_PROMPT,
         output_type=AssistantMessage,
@@ -109,7 +109,7 @@ def _create_chat_agent_for_user() -> Agent[ChatAgentDeps, AssistantMessage]:
     This is the underlying agent factory used by both get_chat_agent_with_deps()
     (for dev UX with specific user context) and the cached get_chat_agent() entry point.
     """
-    agent = Agent(
+    agent: Agent[ChatAgentDeps, AssistantMessage] = Agent(
         "gemini-2.5-flash",
         instructions=CHAT_SYSTEM_PROMPT,
         output_type=AssistantMessage,
