@@ -22,6 +22,7 @@ from services.weather import (
     _safe_int,
     _to_float,
     _weather_cache,
+    clear_weather_cache,
     get_daily_forecast_for_user,
 )
 
@@ -259,7 +260,7 @@ class TestGetDailyForecastForUser:
     @pytest.fixture(autouse=True)
     def clear_cache(self) -> None:
         """Clear the weather cache before each test."""
-        _weather_cache.clear()
+        clear_weather_cache()
 
     @pytest.mark.asyncio
     async def test_missing_preferences(self) -> None:

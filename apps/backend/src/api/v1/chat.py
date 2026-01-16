@@ -426,10 +426,10 @@ async def stream_chat_message(
                     ).to_sse()
 
             # Update the assistant message with the final response content
-            result = await db.execute(
+            db_result = await db.execute(
                 select(ChatMessage).where(ChatMessage.id == message_id)
             )
-            assistant_message = result.scalar_one()
+            assistant_message = db_result.scalar_one()
             assistant_message.content_blocks = [
                 block.model_dump() for block in message.blocks
             ]
@@ -443,6 +443,18 @@ async def stream_chat_message(
                 data={},
             ).to_sse()
         except Exception as exc:
+            # Mark orphaned placeholder message as failed to prevent dangling records
+            try:
+                db_result = await db.execute(
+                    select(ChatMessage).where(ChatMessage.id == message_id)
+                )
+                orphaned_message = db_result.scalar_one_or_none()
+                if orphaned_message and orphaned_message.metadata.get("streaming"):
+                    orphaned_message.metadata = {"streaming": False, "error": True}
+                    await db.commit()
+            except Exception:
+                # Don't mask the original exception with cleanup errors
+                pass
             yield ChatSseEvent(
                 event="error",
                 conversation_id=conversation_id,

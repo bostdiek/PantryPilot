@@ -82,9 +82,8 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         return await get_daily_forecast_for_user(ctx.deps.db, user_id=ctx.deps.user.id)
 
     @agent.tool
-    async def web_search(ctx: RunContext[ChatAgentDeps], query: str) -> dict[str, Any]:
+    async def web_search(_ctx: RunContext[ChatAgentDeps], query: str) -> dict[str, Any]:
         """Read-only web search tool (capped)."""
-        _ = ctx
         outcome = await search_web(query)
         return {
             "status": outcome.status,
@@ -99,87 +98,6 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
             ],
             "message": outcome.message,
         }
-
-    return agent
-
-
-def _create_chat_agent_for_user() -> Agent[ChatAgentDeps, AssistantMessage]:
-    """Create a chat assistant agent with tool support (internal factory).
-
-    This is the underlying agent factory used by both get_chat_agent_with_deps()
-    (for dev UX with specific user context) and the cached get_chat_agent() entry point.
-    """
-    agent: Agent[ChatAgentDeps, AssistantMessage] = Agent(
-        "gemini-2.5-flash",
-        instructions=CHAT_SYSTEM_PROMPT,
-        output_type=AssistantMessage,
-        name="Nibble",
-    )
-
-    @agent.tool
-    async def get_daily_weather(
-        ctx: RunContext[ChatAgentDeps],
-    ) -> dict[str, Any]:
-        """Read-only weather lookup based on user profile."""
-        return await get_daily_forecast_for_user(ctx.deps.db, user_id=ctx.deps.user.id)
-
-    @agent.tool
-    async def web_search(ctx: RunContext[ChatAgentDeps], query: str) -> dict[str, Any]:
-        """Read-only web search tool (capped)."""
-        _ = ctx
-        outcome = await search_web(query)
-        return {
-            "status": outcome.status,
-            "provider": outcome.provider,
-            "results": [
-                {
-                    "title": result.title,
-                    "url": result.url,
-                    "description": result.description,
-                }
-                for result in outcome.results
-            ],
-            "message": outcome.message,
-        }
-
-    return agent
-
-
-def get_chat_agent_with_deps(
-    user: User, db: AsyncSession | None = None
-) -> Agent[ChatAgentDeps, AssistantMessage]:
-    """Create a chat agent pre-configured with a specific user (for dev/playground use).
-
-    This creates a new agent (not cached) with tools pre-bound to a specific
-    user context. Useful for dev playgrounds and testing scenarios where you
-    need user-specific behavior.
-
-    Args:
-        user: The User to bind into the agent's context.
-        db: Optional AsyncSession to use for tool operations.
-             If None, tools may fail (unless you override deps before calling agent).
-
-    Returns:
-        An Agent[ChatAgentDeps, AssistantMessage] that is pre-configured for the user.
-
-    Note:
-        For dev playgrounds that call agent.to_web(), the web UI will handle session
-        management. The db parameter is primarily for custom usage outside of to_web().
-    """
-    agent = _create_chat_agent_for_user()
-
-    # If db is provided, we need to ensure deps are passed when running
-    # the agent. However, agent.to_web() doesn't easily expose a deps
-    # override mechanism. For now, return the agent and rely on the caller
-    # to pass deps via run_stream_events(). This is a limitation of the
-    # current pydanticai web UI - it doesn't support custom deps factory.
-
-    # Workaround: Store db and user on the agent object so the web UI
-    # can access them. Note: This is a bit of a hack, but pydanticai's
-    # to_web() doesn't provide better options yet
-    if db is not None:
-        agent._dev_db = db  # type: ignore
-        agent._dev_user = user  # type: ignore
 
     return agent
 

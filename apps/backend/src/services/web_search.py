@@ -70,9 +70,17 @@ async def search_web(
         results = _parse_brave_results(payload, max_results)
         return WebSearchOutcome(status="ok", provider="brave", results=results)
     except httpx.HTTPError as exc:
-        logger.warning("Brave search request failed: %s", type(exc).__name__)
+        logger.warning(
+            "Brave search request failed: %s - %s",
+            type(exc).__name__,
+            str(exc),
+        )
     except (KeyError, TypeError, ValueError) as exc:
-        logger.warning("Brave search parse failed: %s", type(exc).__name__)
+        logger.warning(
+            "Brave search parse failed: %s - %s",
+            type(exc).__name__,
+            str(exc),
+        )
 
     return WebSearchOutcome(
         status="error",

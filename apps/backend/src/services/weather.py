@@ -30,7 +30,28 @@ class WeatherCacheEntry:
     payload: dict[str, Any]
 
 
+# NOTE: This is an in-memory, per-process cache.
+# In multi-worker deployments (e.g., gunicorn/uvicorn with multiple workers),
+# each worker maintains its own copy of this cache. That means:
+#   * cache entries are not shared across workers, and
+#   * external weather APIs may still be called redundantly across processes.
+#
+# For production deployments that require cross-worker caching, consider
+# replacing this with a shared cache backend such as Redis. Tests should
+# use `clear_weather_cache()` instead of mutating `_weather_cache` directly.
 _weather_cache: dict[str, WeatherCacheEntry] = {}
+
+
+def clear_weather_cache() -> None:
+    """Clear the in-memory weather cache.
+
+    This helper is primarily intended for tests so that cache state does
+    not leak between test cases. It is safe to call at any time.
+
+    The cache remains per-process and is not shared across workers. For
+    cross-worker caching, use a shared backend (e.g., Redis).
+    """
+    _weather_cache.clear()
 
 
 def _cache_key(

@@ -152,10 +152,13 @@ The UI automatically creates or uses a `dev` user with the following context:
 To test the chat tools via the REST API instead:
 
 ```bash
-# 1. Login as dev user (credentials in .env.dev or seed script)
+# 1. Login as dev user
+#    By default in local dev, the `dev` user is created with password `dev_password_123`
+#    (see dev/pydanticai_ui.py). If you override this in .env.dev or a seed script,
+#    update the password value below accordingly.
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=dev&password=YOUR_DEV_PASSWORD"
+  -d "username=dev&password=dev_password_123"
 
 # 2. Use the returned token to call the chat streaming endpoint
 curl -X POST "http://localhost:8000/api/v1/chat/conversations/{uuid}/messages/stream" \

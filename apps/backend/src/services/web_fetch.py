@@ -20,5 +20,5 @@ async def fetch_url_content(url: str) -> WebFetchResult:
     try:
         content = await extractor.fetch_and_sanitize(url)
         return WebFetchResult(url=url, content=content)
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:
         return WebFetchResult(url=url, content=None, error=str(exc))
