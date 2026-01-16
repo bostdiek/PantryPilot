@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import logging
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from pydantic_ai import Agent, RunContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.users import User
 from schemas.chat_content import AssistantMessage, TextBlock
+from services.weather import get_daily_forecast_for_user
+from services.web_search import search_web
 
-
-logger = logging.getLogger(__name__)
 
 CHAT_SYSTEM_PROMPT = """
 You are Nibble, a friendly pantry and meal planning assistant for families.
@@ -48,8 +50,14 @@ Tool rules:
 """
 
 
+@dataclass(frozen=True)
+class ChatAgentDeps:
+    db: AsyncSession
+    user: User
+
+
 @lru_cache
-def get_chat_agent() -> Agent[None, AssistantMessage]:
+def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     """Create and cache the chat assistant agent.
 
     Returns an agent configured with structured output type AssistantMessage.
@@ -59,7 +67,7 @@ def get_chat_agent() -> Agent[None, AssistantMessage]:
     because it is evaluated as a structured task-specific extractor rather
     than a general chat assistant.
     """
-    agent = Agent(
+    agent: Agent[ChatAgentDeps, AssistantMessage] = Agent(
         "gemini-2.5-flash",
         instructions=CHAT_SYSTEM_PROMPT,
         output_type=AssistantMessage,
@@ -68,25 +76,27 @@ def get_chat_agent() -> Agent[None, AssistantMessage]:
 
     @agent.tool
     async def get_daily_weather(
-        ctx: RunContext[None],
-        location: str,
+        ctx: RunContext[ChatAgentDeps],
     ) -> dict[str, Any]:
-        """Read-only weather lookup stub."""
-        _ = ctx
-        logger.debug("Weather tool called for location=%s", location)
-        return {
-            "location": location,
-            "forecast": "Weather lookup is not configured yet.",
-        }
+        """Read-only weather lookup based on user profile."""
+        return await get_daily_forecast_for_user(ctx.deps.db, user_id=ctx.deps.user.id)
 
     @agent.tool
-    async def web_search(ctx: RunContext[None], query: str) -> dict[str, Any]:
-        """Read-only web search stub."""
-        _ = ctx
-        logger.debug("Web search tool called for query=%s", query)
+    async def web_search(_ctx: RunContext[ChatAgentDeps], query: str) -> dict[str, Any]:
+        """Read-only web search tool (capped)."""
+        outcome = await search_web(query)
         return {
-            "query": query,
-            "results": [],
+            "status": outcome.status,
+            "provider": outcome.provider,
+            "results": [
+                {
+                    "title": result.title,
+                    "url": result.url,
+                    "description": result.description,
+                }
+                for result in outcome.results
+            ],
+            "message": outcome.message,
         }
 
     return agent

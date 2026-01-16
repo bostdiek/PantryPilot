@@ -140,5 +140,36 @@ Use the PydanticAI Web UI to iterate on the chat assistant locally:
 
 The UI starts on http://127.0.0.1:8021 and uses the shared chat agent tools.
 
+### Dev User Context
+
+The UI automatically creates or uses a `dev` user with the following context:
+
+- **Location**: Boston, MA (42.3601, -71.0589) for weather tool testing
+- **Timezone**: America/New_York
+
+### Testing Tools via API
+
+To test the chat tools via the REST API instead:
+
+```bash
+# 1. Login as dev user
+#    By default in local dev, the `dev` user is created with password `dev_password_123`
+#    (see dev/pydanticai_ui.py). If you override this in .env.dev or a seed script,
+#    update the password value below accordingly.
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=dev&password=dev_password_123"
+
+# 2. Use the returned token to call the chat streaming endpoint
+curl -X POST "http://localhost:8000/api/v1/chat/conversations/{uuid}/messages/stream" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "What is the weather like today?"}'
+```
+
+The chat agent has access to these internal tools:
+- `get_daily_weather`: Returns 7-day forecast based on user's location preferences
+- `web_search`: Searches the web using Brave Search API for recipes and information
+
 ---
 For questions or improvements, open an issue or submit a PR with a proposed change plus tests.
