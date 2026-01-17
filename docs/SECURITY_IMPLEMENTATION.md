@@ -6,6 +6,45 @@ This document summarizes the security enhancements implemented for PantryPilot i
 
 Implemented baseline web security headers and proper CORS configuration for small private deployments with room to grow.
 
+## Observability and PII Safety ✅
+
+### Safe Logging Guidance for Chat Assistant
+
+The chat assistant (Nibble) integrates with Azure Monitor via OpenTelemetry for production observability. Follow these guidelines to prevent PII leakage:
+
+**NEVER log or trace:**
+- Raw user messages or recipe content
+- Email addresses, names, or personal profile information
+- API keys, tokens, or credentials
+- Tool call arguments containing user-provided content
+- Location data beyond city-level granularity
+
+**SAFE to log/trace:**
+- Correlation IDs and request IDs
+- Message lengths (not content)
+- Tool names and execution duration
+- Error types (not full error messages with user data)
+- Aggregated metrics (counts, latencies)
+
+### Logfire vs Azure Monitor
+
+- **Development**: Logfire can be used for local trace visualization
+- **Production**: Azure Monitor Application Insights is the primary backend
+- **Important**: Logfire scrubbing only applies to structured fields, NOT span/log messages themselves
+
+### Configuration
+
+```bash
+# Enable observability in production
+ENABLE_OBSERVABILITY=true
+APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...
+
+# Disable in local development (default)
+ENABLE_OBSERVABILITY=false
+```
+
+See `apps/backend/src/core/observability.py` for implementation details.
+
 ## CORS Configuration ✅
 
 ### Backend Implementation (FastAPI)
