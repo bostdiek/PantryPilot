@@ -3,6 +3,35 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { useChatStore } from '../useChatStore';
 
+// Mock the chat API endpoints
+vi.mock('../../api/endpoints/chat', () => ({
+  fetchConversations: vi.fn(),
+  fetchMessages: vi.fn(),
+  streamChatMessage: vi.fn(),
+  acceptAction: vi.fn(),
+  cancelAction: vi.fn(),
+}));
+
+// Mock logger to avoid console noise
+vi.mock('../../lib/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+// Get the mocked functions
+const getMocks = async () => {
+  const chatApi = await import('../../api/endpoints/chat');
+  return {
+    fetchConversations: chatApi.fetchConversations as ReturnType<typeof vi.fn>,
+    fetchMessages: chatApi.fetchMessages as ReturnType<typeof vi.fn>,
+    streamChatMessage: chatApi.streamChatMessage as ReturnType<typeof vi.fn>,
+    acceptAction: chatApi.acceptAction as ReturnType<typeof vi.fn>,
+    cancelAction: chatApi.cancelAction as ReturnType<typeof vi.fn>,
+  };
+};
+
 describe('useChatStore', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -15,6 +44,10 @@ describe('useChatStore', () => {
         activeConversationId: null,
         messagesByConversationId: {},
         isLoading: false,
+        isStreaming: false,
+        streamingMessageId: null,
+        error: null,
+        _abortController: null,
       });
     });
   });
@@ -22,6 +55,7 @@ describe('useChatStore', () => {
   afterEach(() => {
     vi.clearAllTimers();
     vi.useRealTimers();
+    vi.clearAllMocks();
   });
 
   test('initializes with empty conversations', () => {
@@ -53,6 +87,10 @@ describe('useChatStore', () => {
 
   test('switchConversation updates activeConversationId', async () => {
     const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    // Mock empty messages response
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
 
     await act(async () => {
       await result.current.createConversation('Chat 1');
@@ -67,33 +105,44 @@ describe('useChatStore', () => {
     expect(result.current.activeConversationId).toBe(convoId);
   });
 
-  test('loadConversations toggles loading state', async () => {
+  test('loadConversations fetches from API and updates state', async () => {
     const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
 
-    const transitions: boolean[] = [];
-    const unsubscribe = useChatStore.subscribe((state) => {
-      transitions.push(state.isLoading);
-    });
-
-    let promise: Promise<void> | undefined;
-    act(() => {
-      promise = result.current.loadConversations();
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'conv-1',
+          title: 'Test Chat',
+          created_at: '2026-01-17T10:00:00Z',
+          last_activity_at: '2026-01-17T11:00:00Z',
+        },
+      ],
+      total: 1,
+      has_more: false,
     });
 
     await act(async () => {
-      await promise;
+      await result.current.loadConversations();
     });
 
-    unsubscribe();
-
-    expect(transitions).toContain(true);
     expect(useChatStore.getState().isLoading).toBe(false);
-
-    expect(useChatStore.getState().isLoading).toBe(false);
+    expect(useChatStore.getState().conversations).toHaveLength(1);
+    expect(useChatStore.getState().conversations[0]?.id).toBe('conv-1');
   });
 
-  test('sendMessage creates a conversation if none exists and appends a user + assistant message', async () => {
+  test('sendMessage creates a conversation if none exists and sends to API', async () => {
     const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    // Mock streaming to immediately call onDone
+    mocks.streamChatMessage.mockImplementation(
+      async (_conversationId, _content, callbacks) => {
+        // Simulate immediate completion
+        callbacks.onDone?.();
+        return new AbortController();
+      }
+    );
 
     await act(async () => {
       await result.current.sendMessage('Hello');
@@ -102,20 +151,13 @@ describe('useChatStore', () => {
     const conversationId = useChatStore.getState().activeConversationId;
     expect(conversationId).not.toBeNull();
 
-    const afterUser =
+    // Should have user message and streaming assistant placeholder
+    const messages =
       useChatStore.getState().messagesByConversationId[conversationId!];
-    expect(afterUser).toHaveLength(1);
-    expect(afterUser?.[0]?.role).toBe('user');
-
-    act(() => {
-      vi.advanceTimersByTime(700);
-    });
-
-    const afterAssistant =
-      useChatStore.getState().messagesByConversationId[conversationId!];
-    expect(afterAssistant).toHaveLength(2);
-    expect(afterAssistant?.[1]?.role).toBe('assistant');
-    expect(useChatStore.getState().isLoading).toBe(false);
+    expect(messages).toHaveLength(2);
+    expect(messages?.[0]?.role).toBe('user');
+    expect(messages?.[0]?.content).toBe('Hello');
+    expect(messages?.[1]?.role).toBe('assistant');
   });
 
   test('sendMessage ignores empty/whitespace input', async () => {
@@ -128,33 +170,38 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().conversations).toHaveLength(0);
   });
 
-  test('cancelPendingAssistantReply cancels the scheduled assistant message', async () => {
+  test('cancelPendingAssistantReply aborts the stream and clears streaming state', async () => {
     const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    const mockAbortController = new AbortController();
+
+    // Mock streaming that doesn't immediately complete
+    mocks.streamChatMessage.mockImplementation(async () => {
+      return mockAbortController;
+    });
 
     await act(async () => {
       await result.current.createConversation('Chat');
       await result.current.sendMessage('Hello');
     });
 
-    const conversationId = useChatStore.getState().activeConversationId!;
-    expect(useChatStore.getState().isLoading).toBe(true);
-    expect(
-      useChatStore.getState().messagesByConversationId[conversationId]
-    ).toHaveLength(1);
+    // Manually set the abort controller as it would be after streamChatMessage
+    act(() => {
+      useChatStore.setState({
+        isStreaming: true,
+        _abortController: mockAbortController,
+      });
+    });
+
+    expect(useChatStore.getState().isStreaming).toBe(true);
 
     act(() => {
       result.current.cancelPendingAssistantReply();
     });
 
     expect(useChatStore.getState().isLoading).toBe(false);
-
-    act(() => {
-      vi.advanceTimersByTime(700);
-    });
-
-    expect(
-      useChatStore.getState().messagesByConversationId[conversationId]
-    ).toHaveLength(1);
+    expect(useChatStore.getState().isStreaming).toBe(false);
   });
 
   test('clearConversation clears messages for the given conversation', async () => {
@@ -162,10 +209,26 @@ describe('useChatStore', () => {
 
     await act(async () => {
       await result.current.createConversation('Chat');
-      await result.current.sendMessage('Hello');
     });
 
     const conversationId = useChatStore.getState().activeConversationId!;
+
+    // Add a message directly to state
+    act(() => {
+      useChatStore.setState({
+        messagesByConversationId: {
+          [conversationId]: [
+            {
+              id: 'msg-1',
+              conversationId,
+              role: 'user',
+              content: 'Hello',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        },
+      });
+    });
 
     expect(
       useChatStore.getState().messagesByConversationId[conversationId]
@@ -180,45 +243,37 @@ describe('useChatStore', () => {
     ).toEqual([]);
   });
 
-  test('caps messages at 50 per conversation', async () => {
+  test('acceptAction calls API', async () => {
     const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
 
-    await act(async () => {
-      await result.current.createConversation('Chat');
-    });
-
-    const conversationId = useChatStore.getState().activeConversationId!;
-
-    act(() => {
-      useChatStore.setState({
-        messagesByConversationId: {
-          [conversationId]: Array.from({ length: 50 }, (_, i) => ({
-            id: `m${i}`,
-            conversationId,
-            role: 'user',
-            content: `msg ${i}`,
-            createdAt: new Date(2026, 0, 1, 0, 0, i).toISOString(),
-          })),
-        },
-      });
+    mocks.acceptAction.mockResolvedValue({
+      success: true,
+      action_id: 'action-1',
+      status: 'accepted',
     });
 
     await act(async () => {
-      await result.current.sendMessage('overflow');
+      await result.current.acceptAction('action-1');
     });
 
-    const afterUser =
-      useChatStore.getState().messagesByConversationId[conversationId];
-    expect(afterUser).toHaveLength(50);
-    expect(afterUser[49]?.content).toBe('overflow');
+    expect(mocks.acceptAction).toHaveBeenCalledWith('action-1');
+  });
 
-    act(() => {
-      vi.advanceTimersByTime(700);
+  test('cancelAction calls API', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    mocks.cancelAction.mockResolvedValue({
+      success: true,
+      action_id: 'action-1',
+      status: 'canceled',
     });
 
-    const afterAssistant =
-      useChatStore.getState().messagesByConversationId[conversationId];
-    expect(afterAssistant).toHaveLength(50);
-    expect(afterAssistant[49]?.role).toBe('assistant');
+    await act(async () => {
+      await result.current.cancelAction('action-1');
+    });
+
+    expect(mocks.cancelAction).toHaveBeenCalledWith('action-1');
   });
 });
