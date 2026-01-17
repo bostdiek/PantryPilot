@@ -148,7 +148,7 @@ def configure_observability() -> bool:
         return False
 
 
-def get_tracer(name: str) -> _NoOpTracer:
+def get_tracer(name: str) -> object | _NoOpTracer:
     """Get an OpenTelemetry tracer for custom instrumentation.
 
     Use this to create custom spans for operations that aren't automatically
@@ -158,8 +158,10 @@ def get_tracer(name: str) -> _NoOpTracer:
         name: The name of the tracer, typically __name__ of the calling module.
 
     Returns:
-        An OpenTelemetry Tracer instance. If observability is not configured,
-        returns a no-op tracer that doesn't emit spans.
+        An OpenTelemetry Tracer instance when OpenTelemetry is available and
+        properly configured. Returns a no-op tracer (_NoOpTracer) when
+        OpenTelemetry is not installed or observability is disabled. The no-op
+        tracer provides the same interface but doesn't emit any spans.
 
     Example:
         from core.observability import get_tracer
@@ -178,7 +180,7 @@ def get_tracer(name: str) -> _NoOpTracer:
     try:
         from opentelemetry import trace
 
-        return trace.get_tracer(name)  # type: ignore[return-value]
+        return trace.get_tracer(name)
     except ImportError:
         # Return a no-op tracer if OpenTelemetry is not installed
         logger.debug("OpenTelemetry not available; returning no-op tracer")
