@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_REQUESTS: int = 10
     RATE_LIMIT_WINDOW_SECONDS: int = 60
 
+    # Observability / Telemetry
+    # Enable Azure Monitor / Application Insights integration via OpenTelemetry.
+    # Set ENABLE_OBSERVABILITY=true and provide APPLICATIONINSIGHTS_CONNECTION_STRING.
+    # For local development, Logfire can be used as optional dev tooling.
+    ENABLE_OBSERVABILITY: bool = False
+    APPLICATIONINSIGHTS_CONNECTION_STRING: str | None = None
+    OTEL_SERVICE_NAME: str = "pantrypilot-backend"
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: object) -> list[str]:
