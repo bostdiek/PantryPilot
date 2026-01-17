@@ -68,6 +68,10 @@ async def list_conversations(
     offset: int = 0,
 ) -> ConversationListResponse:
     """List all conversations for the current user with pagination."""
+    # Validate and clamp pagination parameters
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+
     # Count total conversations for the user
     count_query = select(func.count(ChatConversation.id)).where(
         ChatConversation.user_id == current_user.id
@@ -117,6 +121,9 @@ async def get_message_history(
     before_id: UUID | None = None,
 ) -> MessageHistoryResponse:
     """Fetch message history for a conversation with optional cursor pagination."""
+    # Validate and clamp limit parameter
+    limit = max(1, min(limit, 100))
+
     # Verify conversation exists and belongs to user
     conv_query = select(ChatConversation).where(
         ChatConversation.id == conversation_id,
@@ -136,16 +143,23 @@ async def get_message_history(
         ChatMessage.user_id == current_user.id,
     )
 
-    # If before_id is provided, only fetch messages created before that message
+    # If before_id is provided, validate it belongs to this conversation and user
     if before_id is not None:
-        cursor_query = select(ChatMessage.created_at).where(ChatMessage.id == before_id)
+        cursor_query = select(ChatMessage.created_at).where(
+            ChatMessage.id == before_id,
+            ChatMessage.conversation_id == conversation_id,
+            ChatMessage.user_id == current_user.id,
+        )
         cursor_result = await db.execute(cursor_query)
         cursor_time = cursor_result.scalar()
-        if cursor_time is not None:
-            query = query.where(ChatMessage.created_at < cursor_time)
+        if cursor_time is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid before_id: message not found in this conversation",
+            )
+        query = query.where(ChatMessage.created_at < cursor_time)
 
-    # Order by created_at ascending (oldest first), but we need to limit from
-    # the end for cursor pagination. Use a subquery approach.
+    # Order by created_at ascending (oldest first) for chronological display
     query = query.order_by(ChatMessage.created_at.asc()).limit(limit + 1)
 
     result = await db.execute(query)
@@ -232,7 +246,7 @@ def _convert_db_messages_to_pydantic_ai(
             result.append(
                 ModelResponse(
                     parts=[TextPart(content=text_content)],
-                    model_name="",
+                    model_name="historical",
                     timestamp=msg.created_at,
                 )
             )
