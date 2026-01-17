@@ -59,3 +59,49 @@ class ChatStreamRequest(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+# -----------------------------------------------------------------------------
+# Conversation History Response Schemas
+# -----------------------------------------------------------------------------
+
+
+class ConversationSummary(BaseModel):
+    """Summary of a chat conversation for list views."""
+
+    id: UUID
+    title: str | None = None
+    created_at: str
+    last_activity_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ConversationListResponse(BaseModel):
+    """Response for listing user conversations."""
+
+    conversations: list[ConversationSummary]
+    total: int
+    has_more: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MessageSummary(BaseModel):
+    """Summary of a chat message for history views."""
+
+    id: UUID
+    role: str
+    content_blocks: list[dict[str, Any]]
+    created_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MessageHistoryResponse(BaseModel):
+    """Response for fetching message history."""
+
+    messages: list[MessageSummary]
+    has_more: bool
+
+    model_config = ConfigDict(extra="forbid")
