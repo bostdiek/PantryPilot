@@ -89,6 +89,9 @@ class _FakeResult:
     def one_or_none(self):  # pragma: no cover - trivial
         return None
 
+    def all(self):  # pragma: no cover - trivial
+        return []
+
 
 class _FakeSession:
     """Minimal fake async session used in lightweight tests.
