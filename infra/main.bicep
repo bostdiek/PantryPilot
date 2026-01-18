@@ -31,6 +31,10 @@ param upstashRedisRestToken string = ''
 @description('Use Microsoft quickstart placeholder image for initial deployment (before CI/CD pushes real image)')
 param useQuickstartImage bool = false
 
+@description('Brave Search API key for web search integration (optional)')
+@secure()
+param braveSearchApiKey string = ''
+
 // Environment-specific settings
 var environmentSettings = {
   dev: {
@@ -106,6 +110,7 @@ module keyVault 'modules/keyvault.bicep' = {
       dbConnectionString: 'postgresql://${dbAdminUsername}:${dbAdminPassword}@${postgresql.outputs.fqdn}:5432/pantrypilot?sslmode=require'
       upstashRedisRestUrl: upstashRedisRestUrl
       upstashRedisRestToken: upstashRedisRestToken
+      braveSearchApiKey: braveSearchApiKey
     }
   }
 }
@@ -178,6 +183,20 @@ resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01
   dependsOn: [keyVault, communication]
 }
 
+// Store Application Insights connection string in Key Vault for reference/debugging
+// Note: The Container Apps module injects this directly since it creates App Insights
+resource appInsightsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+  parent: keyVaultResource
+  name: 'applicationInsightsConnectionString'
+  properties: {
+    value: containerApps.outputs.appInsightsConnectionString
+    attributes: {
+      enabled: true
+    }
+  }
+  dependsOn: [keyVault, containerApps]
+}
+
 // Deploy Static Web App FIRST to get its actual hostname for CORS
 module staticWebApp 'modules/staticwebapp.bicep' = {
   params: {
@@ -240,6 +259,8 @@ module containerApps 'modules/containerapps.bicep' = {
     corsOrigins: corsOrigins
     emailSenderAddress: emailSenderAddress
     frontendUrl: frontendUrl
+    braveSearchApiKey: braveSearchApiKey
+    enableObservability: true
     tags: commonTags
   }
   dependsOn: [acsConnectionStringSecret] // Ensure ACS secret is in Key Vault before Container App tries to reference it

@@ -10,3 +10,6 @@ param secretKey = readEnvironmentVariable('SECRET_KEY')
 // Upstash Rate Limiting (optional - set via Key Vault or leave empty to disable)
 param upstashRedisRestUrl = readEnvironmentVariable('UPSTASH_REDIS_REST_URL', '')
 param upstashRedisRestToken = readEnvironmentVariable('UPSTASH_REDIS_REST_TOKEN', '')
+
+// Brave Search API key for web search integration (optional - leave empty to disable)
+param braveSearchApiKey = readEnvironmentVariable('BRAVE_SEARCH_API_KEY', '')
