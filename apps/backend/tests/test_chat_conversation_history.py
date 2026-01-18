@@ -605,3 +605,113 @@ async def test_get_message_history_pagination() -> None:
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_message_history_forbidden_different_user() -> None:
+    """Test that accessing another user's conversation returns 404.
+
+    Note: We return 404 rather than 403 to avoid leaking conversation existence
+    information. The query filters by user_id so different user's conversations
+    appear as "not found" rather than "forbidden".
+    """
+    current_user_id = uuid4()
+    other_user_id = uuid4()  # noqa: F841 - documents the scenario
+    conversation_id = uuid4()
+
+    # Scenario: Conversation with `conversation_id` belongs to `other_user_id`,
+    # but current user is `current_user_id`. The query filters by user_id,
+    # so it returns None as if the conversation doesn't exist.
+
+    class _DifferentUserDbSession:
+        async def execute(self, stmt):
+            # Query filters by user_id, so this returns None
+            # (conversation exists but doesn't match current user)
+            return _ExecuteResult(single=None)
+
+    db = _DifferentUserDbSession()
+
+    async def _override_get_db():
+        yield db
+
+    async def _override_current_user():
+        return SimpleNamespace(id=current_user_id)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_current_user
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            resp = await client.get(
+                f"/api/v1/chat/conversations/{conversation_id}/messages"
+            )
+
+        # Returns 404 to prevent information leakage
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+        body = resp.json()
+        assert "not found" in body["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_list_conversations_only_returns_user_owned() -> None:
+    """Test that conversation list only returns conversations owned by current user.
+
+    The endpoint filters by user_id, so other users' conversations are never visible.
+    """
+    current_user_id = uuid4()
+
+    # Create conversations - only the ones belonging to current user should be returned
+    user_conv1 = _MockConversation(user_id=current_user_id, title="My chat 1")
+    user_conv2 = _MockConversation(user_id=current_user_id, title="My chat 2")
+    # Note: Other user's conversations would not be returned by the filtered query
+
+    class _FilteredConvDbSession:
+        def __init__(self):
+            self._call_count = 0
+
+        async def execute(self, stmt):
+            self._call_count += 1
+            if self._call_count == 1:
+                # Count query - only 2 conversations for this user
+                result = _ExecuteResult()
+                result._scalar_value = 2
+                return result
+            # Conversations query - already filtered by user_id
+            return _ExecuteResult(items=[user_conv1, user_conv2])
+
+    db = _FilteredConvDbSession()
+
+    async def _override_get_db():
+        yield db
+
+    async def _override_current_user():
+        return SimpleNamespace(id=current_user_id)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_current_user
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            resp = await client.get("/api/v1/chat/conversations")
+
+        assert resp.status_code == status.HTTP_200_OK
+        body = resp.json()
+        # Should only see user's own conversations
+        assert len(body["conversations"]) == 2
+        assert body["total"] == 2
+        # Verify all returned conversations have titles belonging to current user
+        titles = [c["title"] for c in body["conversations"]]
+        assert "My chat 1" in titles
+        assert "My chat 2" in titles
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
