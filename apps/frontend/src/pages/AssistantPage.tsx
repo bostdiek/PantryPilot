@@ -137,17 +137,17 @@ export default function AssistantPage() {
       >
         {announcement}
       </div>
-      <div className="flex min-h-[calc(100dvh-5rem)] flex-col md:flex-row">
+      <div className="flex h-[calc(100dvh-8rem)] flex-col md:flex-row">
         <aside
           aria-label="Conversation list"
-          className="hidden w-80 shrink-0 border-r border-gray-200 md:block"
+          className="hidden w-80 shrink-0 border-r border-gray-200 md:block md:overflow-y-auto"
         >
           <ConversationList />
         </aside>
 
         <section
           aria-label="Chat conversation"
-          className="flex min-w-0 flex-1 flex-col md:pl-6"
+          className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-6"
         >
           <header className="pb-3">
             <div className="flex items-start justify-between gap-3">
