@@ -616,12 +616,11 @@ async def test_get_message_history_forbidden_different_user() -> None:
     appear as "not found" rather than "forbidden".
     """
     current_user_id = uuid4()
-    other_user_id = uuid4()  # noqa: F841 - documents the scenario
     conversation_id = uuid4()
 
-    # Scenario: Conversation with `conversation_id` belongs to `other_user_id`,
-    # but current user is `current_user_id`. The query filters by user_id,
-    # so it returns None as if the conversation doesn't exist.
+    # Scenario: Conversation with `conversation_id` belongs to a different user
+    # than `current_user_id`. The query filters by user_id, so it returns None
+    # as if the conversation doesn't exist.
 
     class _DifferentUserDbSession:
         async def execute(self, stmt):
