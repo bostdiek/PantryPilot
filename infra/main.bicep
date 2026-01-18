@@ -35,6 +35,10 @@ param useQuickstartImage bool = false
 @secure()
 param braveSearchApiKey string = ''
 
+@description('Gemini API key for AI model access')
+@secure()
+param geminiApiKey string = ''
+
 // Environment-specific settings
 var environmentSettings = {
   dev: {
@@ -111,6 +115,7 @@ module keyVault 'modules/keyvault.bicep' = {
       upstashRedisRestUrl: upstashRedisRestUrl
       upstashRedisRestToken: upstashRedisRestToken
       braveSearchApiKey: braveSearchApiKey
+      geminiApiKey: geminiApiKey
     }
   }
 }
