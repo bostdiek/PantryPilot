@@ -124,7 +124,7 @@ describe('chat API endpoints', () => {
       await streamChatMessage('conv-456', 'Hello', callbacks);
 
       expect(global.fetch).toHaveBeenCalledWith(
-        'http://api/api/v1/chat/conversations/conv-456/stream',
+        'http://api/api/v1/chat/conversations/conv-456/messages/stream',
         expect.anything()
       );
     });

@@ -22,6 +22,8 @@ export interface ChatMessageData {
   createdAt: string;
   /** Whether the message is still being streamed */
   isStreaming?: boolean;
+  /** Current status text to show during streaming (e.g., "Searching recipes...") */
+  statusText?: string;
 }
 
 interface ChatMessageProps {
@@ -91,6 +93,16 @@ export function ChatMessage({
       );
     }
 
+    // Streaming indicator component
+    const StreamingIndicator = () => (
+      <div className="flex items-center gap-2 text-gray-500">
+        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-gray-400" />
+        <span className="text-xs italic">
+          {message.statusText || 'Nibble is typing...'}
+        </span>
+      </div>
+    );
+
     // Assistant messages: prefer blocks, fall back to content
     if (message.blocks && message.blocks.length > 0) {
       return (
@@ -98,12 +110,7 @@ export function ChatMessage({
           {message.blocks.map((block, index) =>
             renderBlock(block, index, onAcceptAction, onCancelAction)
           )}
-          {message.isStreaming && (
-            <div className="flex items-center gap-1 text-gray-500">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-gray-400" />
-              <span className="text-xs">Typing...</span>
-            </div>
-          )}
+          {message.isStreaming && <StreamingIndicator />}
         </div>
       );
     }
@@ -122,12 +129,7 @@ export function ChatMessage({
 
     // Streaming message with no content yet
     if (message.isStreaming) {
-      return (
-        <div className="flex items-center gap-1 text-gray-500">
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-gray-400" />
-          <span className="text-xs">Typing...</span>
-        </div>
-      );
+      return <StreamingIndicator />;
     }
 
     return null;

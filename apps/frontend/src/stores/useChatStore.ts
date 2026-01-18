@@ -31,6 +31,8 @@ export interface Message {
   createdAt: string; // ISO
   /** Whether the message is currently being streamed */
   isStreaming?: boolean;
+  /** Current status text to show during streaming (e.g., "Searching recipes...") */
+  statusText?: string;
 }
 
 export interface ChatState {
@@ -76,6 +78,39 @@ function createId(): string {
 function capMessages(messages: Message[]): Message[] {
   if (messages.length <= MAX_MESSAGES_PER_CONVERSATION) return messages;
   return messages.slice(-MAX_MESSAGES_PER_CONVERSATION);
+}
+
+/**
+ * Formats a snake_case tool name into a friendly display string.
+ * e.g., "search_recipes" -> "Searching recipes..."
+ *       "get_user_preferences" -> "Getting user preferences..."
+ */
+function formatToolName(toolName: string): string {
+  // Map of known tool names to friendly descriptions
+  const toolNameMap: Record<string, string> = {
+    search_recipes: 'Searching recipes...',
+    get_recipe: 'Fetching recipe details...',
+    get_recipes: 'Fetching recipes...',
+    search_web: 'Searching the web...',
+    get_user_preferences: 'Checking your preferences...',
+    get_meal_plan: 'Loading meal plan...',
+    create_meal_plan: 'Creating meal plan...',
+    add_to_meal_plan: 'Adding to meal plan...',
+    get_grocery_list: 'Generating grocery list...',
+  };
+
+  if (toolNameMap[toolName]) {
+    return toolNameMap[toolName];
+  }
+
+  // Fallback: convert snake_case to sentence case with "..."
+  const words = toolName.split('_');
+  const firstWord = words[0];
+  const rest = words.slice(1).join(' ');
+  // Capitalize first letter and add -ing suffix if it looks like a verb
+  const capitalized =
+    firstWord.charAt(0).toUpperCase() + firstWord.slice(1) + 'ing';
+  return `${capitalized} ${rest}...`.trim();
 }
 
 export const useChatStore = create<ChatState>()(
@@ -365,10 +400,52 @@ export const useChatStore = create<ChatState>()(
 
             onStatus: (status, detail) => {
               logger.debug(`Chat status: ${status} - ${detail ?? ''}`);
+              // Update the streaming message's status text
+              const conversationId = get().activeConversationId;
+              const streamingMsgId = get().streamingMessageId;
+              if (conversationId && streamingMsgId) {
+                set((state) => {
+                  const messages =
+                    state.messagesByConversationId[conversationId] ?? [];
+                  const updatedMessages = messages.map((m) =>
+                    m.id === streamingMsgId
+                      ? { ...m, statusText: detail ?? status }
+                      : m
+                  );
+                  return {
+                    messagesByConversationId: {
+                      ...state.messagesByConversationId,
+                      [conversationId]: updatedMessages,
+                    },
+                  };
+                });
+              }
             },
 
             onToolStarted: (toolName, data) => {
               logger.debug(`Tool started: ${toolName}`, data);
+              // Show tool name as status
+              const conversationId = get().activeConversationId;
+              const streamingMsgId = get().streamingMessageId;
+              if (conversationId && streamingMsgId) {
+                // Format tool name nicely (e.g., search_recipes -> Searching recipes)
+                const friendlyName = formatToolName(toolName);
+                set((state) => {
+                  const messages =
+                    state.messagesByConversationId[conversationId] ?? [];
+                  const updatedMessages = messages.map((m) =>
+                    m.id === streamingMsgId
+                      ? { ...m, statusText: friendlyName }
+                      : m
+                  );
+                  return {
+                    messagesByConversationId: {
+                      ...state.messagesByConversationId,
+                      [conversationId]: updatedMessages,
+                    },
+                  };
+                });
+              }
             },
 
             onToolProposed: (proposalId, data) => {

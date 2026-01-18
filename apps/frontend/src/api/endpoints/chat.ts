@@ -50,7 +50,7 @@ export async function streamChatMessage(
 
   // Build endpoint URL
   const endpoint = conversationId
-    ? `/api/v1/chat/conversations/${conversationId}/stream`
+    ? `/api/v1/chat/conversations/${conversationId}/messages/stream`
     : '/api/v1/chat/stream';
 
   const url = `${API_BASE_URL}${endpoint}`;
