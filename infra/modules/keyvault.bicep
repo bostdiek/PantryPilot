@@ -83,6 +83,8 @@ resource keyVaultSecretsUserRoleAssignment 'Microsoft.Authorization/roleAssignme
 ]
 
 // Create secrets in the Key Vault
+// Only create/update secrets with non-empty values to preserve existing secrets
+// This prevents accidentally overwriting secrets when empty strings are passed
 resource secretResources 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
   for secretName in items(secrets): {
     parent: keyVault
@@ -93,6 +95,8 @@ resource secretResources 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = [
         enabled: true
       }
     }
+    // Skip creating this secret if the value is empty, preserving any existing secret
+    skip: empty(secretName.value)
   }
 ]
 
