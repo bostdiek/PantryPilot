@@ -546,11 +546,12 @@ function UserProfilePage() {
                 label="Country"
                 type="text"
                 value={preferencesData.country || 'US'}
-                onChange={(value) =>
+                onChange={(value) => {
+                  const normalized = value?.trim();
                   handlePreferenceChange('country')(
-                    value?.toUpperCase() || 'US'
-                  )
-                }
+                    normalized ? normalized.toUpperCase() : undefined
+                  );
+                }}
                 disabled={!isEditing}
                 placeholder="US"
                 helperText="2-letter country code (e.g., US, CA, GB)"
