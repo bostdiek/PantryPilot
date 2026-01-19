@@ -545,11 +545,11 @@ function UserProfilePage() {
               <Input
                 label="Country"
                 type="text"
-                value={preferencesData.country || 'US'}
+                value={preferencesData.country ?? ''}
                 onChange={(value) => {
                   const normalized = value?.trim();
                   handlePreferenceChange('country')(
-                    normalized ? normalized.toUpperCase() : undefined
+                    normalized ? normalized.toUpperCase() : ''
                   );
                 }}
                 disabled={!isEditing}

@@ -72,8 +72,7 @@ export interface InputProps {
  * ```
  */
 import clsx from 'clsx';
-import React from 'react';
-import { useId } from 'react';
+import React, { useId } from 'react';
 import { Icon } from './Icon';
 import { inputSizes } from './tokens';
 
