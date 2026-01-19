@@ -28,6 +28,7 @@ import { ApiErrorImpl } from '../../../types/api';
 import {
   acceptAction,
   cancelAction,
+  deleteConversation,
   fetchConversations,
   fetchMessages,
   streamChatMessage,
@@ -790,6 +791,71 @@ describe('chat API endpoints', () => {
       });
 
       await expect(cancelAction('prop-not-exist')).rejects.toThrow(
+        ApiErrorImpl
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // deleteConversation
+  // ---------------------------------------------------------------------------
+
+  describe('deleteConversation', () => {
+    it('sends DELETE to correct endpoint', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 204,
+      });
+
+      await deleteConversation('conv-123');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://api/api/v1/chat/conversations/conv-123',
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer test-token' },
+        })
+      );
+    });
+
+    it('throws ApiErrorImpl when conversation not found', async () => {
+      const mockErrorResponse = {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: vi
+          .fn()
+          .mockResolvedValue(
+            JSON.stringify({ detail: 'Conversation not found' })
+          ),
+      };
+
+      global.fetch = vi.fn().mockResolvedValue(mockErrorResponse);
+
+      await expect(deleteConversation('conv-not-exist')).rejects.toThrow(
+        ApiErrorImpl
+      );
+
+      // Reset the mock for second call
+      global.fetch = vi.fn().mockResolvedValue(mockErrorResponse);
+
+      await expect(deleteConversation('conv-not-exist')).rejects.toMatchObject({
+        status: 404,
+        message: 'Conversation not found',
+      });
+    });
+
+    it('throws ApiErrorImpl on HTTP error', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+        text: vi
+          .fn()
+          .mockResolvedValue(JSON.stringify({ detail: 'Database error' })),
+      });
+
+      await expect(deleteConversation('conv-123')).rejects.toThrow(
         ApiErrorImpl
       );
     });
