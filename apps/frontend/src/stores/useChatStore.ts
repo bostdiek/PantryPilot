@@ -4,6 +4,7 @@ import { persist } from 'zustand/middleware';
 import {
   acceptAction,
   cancelAction,
+  deleteConversation as apiDeleteConversation,
   fetchConversations,
   fetchMessages,
   streamChatMessage,
@@ -54,6 +55,7 @@ export interface ChatState {
   loadMessages: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
   switchConversation: (id: string) => Promise<void>;
+  deleteConversation: (id: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   cancelPendingAssistantReply: () => void;
   clearConversation: (id: string) => void;
@@ -199,6 +201,54 @@ export const useChatStore = create<ChatState>()(
         const messages = get().messagesByConversationId[id];
         if (!messages || messages.length === 0) {
           await get().loadMessages(id);
+        }
+      },
+
+      deleteConversation: async (id: string) => {
+        set({ isLoading: true, error: null });
+        try {
+          // Call API to delete the conversation
+          await apiDeleteConversation(id);
+
+          // Remove conversation from local state
+          set((state) => {
+            const updatedConversations = state.conversations.filter(
+              (c) => c.id !== id
+            );
+
+            // Remove messages for this conversation
+            const { [id]: _removed, ...remainingMessages } =
+              state.messagesByConversationId;
+
+            // If the deleted conversation was active, switch to another one or create new
+            let newActiveId = state.activeConversationId;
+            if (state.activeConversationId === id) {
+              if (updatedConversations.length > 0) {
+                // Switch to the most recent conversation
+                newActiveId = updatedConversations[0].id;
+              } else {
+                // No conversations left, will create a new one
+                newActiveId = null;
+              }
+            }
+
+            return {
+              conversations: updatedConversations,
+              messagesByConversationId: remainingMessages,
+              activeConversationId: newActiveId,
+            };
+          });
+
+          // If there were no conversations left, create a new one
+          if (get().conversations.length === 0) {
+            await get().createConversation();
+          }
+        } catch (err) {
+          logger.error('Failed to delete conversation:', err);
+          set({ error: 'Failed to delete conversation' });
+          throw err;
+        } finally {
+          set({ isLoading: false });
         }
       },
 

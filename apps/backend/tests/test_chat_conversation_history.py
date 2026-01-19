@@ -714,3 +714,139 @@ async def test_list_conversations_only_returns_user_owned() -> None:
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
+
+
+# -----------------------------------------------------------------------------
+# Delete Conversation Tests
+# -----------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_conversation_success() -> None:
+    """Test successfully deleting a conversation."""
+    user_id = uuid4()
+    conversation_id = uuid4()
+    conv = _MockConversation(id=conversation_id, user_id=user_id)
+
+    class _DeleteDbSession:
+        def __init__(self):
+            self.deleted_objects = []
+            self.commits = 0
+
+        async def execute(self, stmt):
+            # Return the conversation to be deleted
+            return _ExecuteResult(single=conv)
+
+        async def delete(self, obj):
+            self.deleted_objects.append(obj)
+
+        async def commit(self):
+            self.commits += 1
+
+    db = _DeleteDbSession()
+
+    async def _override_get_db():
+        yield db
+
+    async def _override_current_user():
+        return SimpleNamespace(id=user_id)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_current_user
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            resp = await client.delete(
+                f"/api/v1/chat/conversations/{conversation_id}"
+            )
+
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        assert len(db.deleted_objects) == 1
+        assert db.deleted_objects[0] == conv
+        assert db.commits == 1
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_conversation_not_found() -> None:
+    """Test deleting a non-existent conversation returns 404."""
+    user_id = uuid4()
+    conversation_id = uuid4()
+
+    class _NotFoundDbSession:
+        async def execute(self, stmt):
+            # Conversation not found
+            return _ExecuteResult(single=None)
+
+    db = _NotFoundDbSession()
+
+    async def _override_get_db():
+        yield db
+
+    async def _override_current_user():
+        return SimpleNamespace(id=user_id)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_current_user
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            resp = await client.delete(
+                f"/api/v1/chat/conversations/{conversation_id}"
+            )
+
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+        body = resp.json()
+        assert "not found" in body["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_delete_conversation_wrong_user() -> None:
+    """Test deleting another user's conversation returns 404."""
+    user_id = uuid4()
+    other_user_id = uuid4()
+    conversation_id = uuid4()
+
+    # Conversation belongs to other_user_id, not user_id
+    class _WrongUserDbSession:
+        async def execute(self, stmt):
+            # Query filters by both conversation_id and user_id, so returns None
+            return _ExecuteResult(single=None)
+
+    db = _WrongUserDbSession()
+
+    async def _override_get_db():
+        yield db
+
+    async def _override_current_user():
+        return SimpleNamespace(id=user_id)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_current_user
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as client:
+            resp = await client.delete(
+                f"/api/v1/chat/conversations/{conversation_id}"
+            )
+
+        assert resp.status_code == status.HTTP_404_NOT_FOUND
+        body = resp.json()
+        assert "not found" in body["detail"].lower()
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+        app.dependency_overrides.pop(get_current_user, None)

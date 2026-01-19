@@ -308,6 +308,40 @@ export async function fetchMessages(
   return response.json();
 }
 
+/**
+ * Delete a conversation and all its messages.
+ *
+ * @param conversationId - The conversation ID to delete
+ * @returns Promise that resolves when deletion is complete
+ */
+export async function deleteConversation(
+  conversationId: string
+): Promise<void> {
+  const API_BASE_URL = getApiBaseUrl();
+  const url = `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}`;
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorDetail = errorJson.detail || errorDetail;
+    } catch {
+      // Use default error detail
+    }
+
+    throw new ApiErrorImpl(errorDetail, response.status, 'http_error');
+  }
+
+  // DELETE returns 204 No Content on success
+}
+
 // -----------------------------------------------------------------------------
 // Action API
 // -----------------------------------------------------------------------------

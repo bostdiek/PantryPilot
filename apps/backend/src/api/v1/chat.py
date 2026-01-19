@@ -107,6 +107,37 @@ async def list_conversations(
     )
 
 
+@router.delete(
+    "/conversations/{conversation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a conversation",
+    description="Delete a conversation and all its messages. Requires the conversation to belong to the authenticated user.",
+)
+async def delete_conversation(
+    conversation_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """Delete a conversation and all its messages via cascade delete."""
+    # Verify conversation exists and belongs to user
+    query = select(ChatConversation).where(
+        ChatConversation.id == conversation_id,
+        ChatConversation.user_id == current_user.id,
+    )
+    result = await db.execute(query)
+    conversation = result.scalars().one_or_none()
+
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        )
+
+    # Delete the conversation (messages will cascade delete automatically)
+    await db.delete(conversation)
+    await db.commit()
+
+
 @router.get(
     "/conversations/{conversation_id}/messages",
     response_model=MessageHistoryResponse,
