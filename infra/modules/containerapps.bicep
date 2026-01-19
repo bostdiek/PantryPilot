@@ -58,6 +58,10 @@ param frontendUrl string = ''
 @secure()
 param braveSearchApiKey string = ''
 
+@description('Gemini API key for AI model access (optional - leave empty to disable)')
+@secure()
+param geminiApiKey string = ''
+
 @description('Enable observability (Application Insights + OpenTelemetry)')
 param enableObservability bool = true
 
@@ -174,16 +178,21 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               identity: 'system'
             }
             {
-              name: 'gemini-api-key'
-              keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
-              identity: 'system'
-            }
-            {
               name: 'acs-connection-string'
               keyVaultUrl: '${keyVaultUri}secrets/acsConnectionString'
               identity: 'system'
             }
           ],
+          // Optional Gemini API key for AI model access
+          empty(geminiApiKey)
+            ? []
+            : [
+                {
+                  name: 'gemini-api-key'
+                  keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
+                  identity: 'system'
+                }
+              ],
           // Optional Brave Search API key for web search
           empty(braveSearchApiKey)
             ? []
@@ -237,10 +246,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               {
                 name: 'SECRET_KEY'
                 secretRef: 'secret-key' // pragma: allowlist secret
-              }
-              {
-                name: 'GEMINI_API_KEY'
-                secretRef: 'gemini-api-key' // pragma: allowlist secret
               }
               {
                 name: 'ENVIRONMENT'
@@ -305,6 +310,15 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                   {
                     name: 'UPSTASH_REDIS_REST_TOKEN'
                     secretRef: 'upstash-redis-token' // pragma: allowlist secret
+                  }
+                ],
+            // Optional Gemini API key for AI model access
+            empty(geminiApiKey)
+              ? []
+              : [
+                  {
+                    name: 'GEMINI_API_KEY'
+                    secretRef: 'gemini-api-key' // pragma: allowlist secret
                   }
                 ],
             // Optional Brave Search API key for web search
@@ -397,7 +411,7 @@ output environmentName string = containerAppsEnvironment.name
 output environmentId string = containerAppsEnvironment.id
 
 @description('The Application Insights connection string for observability')
-output appInsightsConnectionString string = appInsights.properties.ConnectionString
+output appInsightsConnectionString string = enableObservability ? appInsights.properties.ConnectionString : ''
 
 @description('The Application Insights instrumentation key (legacy, use connection string instead)')
-output appInsightsInstrumentationKey string = appInsights.properties.InstrumentationKey
+output appInsightsInstrumentationKey string = enableObservability ? appInsights.properties.InstrumentationKey : ''

@@ -35,7 +35,7 @@ param useQuickstartImage bool = false
 @secure()
 param braveSearchApiKey string = ''
 
-@description('Gemini API key for AI model access')
+@description('Gemini API key for AI model access (optional - leave empty to disable)')
 @secure()
 param geminiApiKey string = ''
 
@@ -188,20 +188,6 @@ resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01
   dependsOn: [keyVault, communication]
 }
 
-// Store Application Insights connection string in Key Vault for reference/debugging
-// Note: The Container Apps module injects this directly since it creates App Insights
-resource appInsightsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: keyVaultResource
-  name: 'applicationInsightsConnectionString'
-  properties: {
-    value: containerApps.outputs.appInsightsConnectionString
-    attributes: {
-      enabled: true
-    }
-  }
-  dependsOn: [keyVault, containerApps]
-}
-
 // Deploy Static Web App FIRST to get its actual hostname for CORS
 module staticWebApp 'modules/staticwebapp.bicep' = {
   params: {
@@ -265,6 +251,7 @@ module containerApps 'modules/containerapps.bicep' = {
     emailSenderAddress: emailSenderAddress
     frontendUrl: frontendUrl
     braveSearchApiKey: braveSearchApiKey
+    geminiApiKey: geminiApiKey
     enableObservability: true
     tags: commonTags
   }
