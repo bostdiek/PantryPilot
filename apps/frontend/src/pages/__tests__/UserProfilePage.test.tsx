@@ -191,4 +191,66 @@ describe('UserProfilePage', () => {
     expect(screen.getByDisplayValue('02101')).toBeInTheDocument();
     expect(screen.getByDisplayValue('US')).toBeInTheDocument();
   });
+
+  test('converts country code to uppercase when editing', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit Profile' });
+    await userEvent.click(editButton);
+
+    // Find country input and clear it
+    const countryInput = screen.getByLabelText(/Country/);
+    await userEvent.clear(countryInput);
+
+    // Type lowercase country code
+    await userEvent.type(countryInput, 'ca');
+
+    // The onChange handler should have converted to uppercase
+    // Check that the input value reflects the uppercase conversion
+    expect(countryInput).toHaveValue('CA');
+  });
+
+  test('allows clearing country field', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit Profile' });
+    await userEvent.click(editButton);
+
+    // Find country input and clear it
+    const countryInput = screen.getByLabelText(/Country/);
+    await userEvent.clear(countryInput);
+
+    // Country input should be clearable (empty)
+    expect(countryInput).toHaveValue('');
+  });
+
+  test('location fields are editable in edit mode', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Initially fields should be disabled
+    const cityInput = screen.getByLabelText('City');
+    const stateInput = screen.getByLabelText('State/Region');
+    const postalInput = screen.getByLabelText('Postal Code');
+    const countryInput = screen.getByLabelText(/Country/);
+
+    expect(cityInput).toBeDisabled();
+    expect(stateInput).toBeDisabled();
+    expect(postalInput).toBeDisabled();
+    expect(countryInput).toBeDisabled();
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit Profile' });
+    await userEvent.click(editButton);
+
+    // Now fields should be enabled
+    expect(cityInput).not.toBeDisabled();
+    expect(stateInput).not.toBeDisabled();
+    expect(postalInput).not.toBeDisabled();
+    expect(countryInput).not.toBeDisabled();
+  });
 });
