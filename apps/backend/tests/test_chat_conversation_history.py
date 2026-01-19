@@ -759,9 +759,7 @@ async def test_delete_conversation_success() -> None:
         async with AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
-            resp = await client.delete(
-                f"/api/v1/chat/conversations/{conversation_id}"
-            )
+            resp = await client.delete(f"/api/v1/chat/conversations/{conversation_id}")
 
         assert resp.status_code == status.HTTP_204_NO_CONTENT
         assert len(db.deleted_objects) == 1
@@ -799,9 +797,7 @@ async def test_delete_conversation_not_found() -> None:
         async with AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
-            resp = await client.delete(
-                f"/api/v1/chat/conversations/{conversation_id}"
-            )
+            resp = await client.delete(f"/api/v1/chat/conversations/{conversation_id}")
 
         assert resp.status_code == status.HTTP_404_NOT_FOUND
         body = resp.json()
@@ -815,10 +811,9 @@ async def test_delete_conversation_not_found() -> None:
 async def test_delete_conversation_wrong_user() -> None:
     """Test deleting another user's conversation returns 404."""
     user_id = uuid4()
-    other_user_id = uuid4()
     conversation_id = uuid4()
 
-    # Conversation belongs to other_user_id, not user_id
+    # Conversation belongs to another user, not user_id
     class _WrongUserDbSession:
         async def execute(self, stmt):
             # Query filters by both conversation_id and user_id, so returns None
@@ -840,9 +835,7 @@ async def test_delete_conversation_wrong_user() -> None:
         async with AsyncClient(
             transport=transport, base_url="http://testserver"
         ) as client:
-            resp = await client.delete(
-                f"/api/v1/chat/conversations/{conversation_id}"
-            )
+            resp = await client.delete(f"/api/v1/chat/conversations/{conversation_id}")
 
         assert resp.status_code == status.HTTP_404_NOT_FOUND
         body = resp.json()

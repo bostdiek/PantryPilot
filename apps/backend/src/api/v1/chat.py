@@ -111,7 +111,10 @@ async def list_conversations(
     "/conversations/{conversation_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a conversation",
-    description="Delete a conversation and all its messages. Requires the conversation to belong to the authenticated user.",
+    description=(
+        "Delete a conversation and all its messages. "
+        "Requires the conversation to belong to the authenticated user."
+    ),
 )
 async def delete_conversation(
     conversation_id: UUID,

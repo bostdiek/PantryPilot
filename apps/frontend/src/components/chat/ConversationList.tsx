@@ -102,7 +102,9 @@ export function ConversationList({ compact = false }: ConversationListProps) {
             key={c.id}
             className={clsx(
               'group relative min-h-[60px] border-b border-gray-100',
-              activeConversationId === c.id ? 'bg-primary-50' : 'hover:bg-gray-50'
+              activeConversationId === c.id
+                ? 'bg-primary-50'
+                : 'hover:bg-gray-50'
             )}
           >
             <button
@@ -121,7 +123,7 @@ export function ConversationList({ compact = false }: ConversationListProps) {
             <button
               type="button"
               onClick={(e) => handleDeleteConversation(e, c.id, c.title)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-2 text-gray-400 opacity-0 transition-opacity hover:bg-gray-100 hover:text-red-600 focus:opacity-100 focus:ring-2 focus:ring-blue-500 focus:outline-none group-hover:opacity-100"
+              className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-2 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-100 hover:text-red-600 focus:opacity-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               aria-label={`Delete conversation "${c.title}"`}
               title="Delete conversation"
             >
