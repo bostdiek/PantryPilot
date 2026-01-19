@@ -1,4 +1,4 @@
-import { Send } from 'lucide-react';
+import { Send, Square } from 'lucide-react';
 import {
   useCallback,
   useState,
@@ -14,19 +14,27 @@ import { Textarea } from '../ui/Textarea';
 export function ChatInput() {
   const [message, setMessage] = useState('');
   const isLoading = useChatStore((s) => s.isLoading);
+  const isStreaming = useChatStore((s) => s.isStreaming);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const cancelPendingAssistantReply = useChatStore(
+    (s) => s.cancelPendingAssistantReply
+  );
   const isMobile = useIsMobile();
 
   const sendCurrentMessage = useCallback(async () => {
     const trimmed = message.trim();
-    if (!trimmed || isLoading) return;
+    if (!trimmed || isLoading || isStreaming) return;
 
     await sendMessage(trimmed);
     setMessage('');
-  }, [isLoading, message, sendMessage]);
+  }, [isLoading, isStreaming, message, sendMessage]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (isStreaming) {
+      cancelPendingAssistantReply();
+      return;
+    }
     await sendCurrentMessage();
   };
 
@@ -59,6 +67,7 @@ export function ChatInput() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          disabled={isStreaming}
           // Some mobile keyboards only support voice typing reliably in
           // single-line inputs (vs. multiline textareas).
           autoCorrect="on"
@@ -69,7 +78,7 @@ export function ChatInput() {
           placeholder="Ask Nibble about a recipe, ingredient, or meal idea…"
           aria-label="Message Nibble"
           aria-describedby="assistant-message-help"
-          className="h-12 flex-1 rounded-md border border-gray-500 bg-white px-3 py-2 text-base shadow-sm placeholder:text-gray-500"
+          className="h-12 flex-1 rounded-md border border-gray-500 bg-white px-3 py-2 text-base shadow-sm placeholder:text-gray-500 disabled:bg-gray-100"
         />
       ) : (
         <Textarea
@@ -77,6 +86,7 @@ export function ChatInput() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
+          disabled={isStreaming}
           rows={2}
           autoCorrect="on"
           autoCapitalize="sentences"
@@ -90,15 +100,26 @@ export function ChatInput() {
         />
       )}
 
-      <Button
-        type="submit"
-        variant="primary"
-        disabled={!message.trim() || isLoading}
-        className="h-12 w-12 shrink-0 p-0"
-        aria-label="Send message"
-      >
-        <Send className="h-5 w-5" aria-hidden="true" />
-      </Button>
+      {isStreaming ? (
+        <Button
+          type="submit"
+          variant="secondary"
+          className="h-12 w-12 shrink-0 p-0"
+          aria-label="Cancel response"
+        >
+          <Square className="h-5 w-5" aria-hidden="true" />
+        </Button>
+      ) : (
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={!message.trim() || isLoading}
+          className="h-12 w-12 shrink-0 p-0"
+          aria-label="Send message"
+        >
+          <Send className="h-5 w-5" aria-hidden="true" />
+        </Button>
+      )}
     </form>
   );
 }
