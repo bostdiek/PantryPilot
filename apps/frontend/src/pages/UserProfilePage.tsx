@@ -499,6 +499,66 @@ function UserProfilePage() {
             </div>
           </Card>
 
+          {/* Location Settings */}
+          <Card variant="default" className="p-6">
+            <h2 className="mb-4 text-xl font-semibold">Location Settings</h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Set your location to enable weather-based meal planning features
+            </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input
+                label="City"
+                type="text"
+                value={preferencesData.city || ''}
+                onChange={(value) =>
+                  handlePreferenceChange('city')(value || undefined)
+                }
+                disabled={!isEditing}
+                placeholder="Enter your city"
+                helperText="Your city for weather and meal planning"
+              />
+
+              <Input
+                label="State/Region"
+                type="text"
+                value={preferencesData.stateOrRegion || ''}
+                onChange={(value) =>
+                  handlePreferenceChange('stateOrRegion')(value || undefined)
+                }
+                disabled={!isEditing}
+                placeholder="e.g., CA, Ontario"
+                helperText="State, province, or region"
+              />
+
+              <Input
+                label="Postal Code"
+                type="text"
+                value={preferencesData.postalCode || ''}
+                onChange={(value) =>
+                  handlePreferenceChange('postalCode')(value || undefined)
+                }
+                disabled={!isEditing}
+                placeholder="Enter your postal/ZIP code"
+                helperText="ZIP or postal code"
+              />
+
+              <Input
+                label="Country"
+                type="text"
+                value={preferencesData.country || 'US'}
+                onChange={(value) =>
+                  handlePreferenceChange('country')(
+                    value?.toUpperCase() || 'US'
+                  )
+                }
+                disabled={!isEditing}
+                placeholder="US"
+                helperText="2-letter country code (e.g., US, CA, GB)"
+                maxLength={2}
+              />
+            </div>
+          </Card>
+
           {/* Preferred Cuisines */}
           <Card variant="default" className="p-6">
             <h2 className="mb-4 text-xl font-semibold">Preferred Cuisines</h2>

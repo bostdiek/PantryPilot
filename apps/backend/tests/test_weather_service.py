@@ -275,7 +275,7 @@ class TestGetDailyForecastForUser:
             result = await get_daily_forecast_for_user(mock_db, user_id=user_id)
 
         assert result["status"] == "missing_location"
-        assert "city/ZIP" in result["message"]
+        assert "Profile settings" in result["message"]
 
     @pytest.mark.asyncio
     async def test_missing_lat_lon(self) -> None:

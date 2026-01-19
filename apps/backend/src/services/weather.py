@@ -99,7 +99,10 @@ async def get_daily_forecast_for_user(
     if preferences is None:
         return {
             "status": "missing_location",
-            "message": "What city/ZIP should I use for meal-planning weather?",
+            "message": (
+                "I need your location to check the weather. "
+                "Please set your city and postal code in your Profile settings."
+            ),
         }
 
     latitude = _to_float(preferences.latitude)
@@ -108,7 +111,10 @@ async def get_daily_forecast_for_user(
     if latitude is None or longitude is None:
         return {
             "status": "missing_location",
-            "message": "What city/ZIP should I use for meal-planning weather?",
+            "message": (
+                "I need your location to check the weather. "
+                "Please set your city and postal code in your Profile settings."
+            ),
         }
 
     unit = _get_temperature_unit(preferences)
