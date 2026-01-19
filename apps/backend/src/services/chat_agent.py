@@ -44,7 +44,7 @@ USER PREFERENCES & SETTINGS:
 - Users can set their location preferences at /user
 - If the weather tool returns a missing_location error, direct users to set
   their location by saying: "You can set your location in your Profile page
-  at /profile to enable weather-based meal planning."
+  at /user to enable weather-based meal planning."
 - Provide this as a markdown clickable link: [Your Profile](/user)
 
 Output rules (critical):
