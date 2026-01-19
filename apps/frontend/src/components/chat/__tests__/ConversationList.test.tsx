@@ -139,7 +139,7 @@ describe('ConversationList', () => {
     });
 
     expect(useChatStore.getState().activeConversationId).toBe('c2');
-    
+
     // After clicking, Chat 2 should now be active
     const chat2ButtonsAfterClick = screen.getAllByRole('button', {
       name: /Chat 2/i,
