@@ -22,6 +22,10 @@ const mockPreferences = {
   units: 'metric' as const,
   meal_planning_days: 7,
   preferred_cuisines: ['Italian'],
+  city: 'Boston',
+  state_or_region: 'MA',
+  postal_code: '02101',
+  country: 'US',
 };
 
 // Derived frontend shape used by store
@@ -34,6 +38,10 @@ const frontendPrefs = {
   units: mockPreferences.units,
   mealPlanningDays: mockPreferences.meal_planning_days,
   preferredCuisines: mockPreferences.preferred_cuisines,
+  city: mockPreferences.city,
+  stateOrRegion: mockPreferences.state_or_region,
+  postalCode: mockPreferences.postal_code,
+  country: mockPreferences.country,
 };
 
 const mockSetUser = vi.fn();
@@ -173,5 +181,76 @@ describe('UserProfilePage', () => {
     await renderAndWait();
 
     expect(screen.getByLabelText('Italian')).toBeChecked();
+  });
+
+  test('shows location settings', async () => {
+    await renderAndWait();
+
+    expect(screen.getByDisplayValue('Boston')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('MA')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('02101')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('US')).toBeInTheDocument();
+  });
+
+  test('converts country code to uppercase when editing', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit Profile' });
+    await userEvent.click(editButton);
+
+    // Find country input and clear it
+    const countryInput = screen.getByLabelText(/Country/);
+    await userEvent.clear(countryInput);
+
+    // Type lowercase country code
+    await userEvent.type(countryInput, 'ca');
+
+    // The onChange handler should have converted to uppercase
+    // Check that the input value reflects the uppercase conversion
+    expect(countryInput).toHaveValue('CA');
+  });
+
+  test('allows clearing country field', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit Profile' });
+    await userEvent.click(editButton);
+
+    // Find country input and clear it
+    const countryInput = screen.getByLabelText(/Country/);
+    await userEvent.clear(countryInput);
+
+    // Country input should be clearable (empty)
+    expect(countryInput).toHaveValue('');
+  });
+
+  test('location fields are editable in edit mode', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Initially fields should be disabled
+    const cityInput = screen.getByLabelText('City');
+    const stateInput = screen.getByLabelText('State/Region');
+    const postalInput = screen.getByLabelText('Postal Code');
+    const countryInput = screen.getByLabelText(/Country/);
+
+    expect(cityInput).toBeDisabled();
+    expect(stateInput).toBeDisabled();
+    expect(postalInput).toBeDisabled();
+    expect(countryInput).toBeDisabled();
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit Profile' });
+    await userEvent.click(editButton);
+
+    // Now fields should be enabled
+    expect(cityInput).not.toBeDisabled();
+    expect(stateInput).not.toBeDisabled();
+    expect(postalInput).not.toBeDisabled();
+    expect(countryInput).not.toBeDisabled();
   });
 });
