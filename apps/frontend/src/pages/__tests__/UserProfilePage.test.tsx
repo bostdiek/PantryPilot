@@ -22,6 +22,10 @@ const mockPreferences = {
   units: 'metric' as const,
   meal_planning_days: 7,
   preferred_cuisines: ['Italian'],
+  city: 'Boston',
+  state_or_region: 'MA',
+  postal_code: '02101',
+  country: 'US',
 };
 
 // Derived frontend shape used by store
@@ -34,6 +38,10 @@ const frontendPrefs = {
   units: mockPreferences.units,
   mealPlanningDays: mockPreferences.meal_planning_days,
   preferredCuisines: mockPreferences.preferred_cuisines,
+  city: mockPreferences.city,
+  stateOrRegion: mockPreferences.state_or_region,
+  postalCode: mockPreferences.postal_code,
+  country: mockPreferences.country,
 };
 
 const mockSetUser = vi.fn();
@@ -173,5 +181,14 @@ describe('UserProfilePage', () => {
     await renderAndWait();
 
     expect(screen.getByLabelText('Italian')).toBeChecked();
+  });
+
+  test('shows location settings', async () => {
+    await renderAndWait();
+
+    expect(screen.getByDisplayValue('Boston')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('MA')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('02101')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('US')).toBeInTheDocument();
   });
 });
