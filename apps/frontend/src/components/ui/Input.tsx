@@ -50,6 +50,8 @@ export interface InputProps {
   disabled?: boolean;
   /** Additional CSS classes */
   className?: string;
+  /** Maximum character length */
+  maxLength?: number;
 }
 
 /**
@@ -96,6 +98,7 @@ export function Input({
   onBlur,
   disabled = false,
   className = '',
+  maxLength,
 }: InputProps) {
   // Generate an ID if not provided (for associating label and help/error text)
   const autoId = useId();
@@ -161,6 +164,7 @@ export function Input({
           disabled={disabled}
           required={required}
           autoComplete={autoComplete}
+          maxLength={maxLength}
           aria-describedby={helperText || error ? helperId : undefined}
           aria-invalid={!!error}
           aria-required={required}
