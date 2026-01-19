@@ -10,6 +10,7 @@ vi.mock('../../api/endpoints/chat', () => ({
   streamChatMessage: vi.fn(),
   acceptAction: vi.fn(),
   cancelAction: vi.fn(),
+  deleteConversation: vi.fn(),
 }));
 
 // Mock logger to avoid console noise
@@ -29,6 +30,7 @@ const getMocks = async () => {
     streamChatMessage: chatApi.streamChatMessage as ReturnType<typeof vi.fn>,
     acceptAction: chatApi.acceptAction as ReturnType<typeof vi.fn>,
     cancelAction: chatApi.cancelAction as ReturnType<typeof vi.fn>,
+    deleteConversation: chatApi.deleteConversation as ReturnType<typeof vi.fn>,
   };
 };
 
@@ -275,5 +277,125 @@ describe('useChatStore', () => {
     });
 
     expect(mocks.cancelAction).toHaveBeenCalledWith('action-1');
+  });
+
+  test('deleteConversation removes conversation from state', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    // Create two conversations
+    await act(async () => {
+      await result.current.createConversation('Chat 1');
+    });
+    const conv1Id = result.current.conversations[0]!.id;
+
+    await act(async () => {
+      await result.current.createConversation('Chat 2');
+    });
+    const conv2Id = result.current.conversations[0]!.id;
+
+    // Conversations are added to beginning, so order is [Chat 2, Chat 1]
+    expect(result.current.conversations).toHaveLength(2);
+    expect(result.current.conversations[0]!.id).toBe(conv2Id);
+    expect(result.current.conversations[1]!.id).toBe(conv1Id);
+
+    // Mock successful API deletion
+    mocks.deleteConversation.mockResolvedValue(undefined);
+
+    // Delete the first conversation (Chat 1)
+    await act(async () => {
+      await result.current.deleteConversation(conv1Id);
+    });
+
+    // Verify conversation was removed
+    expect(result.current.conversations).toHaveLength(1);
+    expect(result.current.conversations[0]!.id).toBe(conv2Id);
+    expect(result.current.messagesByConversationId[conv1Id]).toBeUndefined();
+    expect(mocks.deleteConversation).toHaveBeenCalledWith(conv1Id);
+  });
+
+  test('deleteConversation switches to another conversation when deleting active one', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    // Create two conversations
+    await act(async () => {
+      await result.current.createConversation('Chat 1');
+    });
+    const conv1Id = result.current.conversations[0]!.id;
+
+    await act(async () => {
+      await result.current.createConversation('Chat 2');
+    });
+    const conv2Id = result.current.conversations[0]!.id;
+
+    // Conversations are added to beginning, so order is [Chat 2, Chat 1]
+    // Chat 2 is the active one after creation
+    expect(result.current.activeConversationId).toBe(conv2Id);
+
+    // Mock successful API deletion
+    mocks.deleteConversation.mockResolvedValue(undefined);
+
+    // Delete the active conversation (Chat 2)
+    await act(async () => {
+      await result.current.deleteConversation(conv2Id);
+    });
+
+    // Should switch to the remaining conversation (Chat 1)
+    expect(result.current.activeConversationId).toBe(conv1Id);
+  });
+
+  test('deleteConversation creates new conversation when deleting the last one', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    // Create one conversation
+    await act(async () => {
+      await result.current.createConversation('Last Chat');
+    });
+    const convId = result.current.conversations[0]!.id;
+
+    expect(result.current.conversations).toHaveLength(1);
+
+    // Mock successful API deletion
+    mocks.deleteConversation.mockResolvedValue(undefined);
+
+    // Delete the only conversation
+    await act(async () => {
+      await result.current.deleteConversation(convId);
+    });
+
+    // Should have created a new conversation automatically
+    expect(result.current.conversations).toHaveLength(1);
+    expect(result.current.conversations[0]!.id).not.toBe(convId);
+    expect(result.current.conversations[0]!.title).toBe('Chat with Nibble');
+  });
+
+  test('deleteConversation handles API errors', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    // Create a conversation
+    await act(async () => {
+      await result.current.createConversation('Chat 1');
+    });
+    const convId = result.current.conversations[0]!.id;
+
+    // Mock API error
+    mocks.deleteConversation.mockRejectedValue(new Error('API error'));
+
+    // Try to delete conversation
+    await act(async () => {
+      try {
+        await result.current.deleteConversation(convId);
+      } catch (e) {
+        // Expected to throw
+      }
+    });
+
+    // Conversation should still be there since deletion failed
+    expect(result.current.conversations).toHaveLength(1);
+    expect(result.current.conversations[0]!.id).toBe(convId);
+    expect(result.current.error).toBe('Failed to delete conversation');
   });
 });

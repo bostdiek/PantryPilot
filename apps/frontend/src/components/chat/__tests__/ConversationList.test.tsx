@@ -88,8 +88,13 @@ describe('ConversationList', () => {
 
     render(<ConversationList />);
 
-    const item = screen.getByRole('button', { name: /Chat 1/i });
-    expect(item).toHaveAttribute('aria-current', 'page');
+    // Get all buttons with "Chat 1" in the name (conversation button + delete button)
+    // The conversation button is the one with aria-current
+    const chat1Buttons = screen.getAllByRole('button', { name: /Chat 1/i });
+    const chat1ConversationButton = chat1Buttons.find(
+      (btn) => btn.getAttribute('aria-current') === 'page'
+    );
+    expect(chat1ConversationButton).toHaveAttribute('aria-current', 'page');
   });
 
   test('desktop list switches conversations when clicking an inactive item', () => {
@@ -115,22 +120,33 @@ describe('ConversationList', () => {
 
     render(<ConversationList />);
 
-    expect(screen.getByRole('button', { name: /Chat 1/i })).toHaveAttribute(
-      'aria-current',
-      'page'
+    // Get conversation buttons (not delete buttons)
+    const chat1Buttons = screen.getAllByRole('button', { name: /Chat 1/i });
+    const chat1ConversationButton = chat1Buttons.find(
+      (btn) => btn.getAttribute('aria-current') === 'page'
     );
-    expect(screen.getByRole('button', { name: /Chat 2/i })).not.toHaveAttribute(
-      'aria-current'
-    );
+    expect(chat1ConversationButton).toHaveAttribute('aria-current', 'page');
 
+    const chat2Buttons = screen.getAllByRole('button', { name: /Chat 2/i });
+    const chat2ConversationButton = chat2Buttons.find(
+      (btn) => !btn.getAttribute('aria-label')?.startsWith('Delete')
+    );
+    expect(chat2ConversationButton).not.toHaveAttribute('aria-current');
+
+    // Click on Chat 2 conversation button (not the delete button)
     act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /Chat 2/i }));
+      fireEvent.click(chat2ConversationButton!);
     });
 
     expect(useChatStore.getState().activeConversationId).toBe('c2');
-    expect(screen.getByRole('button', { name: /Chat 2/i })).toHaveAttribute(
-      'aria-current',
-      'page'
+
+    // After clicking, Chat 2 should now be active
+    const chat2ButtonsAfterClick = screen.getAllByRole('button', {
+      name: /Chat 2/i,
+    });
+    const chat2ActiveButton = chat2ButtonsAfterClick.find(
+      (btn) => btn.getAttribute('aria-current') === 'page'
     );
+    expect(chat2ActiveButton).toHaveAttribute('aria-current', 'page');
   });
 });
