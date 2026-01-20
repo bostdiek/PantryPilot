@@ -93,21 +93,26 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
         </a>
 
         {/* Add Recipe button links to internal draft page */}
-        <Link
-          to={
-            block.href!.startsWith('/')
-              ? block.href!
-              : new URL(block.href!, window.location.origin).pathname +
-                new URL(block.href!, window.location.origin).search
-          }
-          className="flex-shrink-0"
-          aria-label="Add this recipe to your collection"
-        >
-          <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700">
-            <Plus className="h-4 w-4" aria-hidden="true" />
-            Add Recipe
-          </span>
-        </Link>
+        {(() => {
+          const normalizedPath = block.href!.startsWith('/')
+            ? block.href!
+            : (() => {
+                const url = new URL(block.href!, window.location.origin);
+                return url.pathname + url.search;
+              })();
+          return (
+            <Link
+              to={normalizedPath}
+              className="flex-shrink-0"
+              aria-label="Add this recipe to your collection"
+            >
+              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-green-700">
+                <Plus className="h-4 w-4" aria-hidden="true" />
+                Add Recipe
+              </span>
+            </Link>
+          );
+        })()}
       </div>
     );
   }
@@ -144,18 +149,12 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
       {block.href && !block.recipe_id && (
         <div className="flex-shrink-0">
           {hasDraftLink ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors group-hover:bg-green-700"
-              aria-label="Add this recipe to your collection"
-            >
+            <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-colors group-hover:bg-green-700">
               <Plus className="h-4 w-4" aria-hidden="true" />
               Add Recipe
             </span>
           ) : (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors group-hover:bg-blue-700"
-              aria-label="View recipe on external site"
-            >
+            <span className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors group-hover:bg-blue-700">
               <ExternalLink className="h-4 w-4" aria-hidden="true" />
               View Recipe
             </span>
@@ -180,8 +179,15 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
       const url = new URL(block.href, window.location.origin);
       if (url.origin === window.location.origin) {
         // Internal navigation (includes draft links)
+        const ariaLabel = hasDraftLink
+          ? 'Add this recipe to your collection'
+          : `View ${block.title}`;
         return (
-          <Link to={url.pathname + url.search} className="block">
+          <Link
+            to={url.pathname + url.search}
+            className="block"
+            aria-label={ariaLabel}
+          >
             {content}
           </Link>
         );
@@ -197,6 +203,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
         target="_blank"
         rel="noopener noreferrer"
         className="block"
+        aria-label={`View ${block.title} on external site`}
       >
         {content}
       </a>
