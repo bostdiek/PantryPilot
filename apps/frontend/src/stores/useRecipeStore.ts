@@ -472,15 +472,21 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   // AI suggestion actions
   setFormFromSuggestion: (payload: AIDraftPayload) => {
     // The backend returns payload directly as AIGeneratedRecipe, not wrapped
-    // Check if payload has recipe_data (success case) or if it's the old nested format
+    // Check for various payload formats:
+    // 1. recipe_data field (AI extraction format)
+    // 2. generated_recipe.recipe_data (nested format for backward compatibility)
+    // 3. Direct recipe fields (suggest_recipe tool format - has title, ingredients, etc.)
     let recipeData = null as unknown as any;
 
     if ((payload as any).recipe_data) {
-      // Direct format: payload IS the generated recipe
+      // Direct format: payload has recipe_data field
       recipeData = (payload as any).recipe_data;
     } else if ((payload as any).generated_recipe?.recipe_data) {
       // Nested format (for backward compatibility)
       recipeData = (payload as any).generated_recipe.recipe_data;
+    } else if ((payload as any).title && (payload as any).ingredients) {
+      // suggest_recipe tool format: recipe fields are directly on payload
+      recipeData = payload;
     }
 
     if (recipeData) {
