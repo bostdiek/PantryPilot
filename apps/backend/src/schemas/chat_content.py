@@ -35,14 +35,22 @@ class LinkBlock(BaseModel):
 
 
 class RecipeCardBlock(BaseModel):
-    """Recipe card block with optional deep link."""
+    """Recipe card block with optional deep link.
+
+    The href field supports both absolute URLs (external recipes) and
+    relative URLs (draft deep-links like /recipes/new?ai=1&draftId=...).
+
+    For AI-suggested recipes, source_url contains the original external recipe
+    URL while href contains the internal draft approval link.
+    """
 
     type: Literal["recipe_card"]
     recipe_id: UUID | None = None
     title: str
     subtitle: str | None = None
     image_url: HttpUrl | None = None
-    href: HttpUrl | None = None
+    href: str | None = None
+    source_url: str | None = None  # Original external recipe URL
 
     model_config = ConfigDict(extra="forbid")
 

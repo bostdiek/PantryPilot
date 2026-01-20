@@ -45,7 +45,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     )
     call_event = FunctionToolCallEvent(call_part)
 
-    sse_started, output_started = await _handle_agent_stream_event(
+    sse_started, output_started, blocks_started = await _handle_agent_stream_event(
         call_event,
         conversation_id=conversation_id,
         message_id=message_id,
@@ -55,9 +55,11 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     )
 
     assert output_started is None
-    assert sse_started is not None
-    assert '"event":"tool.started"' in sse_started
-    assert '"tool_call_id":"call_1"' in sse_started
+    assert blocks_started == []
+    assert len(sse_started) > 0
+    sse_started_str = "".join(sse_started)
+    assert '"event":"tool.started"' in sse_started_str
+    assert '"tool_call_id":"call_1"' in sse_started_str
 
     result_part = ToolReturnPart(
         tool_name="get_daily_weather",
@@ -66,7 +68,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     )
     result_event = FunctionToolResultEvent(result_part)
 
-    sse_result, output_result = await _handle_agent_stream_event(
+    sse_result, output_result, blocks_result = await _handle_agent_stream_event(
         result_event,
         conversation_id=conversation_id,
         message_id=message_id,
@@ -76,10 +78,12 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     )
 
     assert output_result is None
-    assert sse_result is not None
-    assert '"event":"tool.result"' in sse_result
-    assert '"tool_call_id":"call_1"' in sse_result
-    assert '"status":"success"' in sse_result
+    assert blocks_result == []
+    assert len(sse_result) > 0
+    sse_result_str = "".join(sse_result)
+    assert '"event":"tool.result"' in sse_result_str
+    assert '"tool_call_id":"call_1"' in sse_result_str
+    assert '"status":"success"' in sse_result_str
 
     persisted = [obj for obj in db.added if isinstance(obj, ChatToolCall)]
     assert len(persisted) == 1

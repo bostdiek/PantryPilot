@@ -18,6 +18,24 @@ function formatLastMessageAt(conversation: Conversation): string {
   }).format(date);
 }
 
+function formatConversationTitle(conversation: Conversation): string {
+  // If the conversation has a custom title, use it
+  if (conversation.title && !conversation.title.startsWith('Chat started ')) {
+    return conversation.title;
+  }
+
+  // Otherwise, generate a title from the createdAt timestamp in the user's local timezone
+  const date = new Date(conversation.createdAt);
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date);
+}
+
 export function ConversationList({ compact = false }: ConversationListProps) {
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
@@ -28,12 +46,12 @@ export function ConversationList({ compact = false }: ConversationListProps) {
   const handleDeleteConversation = (
     e: React.MouseEvent,
     conversationId: string,
-    conversationTitle: string | null
+    conversation: Conversation
   ) => {
     e.stopPropagation(); // Prevent switching to the conversation
 
     const confirmed = window.confirm(
-      `Are you sure you want to delete "${conversationTitle || 'this conversation'}"? This action cannot be undone.`
+      `Are you sure you want to delete "${formatConversationTitle(conversation)}"? This action cannot be undone.`
     );
 
     if (confirmed) {
@@ -60,7 +78,7 @@ export function ConversationList({ compact = false }: ConversationListProps) {
           ) : null}
           {conversations.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.title}
+              {formatConversationTitle(c)}
             </option>
           ))}
         </select>
@@ -114,7 +132,7 @@ export function ConversationList({ compact = false }: ConversationListProps) {
               className="w-full p-4 pr-12 text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
             >
               <div className="truncate font-medium text-gray-900">
-                {c.title}
+                {formatConversationTitle(c)}
               </div>
               <div className="mt-1 text-sm text-gray-500">
                 {formatLastMessageAt(c)}
@@ -122,9 +140,9 @@ export function ConversationList({ compact = false }: ConversationListProps) {
             </button>
             <button
               type="button"
-              onClick={(e) => handleDeleteConversation(e, c.id, c.title)}
+              onClick={(e) => handleDeleteConversation(e, c.id, c)}
               className="absolute top-1/2 right-2 -translate-y-1/2 rounded p-2 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-gray-100 hover:text-red-600 focus:opacity-100 focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              aria-label={`Delete conversation "${c.title}"`}
+              aria-label={`Delete conversation "${formatConversationTitle(c)}"`}
               title="Delete conversation"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />

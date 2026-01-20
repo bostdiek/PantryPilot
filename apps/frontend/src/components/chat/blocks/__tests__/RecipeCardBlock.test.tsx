@@ -146,3 +146,146 @@ describe('RecipeCardBlock', () => {
     expect(card).toBeInTheDocument();
   });
 });
+
+describe('RecipeCardBlock draft link handling', () => {
+  test('renders "Add Recipe" button for draft deep-link', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'Suggested Pasta Recipe',
+      subtitle: 'From Nibble AI',
+      image_url: null,
+      href: '/recipes/new?ai=1&draftId=abc123&token=xyz789',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    expect(screen.getByText('Add Recipe')).toBeInTheDocument();
+    expect(screen.queryByText('View Recipe')).not.toBeInTheDocument();
+  });
+
+  test('renders "View Recipe" button for external links', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'External Recipe',
+      subtitle: null,
+      image_url: null,
+      href: 'https://recipes.example.com/pasta-recipe',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    expect(screen.getByText('View Recipe')).toBeInTheDocument();
+    expect(screen.queryByText('Add Recipe')).not.toBeInTheDocument();
+  });
+
+  test('uses React Router Link for draft links (internal navigation)', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'Draft Recipe',
+      subtitle: null,
+      image_url: null,
+      href: '/recipes/new?ai=1&draftId=draft-123&token=secret',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    const link = screen.getByRole('link');
+    // React Router Link creates internal href
+    expect(link).toHaveAttribute(
+      'href',
+      '/recipes/new?ai=1&draftId=draft-123&token=secret'
+    );
+    // Should not have target="_blank" (external link attribute)
+    expect(link).not.toHaveAttribute('target');
+  });
+
+  test('uses anchor tag with target="_blank" for external links', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'External Site Recipe',
+      subtitle: null,
+      image_url: null,
+      href: 'https://allrecipes.com/recipe/123',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('href', 'https://allrecipes.com/recipe/123');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  test('draft link with additional query params still shows Add Recipe', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'Complex Draft URL',
+      subtitle: null,
+      image_url: null,
+      href: '/recipes/new?ai=1&draftId=id&token=tok&source=chat',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    expect(screen.getByText('Add Recipe')).toBeInTheDocument();
+  });
+
+  test('does not show action button when recipe_id is provided', () => {
+    // When recipe_id is provided, it links directly to recipe detail
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: 'existing-recipe-123',
+      title: 'Saved Recipe',
+      subtitle: null,
+      image_url: null,
+      href: null,
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    expect(screen.queryByText('Add Recipe')).not.toBeInTheDocument();
+    expect(screen.queryByText('View Recipe')).not.toBeInTheDocument();
+    // Still has a link to the recipe detail page
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute('href', '/recipes/existing-recipe-123');
+  });
+
+  test('Add Recipe button has correct accessibility label', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'Accessible Draft',
+      subtitle: null,
+      image_url: null,
+      href: '/recipes/new?ai=1&draftId=123&token=abc',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    const button = screen.getByLabelText('Add this recipe to your collection');
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveTextContent('Add Recipe');
+  });
+
+  test('View Recipe button has correct accessibility label', () => {
+    const block: RecipeCardBlockType = {
+      type: 'recipe_card',
+      recipe_id: null,
+      title: 'External View',
+      subtitle: null,
+      image_url: null,
+      href: 'https://example.com/recipe',
+    };
+
+    renderWithRouter(<RecipeCardBlock block={block} />);
+
+    const button = screen.getByLabelText('View External View on external site');
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveTextContent('View Recipe');
+  });
+});

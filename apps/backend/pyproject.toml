@@ -27,6 +27,7 @@ dependencies = [
     "upstash-ratelimit>=1.1.0",
     "upstash-redis>=1.5.0",
     "timezonefinder>=6.0.0",
+    "markdownify>=1.2.2",
 ]
 
 [dependency-groups]

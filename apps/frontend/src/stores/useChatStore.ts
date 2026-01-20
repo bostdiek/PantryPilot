@@ -3,8 +3,8 @@ import { persist } from 'zustand/middleware';
 
 import {
   acceptAction,
-  cancelAction,
   deleteConversation as apiDeleteConversation,
+  cancelAction,
   fetchConversations,
   fetchMessages,
   streamChatMessage,
@@ -174,13 +174,26 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      createConversation: async (title = 'Chat with Nibble') => {
+      createConversation: async (title?: string) => {
         // Create a local conversation optimistically
         // The backend will create the real one on first message
         const now = getNowIso();
+
+        // Generate title with user's local timezone if not provided
+        const conversationTitle =
+          title ||
+          new Intl.DateTimeFormat(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+          }).format(new Date());
+
         const newConversation: Conversation = {
           id: createId(),
-          title,
+          title: conversationTitle,
           createdAt: now,
           lastMessageAt: now,
         };
@@ -316,6 +329,10 @@ export const useChatStore = create<ChatState>()(
         let accumulatedText = '';
 
         // Stream the response
+        // Get the conversation title to pass to backend for new conversations
+        const conversation = get().conversations.find(
+          (c) => c.id === conversationId
+        );
         const abortController = await streamChatMessage(
           conversationId,
           trimmed,
@@ -505,7 +522,8 @@ export const useChatStore = create<ChatState>()(
             onToolResult: (data) => {
               logger.debug('Tool result:', data);
             },
-          }
+          },
+          conversation?.title || undefined
         );
 
         set({ _abortController: abortController });

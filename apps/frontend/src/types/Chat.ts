@@ -29,6 +29,10 @@ export interface LinkBlock {
 
 /**
  * Recipe card block with optional deep link.
+ *
+ * For AI-suggested recipes:
+ * - href: Internal draft approval link (/recipes/new?ai=1&...)
+ * - source_url: Original external recipe URL for viewing
  */
 export interface RecipeCardBlock {
   type: 'recipe_card';
@@ -37,6 +41,7 @@ export interface RecipeCardBlock {
   subtitle: string | null;
   image_url: string | null;
   href: string | null;
+  source_url: string | null;
 }
 
 /**

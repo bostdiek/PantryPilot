@@ -368,7 +368,10 @@ describe('useChatStore', () => {
     // Should have created a new conversation automatically
     expect(result.current.conversations).toHaveLength(1);
     expect(result.current.conversations[0]!.id).not.toBe(convId);
-    expect(result.current.conversations[0]!.title).toBe('Chat with Nibble');
+    // Title should be a formatted date string instead of 'Chat with Nibble'
+    expect(result.current.conversations[0]!.title).toMatch(
+      /^\w{3} \d{1,2}, \d{4}, \d{1,2}:\d{2} (AM|PM)$/
+    );
   });
 
   test('deleteConversation handles API errors', async () => {

@@ -232,6 +232,38 @@ const RecipesDetail: FC = () => {
                   </span>
                 )}
               </div>
+
+              {/* Original Recipe Source Link */}
+              {recipe.link_source && (
+                <div className="mt-4 border-t border-gray-200 pt-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-700">
+                      Source:
+                    </span>
+                    <a
+                      href={recipe.link_source}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      View Original Recipe
+                      <svg
+                        className="h-4 w-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                        />
+                      </svg>
+                    </a>
+                  </div>
+                </div>
+              )}
             </Card>
           </section>
 

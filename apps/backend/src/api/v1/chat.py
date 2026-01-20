@@ -50,6 +50,71 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 logger = logging.getLogger(__name__)
 
 
+def _get_user_friendly_error_message(exc: Exception) -> str:
+    """Convert technical exceptions to user-friendly error messages.
+
+    Handles common AI API errors like rate limits and overloaded models
+    with actionable guidance for users.
+    """
+    exc_str = str(exc).lower()
+
+    # Gemini API overload / service unavailable
+    if "503" in exc_str or "overloaded" in exc_str or "unavailable" in exc_str:
+        return (
+            "The AI service is currently experiencing high demand. "
+            "Please wait a moment and try again."
+        )
+
+    # Rate limiting
+    if "429" in exc_str or "rate limit" in exc_str or "quota" in exc_str:
+        return (
+            "You've sent too many requests. Please wait a minute before trying again."
+        )
+
+    # Timeout errors
+    if "timeout" in exc_str or "timed out" in exc_str:
+        return (
+            "The request took too long to complete. "
+            "Please try a simpler question or try again later."
+        )
+
+    # Model behavior errors (validation failures, etc.)
+    if "unexpectedmodelbehavior" in exc_str or "output validation" in exc_str:
+        return (
+            "The AI had trouble generating a response. "
+            "Please try rephrasing your question."
+        )
+
+    # Network/connection errors
+    if "connection" in exc_str or "network" in exc_str:
+        return (
+            "There was a network issue connecting to the AI service. "
+            "Please check your connection and try again."
+        )
+
+    # Fall back to a generic message for unknown errors
+    logger.error(f"Unhandled chat error: {exc}")
+    return "Something went wrong. Please try again."
+
+
+async def _mark_message_as_failed(db: AsyncSession, message_id: UUID) -> None:
+    """Mark a streaming message as failed during error cleanup.
+
+    This prevents dangling placeholder messages when an error occurs mid-stream.
+    Errors during cleanup are logged but not raised to avoid masking the original error.
+    """
+    try:
+        db_result = await db.execute(
+            select(ChatMessage).where(ChatMessage.id == message_id)
+        )
+        orphaned_message = db_result.scalar_one_or_none()
+        if orphaned_message and orphaned_message.message_metadata.get("streaming"):
+            orphaned_message.message_metadata = {"streaming": False, "error": True}
+            await db.commit()
+    except Exception:
+        logger.exception("Failed to mark message as failed during error cleanup")
+
+
 # -----------------------------------------------------------------------------
 # Conversation History Endpoints
 # -----------------------------------------------------------------------------
@@ -351,6 +416,7 @@ async def _get_or_create_conversation(
     *,
     conversation_id: UUID,
     user_id: UUID,
+    title: str | None = None,
 ) -> ChatConversation:
     result = await db.execute(
         select(ChatConversation).where(
@@ -365,7 +431,7 @@ async def _get_or_create_conversation(
     conversation = ChatConversation(
         id=conversation_id,
         user_id=user_id,
-        title=_generate_conversation_title(),
+        title=title or _generate_conversation_title(),
     )
     db.add(conversation)
     await db.commit()
@@ -425,7 +491,14 @@ async def _handle_agent_stream_event(
     user_id: UUID,
     db: AsyncSession,
     tool_calls_by_id: dict[str, _ToolCallStart],
-) -> tuple[str | None, object | None]:
+) -> tuple[list[str], object | None, list[dict[str, Any]]]:
+    """Handle a single agent stream event and return SSE events to emit.
+
+    Returns:
+        A tuple of (list of SSE event strings, optional final result, emitted blocks).
+        The list may contain multiple events (e.g., tool.result + blocks.append).
+        Emitted blocks are content blocks from tool results (e.g., recipe_card).
+    """
     if isinstance(event, FunctionToolCallEvent):
         tool_name = _extract_tool_name(event.part)
         arguments = _extract_tool_arguments(event.part)
@@ -435,17 +508,20 @@ async def _handle_agent_stream_event(
             started_at=datetime.now(UTC),
         )
         return (
-            ChatSseEvent(
-                event="tool.started",
-                conversation_id=conversation_id,
-                message_id=message_id,
-                data={
-                    "tool_call_id": event.tool_call_id,
-                    "tool_name": tool_name,
-                    "arguments": arguments,
-                },
-            ).to_sse(),
+            [
+                ChatSseEvent(
+                    event="tool.started",
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    data={
+                        "tool_call_id": event.tool_call_id,
+                        "tool_name": tool_name,
+                        "arguments": arguments,
+                    },
+                ).to_sse()
+            ],
             None,
+            [],
         )
 
     if isinstance(event, FunctionToolResultEvent):
@@ -487,7 +563,11 @@ async def _handle_agent_stream_event(
         )
         await db.commit()
 
-        return (
+        # Build list of SSE events to emit
+        sse_events: list[str] = []
+
+        # Always emit tool.result event
+        sse_events.append(
             ChatSseEvent(
                 event="tool.result",
                 conversation_id=conversation_id,
@@ -498,19 +578,38 @@ async def _handle_agent_stream_event(
                     "status": "success",
                     "result": persisted_result,
                 },
-            ).to_sse(),
-            None,
+            ).to_sse()
         )
+
+        # Extract and emit recipe_card blocks from tool results (e.g., suggest_recipe)
+        emitted_blocks: list[dict[str, Any]] = []
+        if isinstance(persisted_result, dict) and "recipe_card" in persisted_result:
+            recipe_card = persisted_result["recipe_card"]
+            if (
+                isinstance(recipe_card, dict)
+                and recipe_card.get("type") == "recipe_card"
+            ):
+                emitted_blocks.append(recipe_card)
+                sse_events.append(
+                    ChatSseEvent(
+                        event="blocks.append",
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        data={"blocks": [recipe_card]},
+                    ).to_sse()
+                )
+
+        return (sse_events, None, emitted_blocks)
 
     if isinstance(event, AgentRunResultEvent):
         result = event.result
         if hasattr(result, "output"):
-            return None, result.output
+            return ([], result.output, [])
         if hasattr(result, "data"):
-            return None, result.data
-        return None, result
+            return ([], result.data, [])
+        return ([], result, [])
 
-    return None, None
+    return ([], None, [])
 
 
 @router.post(
@@ -650,6 +749,7 @@ async def stream_chat_message(
         db,
         conversation_id=conversation_id,
         user_id=current_user.id,
+        title=payload.title,
     )
 
     # Save the user's message to the conversation
@@ -693,12 +793,14 @@ async def stream_chat_message(
         try:
             tool_calls_by_id: dict[str, _ToolCallStart] = {}
             raw_output: object | None = None
+            # Track blocks emitted from tool results (e.g., recipe cards)
+            tool_emitted_blocks: list[dict[str, Any]] = []
 
             deps = ChatAgentDeps(db=db, user=current_user)
             async for agent_event in agent.run_stream_events(
                 payload.content, deps=deps, message_history=message_history
             ):
-                sse_line, result = await _handle_agent_stream_event(
+                sse_events, result, emitted_blocks = await _handle_agent_stream_event(
                     agent_event,
                     conversation_id=conversation_id,
                     message_id=message_id,
@@ -706,8 +808,10 @@ async def stream_chat_message(
                     db=db,
                     tool_calls_by_id=tool_calls_by_id,
                 )
-                if sse_line is not None:
+                for sse_line in sse_events:
                     yield sse_line
+                if emitted_blocks:
+                    tool_emitted_blocks.extend(emitted_blocks)
                 if result is not None:
                     raw_output = result
 
@@ -725,18 +829,19 @@ async def stream_chat_message(
                         event="blocks.append",
                         conversation_id=conversation_id,
                         message_id=message_id,
-                        data={"block": block.model_dump()},
+                        data={"blocks": [block.model_dump()]},
                     ).to_sse()
 
             # Update the assistant message with the final response content
+            # Include both LLM text blocks and tool-emitted blocks (e.g., recipe cards)
             db_result = await db.execute(
                 select(ChatMessage).where(ChatMessage.id == message_id)
             )
             assistant_message = db_result.scalar_one()
-            assistant_message.content_blocks = [
-                block.model_dump() for block in message.blocks
-            ]
-            assistant_message.metadata = {"streaming": False}
+            all_blocks = [block.model_dump() for block in message.blocks]
+            all_blocks.extend(tool_emitted_blocks)
+            assistant_message.content_blocks = all_blocks
+            assistant_message.message_metadata = {"streaming": False}
 
             # Update conversation activity timestamp
             await _update_conversation_activity(db, conversation_id=conversation_id)
@@ -750,24 +855,15 @@ async def stream_chat_message(
             ).to_sse()
         except Exception as exc:
             # Mark orphaned placeholder message as failed to prevent dangling records
-            try:
-                db_result = await db.execute(
-                    select(ChatMessage).where(ChatMessage.id == message_id)
-                )
-                orphaned_message = db_result.scalar_one_or_none()
-                if orphaned_message and orphaned_message.metadata.get("streaming"):
-                    orphaned_message.metadata = {"streaming": False, "error": True}
-                    await db.commit()
-            except Exception:
-                # Don't mask the original exception with cleanup errors, but do log them
-                logger.exception(
-                    "Failed to mark message as failed during error cleanup"
-                )
+            await _mark_message_as_failed(db, message_id)
+
+            # Provide user-friendly error messages for common API issues
+            error_message = _get_user_friendly_error_message(exc)
             yield ChatSseEvent(
                 event="error",
                 conversation_id=conversation_id,
                 message_id=message_id,
-                data={"message": str(exc)},
+                data={"message": error_message},
             ).to_sse()
         finally:
             yield ChatSseEvent(
