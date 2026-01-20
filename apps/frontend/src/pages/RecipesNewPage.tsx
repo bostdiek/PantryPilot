@@ -87,6 +87,7 @@ const RecipesNewPage: FC = () => {
     undefined
   );
   const [userNotes, setUserNotes] = useState('');
+  const [linkSource, setLinkSource] = useState<string | undefined>(undefined);
   const [ingredients, setIngredients] = useState<Ingredient[]>([
     {
       name: '',
@@ -195,6 +196,7 @@ const RecipesNewPage: FC = () => {
       setEthnicity(formSuggestion.ethnicity || '');
       setOvenTemperatureF(formSuggestion.oven_temperature_f);
       setUserNotes(formSuggestion.user_notes || '');
+      setLinkSource(formSuggestion.link_source);
 
       // Prefill ingredients
       if (formSuggestion.ingredients && formSuggestion.ingredients.length > 0) {
@@ -277,6 +279,7 @@ const RecipesNewPage: FC = () => {
           ethnicity: ethnicity || undefined,
           oven_temperature_f: ovenTemperatureF,
           user_notes: userNotes || undefined,
+          link_source: linkSource,
           instructions: filteredInstructions,
           ingredients: filteredIngredients.map((ing) => ({
             name: ing.name,
@@ -322,6 +325,7 @@ const RecipesNewPage: FC = () => {
         ethnicity: ethnicity || undefined,
         oven_temperature_f: ovenTemperatureF,
         user_notes: userNotes || undefined,
+        link_source: linkSource,
         instructions: filteredInstructions,
         ingredients: filteredIngredients.map((ing) => ({
           name: ing.name,

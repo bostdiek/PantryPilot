@@ -416,6 +416,7 @@ async def _get_or_create_conversation(
     *,
     conversation_id: UUID,
     user_id: UUID,
+    title: str | None = None,
 ) -> ChatConversation:
     result = await db.execute(
         select(ChatConversation).where(
@@ -430,7 +431,7 @@ async def _get_or_create_conversation(
     conversation = ChatConversation(
         id=conversation_id,
         user_id=user_id,
-        title=_generate_conversation_title(),
+        title=title or _generate_conversation_title(),
     )
     db.add(conversation)
     await db.commit()
@@ -748,6 +749,7 @@ async def stream_chat_message(
         db,
         conversation_id=conversation_id,
         user_id=current_user.id,
+        title=payload.title,
     )
 
     # Save the user's message to the conversation

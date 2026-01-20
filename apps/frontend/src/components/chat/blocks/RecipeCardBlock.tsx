@@ -51,7 +51,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
   // For AI suggestions with source URL: split clickable areas
   if (hasDraftLink && hasSourceUrl) {
     return (
-      <div className="group my-1 flex max-w-full items-center gap-3 overflow-hidden rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-blue-300 hover:bg-blue-50">
+      <div className="group my-1 flex w-full max-w-full items-center gap-3 overflow-hidden rounded-lg border border-gray-200 bg-white p-3 transition-colors hover:border-blue-300 hover:bg-blue-50">
         {/* Card body links to external source */}
         <a
           href={block.source_url!}
@@ -77,7 +77,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
 
           {/* Recipe info */}
           <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="truncate font-medium text-blue-700 group-hover:text-blue-800 group-hover:underline">
+            <div className="line-clamp-2 font-medium break-words text-blue-700 group-hover:text-blue-800 group-hover:underline">
               {block.title}
               <ExternalLink
                 className="ml-1 inline h-3 w-3"
@@ -85,7 +85,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
               />
             </div>
             {block.subtitle && (
-              <div className="truncate text-xs text-gray-500">
+              <div className="line-clamp-2 text-xs break-words text-gray-500">
                 {block.subtitle}
               </div>
             )}
@@ -119,7 +119,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
 
   // Standard card content for other cases
   const content = (
-    <div className="group hover:border-primary-300 hover:bg-primary-50 my-1 flex max-w-full items-center gap-3 overflow-hidden rounded-lg border border-gray-200 bg-white p-3 transition-colors">
+    <div className="group hover:border-primary-300 hover:bg-primary-50 my-1 flex w-full max-w-full items-center gap-3 overflow-hidden rounded-lg border border-gray-200 bg-white p-3 transition-colors">
       {/* Recipe image or placeholder */}
       <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-md bg-gray-100">
         {block.image_url ? (
@@ -137,11 +137,13 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
 
       {/* Recipe info */}
       <div className="min-w-0 flex-1 overflow-hidden">
-        <div className="group-hover:text-primary-700 truncate font-medium text-gray-900">
+        <div className="group-hover:text-primary-700 line-clamp-2 font-medium break-words text-gray-900">
           {block.title}
         </div>
         {block.subtitle && (
-          <div className="truncate text-xs text-gray-500">{block.subtitle}</div>
+          <div className="line-clamp-2 text-xs break-words text-gray-500">
+            {block.subtitle}
+          </div>
         )}
       </div>
 

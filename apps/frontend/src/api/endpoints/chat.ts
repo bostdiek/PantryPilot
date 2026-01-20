@@ -43,7 +43,8 @@ function getAuthHeaders(): Record<string, string> {
 export async function streamChatMessage(
   conversationId: string | null,
   content: string,
-  callbacks: ChatStreamCallbacks
+  callbacks: ChatStreamCallbacks,
+  title?: string
 ): Promise<AbortController> {
   const abortController = new AbortController();
   const API_BASE_URL = getApiBaseUrl();
@@ -62,7 +63,10 @@ export async function streamChatMessage(
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
-      body: JSON.stringify({ content }),
+      body: JSON.stringify({
+        content,
+        ...(title ? { title } : {}),
+      }),
       signal: abortController.signal,
     });
 

@@ -53,6 +53,10 @@ class ChatStreamRequest(BaseModel):
     """Request payload for streaming a chat assistant response."""
 
     content: str = Field(..., min_length=1, max_length=4000)
+    title: str | None = Field(
+        default=None,
+        description="Optional conversation title for new conversations.",
+    )
     client_context: dict[str, Any] | None = Field(
         default=None,
         description="Optional client context for routing/experiments.",

@@ -284,7 +284,7 @@ describe('RecipeCardBlock draft link handling', () => {
 
     renderWithRouter(<RecipeCardBlock block={block} />);
 
-    const button = screen.getByLabelText('View recipe on external site');
+    const button = screen.getByLabelText('View External View on external site');
     expect(button).toBeInTheDocument();
     expect(button).toHaveTextContent('View Recipe');
   });

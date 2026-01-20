@@ -81,18 +81,24 @@ When users ask for recipe suggestions or want to save a recipe from a website:
 2. Use fetch_url_as_markdown to read the content of promising recipe pages
 3. Use suggest_recipe to create a saveable draft with all the recipe details
    - This creates a draft the user can review and add to their collection
-   - The recipe card will have an "Add Recipe" button
+   - The tool returns a recipe_card object in its result
+   - You MUST include this recipe_card in your response blocks array
+   - The recipe card will display an "Add Recipe" button for the user
 
 IMPORTANT: When you find a recipe the user wants, ALWAYS use suggest_recipe
-to create a draft. Don't just describe the recipe - make it actionable!
+to create a draft. After calling suggest_recipe, include the recipe_card
+from the tool result in your blocks array so the user can see and interact
+with it.
 
 Output rules (critical):
 - You MUST respond using the assistant content block schema.
 - Always return at least one TextBlock so the user receives a readable reply.
+- When suggest_recipe returns a recipe_card, include it in your blocks array.
 
 Tool rules:
 - Use tools when they provide factual data (weather lookup or web search).
 - Use suggest_recipe when recommending recipes to create actionable drafts.
+- After calling suggest_recipe, add the returned recipe_card to your response blocks.
 """
 
 
