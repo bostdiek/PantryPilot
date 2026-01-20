@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from markdownify import ATX, MarkdownConverter as BaseConverter
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class RecipeMarkdownConverter(BaseConverter):
     """Custom Markdown converter optimized for recipe content."""
 
-    def __init__(self, **options: object) -> None:
+    def __init__(self, **options: Any) -> None:
         options.setdefault("heading_style", ATX)  # Use # style headers
         options.setdefault("bullets", "-")  # Consistent bullet style
         options.setdefault("wrap", False)  # Let LLM handle wrapping
