@@ -2,17 +2,33 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from fastapi import HTTPException
 from pydantic_ai import Agent, RunContext
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.users import User
 from schemas.chat_content import AssistantMessage, TextBlock
+from services.ai.markdown_extractor import MarkdownExtractionService
 from services.weather import get_daily_forecast_for_user
 from services.web_search import search_web
+
+
+logger = logging.getLogger(__name__)
+
+# Lazy initialization for MarkdownExtractionService
+_markdown_extractor: MarkdownExtractionService | None = None
+
+
+def _get_markdown_extractor() -> MarkdownExtractionService:
+    global _markdown_extractor
+    if _markdown_extractor is None:
+        _markdown_extractor = MarkdownExtractionService()
+    return _markdown_extractor
 
 
 CHAT_SYSTEM_PROMPT = """
@@ -105,6 +121,71 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
             ],
             "message": outcome.message,
         }
+
+    @agent.tool
+    async def fetch_url_as_markdown(
+        _ctx: RunContext[ChatAgentDeps],
+        url: str,
+    ) -> dict[str, Any]:
+        """Fetch a web page and convert it to readable Markdown.
+
+        Use this tool when you need to read the content of a web page,
+        especially recipe pages. The page will be fetched, cleaned of
+        navigation and scripts, and converted to Markdown format that
+        you can analyze.
+
+        WORKFLOW TIP: After using web_search to find recipe URLs, use this
+        tool to read the full recipe content. Then use suggest_recipe to
+        create a saveable draft for the user.
+
+        Args:
+            url: The URL of the web page to fetch (from web_search results
+                 or provided by the user)
+
+        Returns:
+            Markdown content of the page that you can analyze to extract
+            recipe details like title, ingredients, instructions, etc.
+        """
+        extractor = _get_markdown_extractor()
+
+        try:
+            markdown_content = await extractor.fetch_as_markdown(url)
+
+            if not markdown_content:
+                return {
+                    "status": "error",
+                    "url": url,
+                    "content": "",
+                    "message": "No content could be extracted from this URL.",
+                }
+
+            return {
+                "status": "ok",
+                "url": url,
+                "content": markdown_content,
+                "message": (
+                    f"Successfully fetched content from {url}. "
+                    "Analyze this to extract recipe details."
+                ),
+            }
+
+        except HTTPException as e:
+            return {
+                "status": "error",
+                "url": url,
+                "content": "",
+                "message": str(e.detail),
+            }
+        except Exception as e:
+            logger.error(f"Failed to fetch URL as Markdown: {e}")
+            return {
+                "status": "error",
+                "url": url,
+                "content": "",
+                "message": (
+                    "Failed to fetch the URL. Please check if it's a valid web page."
+                ),
+            }
 
     return agent
 
