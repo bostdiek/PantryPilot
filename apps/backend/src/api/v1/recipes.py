@@ -192,6 +192,10 @@ async def create_recipe(
             db.add(recipe_ingredient)
             recipe_ingredients.append(recipe_ingredient)
 
+        # Refresh recipe with ingredients for embedding generation
+        await db.flush()
+        await db.refresh(new_recipe, ["recipeingredients"])
+
         # Generate embeddings for semantic search (non-blocking)
         try:
             context, embedding = await generate_recipe_embedding(new_recipe)
