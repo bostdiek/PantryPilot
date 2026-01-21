@@ -80,12 +80,12 @@ class TestSuggestRecipeTool:
 
         with (
             patch(
-                "services.chat_agent.create_success_draft",
+                "services.chat_agent.tools.suggestions.create_success_draft",
                 new_callable=AsyncMock,
                 return_value=draft,
             ) as mock_create_draft,
             patch(
-                "services.chat_agent.create_draft_token",
+                "services.chat_agent.tools.suggestions.create_draft_token",
                 return_value="test-jwt-token",
             ),
         ):
@@ -180,7 +180,7 @@ class TestSuggestRecipeTool:
     async def test_suggest_recipe_error_handling(self) -> None:
         """Test error handling when draft creation fails."""
         with patch(
-            "services.chat_agent.create_success_draft",
+            "services.chat_agent.tools.suggestions.create_success_draft",
             new_callable=AsyncMock,
             side_effect=Exception("Database connection failed"),
         ):

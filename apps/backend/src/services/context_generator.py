@@ -126,6 +126,9 @@ class RecipeContextGenerator:
                     temperature=0.3,  # Low temp for consistent output
                 ),
             )
+            if response.text is None:
+                logger.warning(f"Empty response for '{recipe.name}'")
+                return self._generate_fallback_context(recipe)
             context = response.text.strip()
             logger.debug(f"Generated context for '{recipe.name}': {context[:80]}...")
             return context

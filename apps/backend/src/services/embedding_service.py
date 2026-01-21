@@ -47,13 +47,13 @@ def generate_recipe_text(recipe: Recipe) -> str:
 def _add_basic_info(parts: list[str], recipe: Recipe) -> None:
     """Add basic recipe information to parts list."""
     if recipe.description:
-        parts.append(recipe.description)
+        parts.append(str(recipe.description))
     if recipe.ethnicity:
-        parts.append(f"Cuisine: {recipe.ethnicity}")
+        parts.append(f"Cuisine: {str(recipe.ethnicity)}")
     if recipe.course_type:
-        parts.append(f"Course: {recipe.course_type}")
+        parts.append(f"Course: {str(recipe.course_type)}")
     if recipe.difficulty:
-        parts.append(f"Difficulty: {recipe.difficulty}")
+        parts.append(f"Difficulty: {str(recipe.difficulty)}")
 
 
 def _add_timing_info(parts: list[str], recipe: Recipe) -> None:
@@ -102,11 +102,14 @@ async def generate_embedding(text: str) -> list[float]:
         ),
     )
 
+    if not result.embeddings:
+        raise ValueError("No embeddings returned from API")
+
     # Normalize for cosine similarity (required for 768 dimensions)
     embedding = np.array(result.embeddings[0].values)
     normalized = embedding / np.linalg.norm(embedding)
 
-    return normalized.tolist()
+    return list(normalized.tolist())
 
 
 async def generate_query_embedding(query: str) -> list[float]:
@@ -125,10 +128,13 @@ async def generate_query_embedding(query: str) -> list[float]:
         ),
     )
 
+    if not result.embeddings:
+        raise ValueError("No embeddings returned from API")
+
     embedding = np.array(result.embeddings[0].values)
     normalized = embedding / np.linalg.norm(embedding)
 
-    return normalized.tolist()
+    return list(normalized.tolist())
 
 
 async def generate_recipe_embedding(recipe: Recipe) -> tuple[str, list[float]]:
