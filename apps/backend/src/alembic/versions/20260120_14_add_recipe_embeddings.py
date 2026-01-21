@@ -55,19 +55,56 @@ def upgrade() -> None:
         WITH (m = 16, ef_construction = 64)
     """)
 
+    # Clean up duplicate recipe names before creating unique index
+    # Keep the oldest recipe for each (user_id, LOWER(name)) combination
+    op.execute("""
+        DELETE FROM recipe_names
+        WHERE id IN (
+            SELECT id
+            FROM (
+                SELECT id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY user_id, LOWER(name)
+                           ORDER BY created_at ASC
+                       ) as rn
+                FROM recipe_names
+            ) t
+            WHERE rn > 1
+        )
+    """)
+
+    # Clean up duplicate ingredient names before creating unique index
+    # Keep the oldest ingredient for each (user_id, LOWER(ingredient_name)) combination
+    op.execute("""
+        DELETE FROM ingredient_names
+        WHERE id IN (
+            SELECT id
+            FROM (
+                SELECT id,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY user_id, LOWER(ingredient_name)
+                           ORDER BY created_at ASC
+                       ) as rn
+                FROM ingredient_names
+            ) t
+            WHERE rn > 1
+        )
+    """)
+
     # Add deduplication indexes to prevent duplicate recipes per user
-    # Partial unique index: prevent same user from creating duplicate recipe names
+    # Note: ingredient_names already has a UniqueConstraint at the model level,
+    # but we add a functional index here for case-insensitive uniqueness
     op.execute("""
         CREATE UNIQUE INDEX idx_recipe_names_user_name_unique
         ON recipe_names (user_id, LOWER(name))
-        WHERE deleted_at IS NULL
     """)
 
     # Add deduplication index for ingredients as well
+    # This supplements the existing uq_ingredient_user_name constraint
+    # with case-insensitive matching
     op.execute("""
         CREATE UNIQUE INDEX idx_ingredient_names_user_name_unique
-        ON ingredient_names (user_id, LOWER(name))
-        WHERE deleted_at IS NULL
+        ON ingredient_names (user_id, LOWER(ingredient_name))
     """)
 
 
