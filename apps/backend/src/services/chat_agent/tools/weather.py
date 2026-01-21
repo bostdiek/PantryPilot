@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic_ai import RunContext
 
+from services.chat_agent.deps import ChatAgentDeps
 from services.weather import get_daily_forecast_for_user
-
-
-if TYPE_CHECKING:
-    from services.chat_agent.agent import ChatAgentDeps
 
 
 async def tool_get_daily_weather(

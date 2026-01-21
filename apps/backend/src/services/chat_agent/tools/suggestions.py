@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic_ai import RunContext
 
 from core.security import create_draft_token
+from dependencies.db import AsyncSessionLocal
 from services.ai.draft_service import create_success_draft
-
-
-if TYPE_CHECKING:
-    from services.chat_agent.agent import ChatAgentDeps
+from services.chat_agent.deps import ChatAgentDeps
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +58,6 @@ async def tool_suggest_recipe(
         Recipe card data with deep-link for user approval. The card
         includes an "Add Recipe" button that opens a pre-filled form.
     """
-    db = ctx.deps.db
     user = ctx.deps.user
 
     # Build recipe payload
@@ -80,13 +77,18 @@ async def tool_suggest_recipe(
         recipe_data["link_source"] = source_url
 
     try:
-        # Create the draft using existing service
-        draft = await create_success_draft(
-            db=db,
-            current_user=user,
-            source_url=source_url or "chat://recommendation",
-            generated_recipe=recipe_data,
-        )
+        # Use a separate database session for draft creation to avoid
+        # conflicts with concurrent tool executions (pydantic-ai runs
+        # multiple tools in parallel, which can cause session conflicts)
+        async with AsyncSessionLocal() as draft_db:
+            draft = await create_success_draft(
+                db=draft_db,
+                current_user=user,
+                source_url=source_url or "chat://recommendation",
+                generated_recipe=recipe_data,
+            )
+            # Commit the draft in this separate session
+            await draft_db.commit()
 
         # Generate signed token for secure access
         token = create_draft_token(draft_id=draft.id, user_id=user.id)

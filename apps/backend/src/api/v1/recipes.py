@@ -112,9 +112,11 @@ async def create_recipe(
         recipe_ingredients = []
         for ing_data in recipe_data.ingredients:
             # Check if ingredient already exists by name for this user
+            # Use case-insensitive matching to align with the unique index
+            # on (user_id, LOWER(ingredient_name))
             stmt = select(Ingredient).where(
                 and_(
-                    Ingredient.ingredient_name == ing_data.name,
+                    func.lower(Ingredient.ingredient_name) == ing_data.name.lower(),
                     or_(
                         Ingredient.user_id == current_user.id,
                         Ingredient.user_id.is_(None),  # Legacy ingredients
@@ -329,9 +331,11 @@ async def _get_or_create_ingredient(
             that are not handled as concurrent creation conflicts.
     """
     # Look for ingredient by name for this user or legacy null user_id
+    # Use case-insensitive matching to align with the unique index
+    # on (user_id, LOWER(ingredient_name))
     stmt = select(Ingredient).where(
         and_(
-            Ingredient.ingredient_name == name,
+            func.lower(Ingredient.ingredient_name) == name.lower(),
             or_(
                 Ingredient.user_id == user_id,
                 Ingredient.user_id.is_(None),  # Legacy ingredients

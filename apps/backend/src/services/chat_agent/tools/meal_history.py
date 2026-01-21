@@ -4,18 +4,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic_ai import RunContext
 from sqlalchemy import and_, select
 from sqlalchemy.orm import selectinload
 
 from models.meal_history import Meal
+from services.chat_agent.deps import ChatAgentDeps
 from services.chat_agent.schemas import MealPlanHistoryResponse, TimelineDayMeals
-
-
-if TYPE_CHECKING:
-    from services.chat_agent.agent import ChatAgentDeps
 
 
 async def tool_get_meal_plan_history(

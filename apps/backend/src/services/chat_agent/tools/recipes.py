@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
 from pydantic_ai import RunContext
 from sqlalchemy import and_, desc, func, or_, select, text
 
 from models.meal_history import Meal
 from models.recipes_names import Recipe
+from services.chat_agent.deps import ChatAgentDeps
 from services.embedding_service import generate_query_embedding
-
-
-if TYPE_CHECKING:
-    from services.chat_agent.agent import ChatAgentDeps
 
 
 SortBy = Literal["relevance", "name", "times_cooked", "cook_time"]

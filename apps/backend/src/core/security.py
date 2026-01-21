@@ -115,13 +115,13 @@ def create_draft_token(
     Args:
         draft_id: The UUID of the draft
         user_id: The UUID of the user who owns the draft
-        exp_delta: Optional expiration delta. If None, defaults to 1 hour.
+        exp_delta: Optional expiration delta. If None, defaults to 24 hours.
 
     Returns:
         Signed JWT token containing draft_id, user_id, and expiration
     """
     if exp_delta is None:
-        exp_delta = timedelta(hours=1)
+        exp_delta = timedelta(hours=24)
 
     expire = datetime.now(UTC) + exp_delta
     payload = {

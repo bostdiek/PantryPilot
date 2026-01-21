@@ -2,10 +2,10 @@
 
 from services.chat_agent.agent import (
     CHAT_SYSTEM_PROMPT,
-    ChatAgentDeps,
     get_chat_agent,
     normalize_agent_output,
 )
+from services.chat_agent.deps import ChatAgentDeps
 from services.chat_agent.schemas import (
     DayOfWeekMeals,
     MealEntry,

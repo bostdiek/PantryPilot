@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -11,11 +10,10 @@ from pydantic_ai import Agent
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
-from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
-from models.users import User
 from schemas.chat_content import AssistantMessage, TextBlock
+from services.chat_agent.deps import ChatAgentDeps
 from services.chat_agent.tools import (
     tool_fetch_url_as_markdown,
     tool_get_daily_weather,
@@ -88,14 +86,6 @@ Tool rules:
 # ---------------------------------------------------------------------------
 # Agent dependencies
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class ChatAgentDeps:
-    """Dependencies injected into the chat agent context."""
-
-    db: AsyncSession
-    user: User
 
 
 # ---------------------------------------------------------------------------

@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import HTTPException
 from pydantic_ai import RunContext
 
 from schemas.chat_streaming import MAX_SSE_EVENT_BYTES
 from services.ai.markdown_extractor import MarkdownExtractionService
+from services.chat_agent.deps import ChatAgentDeps
 from services.web_search import search_web
-
-
-if TYPE_CHECKING:
-    from services.chat_agent.agent import ChatAgentDeps
 
 
 logger = logging.getLogger(__name__)
