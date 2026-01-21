@@ -6,6 +6,7 @@ for recipes and their ingredients.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
@@ -37,8 +38,11 @@ from schemas.recipes import (
     RecipeSearchResponse,
     RecipeUpdate,
 )
+from services.deduplication_service import check_recipe_duplicate
+from services.embedding_service import generate_recipe_embedding
 
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/recipes", tags=["recipes"])
 
 
@@ -50,11 +54,13 @@ router = APIRouter(prefix="/recipes", tags=["recipes"])
     description=(
         "Create a new recipe with its ingredients, "
         "returning the created recipe with IDs. "
-        "Requires authentication."
+        "Requires authentication. "
+        "Returns 409 Conflict if a duplicate is detected."
     ),
     responses={
         201: {"description": "Recipe created successfully"},
         401: {"description": "Authentication required"},
+        409: {"description": "Duplicate recipe detected"},
         422: {"description": "Validation error"},
     },
 )
@@ -62,6 +68,7 @@ async def create_recipe(
     recipe_data: RecipeCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
+    force: bool = False,
 ) -> ApiResponse[RecipeOut]:
     """Create a new recipe with ingredients.
 
@@ -71,13 +78,40 @@ async def create_recipe(
     Args:
         recipe_data: The recipe data from the request body.
         db: The database session dependency.
+        current_user: The authenticated user.
+        force: If True, skip duplicate checks and create anyway.
 
     Returns:
         The newly created recipe with all its data.
 
     Raises:
         HTTPException: If there's an integrity error or other database issue.
+        HTTPException 409: If a duplicate recipe is detected and force=False.
     """
+    # Check for duplicates unless force=True
+    if not force:
+        ingredient_names = (
+            [i.name for i in recipe_data.ingredients] if recipe_data.ingredients else []
+        )
+        dup_check = await check_recipe_duplicate(
+            db, current_user.id, recipe_data.title, ingredient_names
+        )
+
+        if dup_check["is_duplicate"]:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": f"Potential duplicate: {dup_check['reason']}",
+                    "existing_recipe_id": (
+                        str(dup_check["exact_match"].id)
+                        if dup_check["exact_match"]
+                        else None
+                    ),
+                    "similar_recipes": dup_check["similar_matches"],
+                    "hint": "Add ?force=true to create anyway",
+                },
+            )
+
     try:
         # Create the recipe first
         total_time = recipe_data.prep_time_minutes + recipe_data.cook_time_minutes
@@ -157,6 +191,18 @@ async def create_recipe(
             )
             db.add(recipe_ingredient)
             recipe_ingredients.append(recipe_ingredient)
+
+        # Generate embeddings for semantic search (non-blocking)
+        try:
+            context, embedding = await generate_recipe_embedding(new_recipe)
+            new_recipe.search_context = context
+            new_recipe.search_context_generated_at = datetime.now(UTC)
+            new_recipe.embedding = embedding
+        except Exception as e:
+            logger.warning(
+                f"Failed to generate embedding for recipe {new_recipe.id}: {e}"
+            )
+            # Continue without embedding - can backfill later
 
         # Commit all changes
         await db.commit()
@@ -635,6 +681,26 @@ async def update_recipe(
             await _replace_recipe_ingredients(
                 db, recipe, recipe_data.ingredients, current_user.id
             )
+
+        # Regenerate embeddings on significant updates
+        # (name, description, or ingredients)
+        if any(
+            [
+                recipe_data.title is not None,
+                recipe_data.description is not None,
+                recipe_data.ingredients is not None,
+            ]
+        ):
+            try:
+                context, embedding = await generate_recipe_embedding(recipe)
+                recipe.search_context = context
+                recipe.search_context_generated_at = datetime.now(UTC)
+                recipe.embedding = embedding
+            except Exception as e:
+                logger.warning(
+                    f"Failed to regenerate embedding for recipe {recipe.id}: {e}"
+                )
+                # Continue without embedding update
 
         await db.commit()
         await db.refresh(recipe)

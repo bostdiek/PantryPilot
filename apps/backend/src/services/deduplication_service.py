@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from sqlalchemy import and_, func, select, text
@@ -35,20 +35,20 @@ async def check_recipe_duplicate(
     user_id: UUID,
     name: str,
     ingredient_names: list[str] | None = None,
-) -> dict:
+) -> dict[str, Any]:
     """Check if a recipe is a potential duplicate.
 
     Returns:
         {
             "is_duplicate": bool,
             "exact_match": Recipe | None,
-            "similar_matches": list[Recipe],
+            "similar_matches": list[dict],
             "reason": str | None,
         }
     """
     from models.recipes_names import Recipe
 
-    result = {
+    result: dict[str, Any] = {
         "is_duplicate": False,
         "exact_match": None,
         "similar_matches": [],
@@ -112,7 +112,7 @@ async def check_ingredient_duplicate(
     db: AsyncSession,
     user_id: UUID | None,
     ingredient_name: str,
-) -> dict:
+) -> dict[str, Any]:
     """Check if an ingredient is a potential duplicate.
 
     Returns:
@@ -124,7 +124,7 @@ async def check_ingredient_duplicate(
     """
     from models.ingredient_names import Ingredient
 
-    result = {
+    result: dict[str, Any] = {
         "is_duplicate": False,
         "exact_match": None,
         "similar_matches": [],
@@ -187,7 +187,7 @@ async def find_duplicate_recipes(
     db: AsyncSession,
     user_id: UUID | None = None,
     similarity_threshold: float = 0.85,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Find all potential duplicate recipes in the database.
 
     For cleanup/reporting purposes.
