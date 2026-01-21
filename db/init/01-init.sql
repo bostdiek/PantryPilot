@@ -10,6 +10,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Text search and similarity functions
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
+-- Vector similarity search for recipe embeddings
+CREATE EXTENSION IF NOT EXISTS "vector";
+
 -- Statistics collection for query optimization
 CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
 

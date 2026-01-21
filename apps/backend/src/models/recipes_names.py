@@ -1,5 +1,7 @@
 import uuid
+from datetime import datetime
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,6 +32,14 @@ class Recipe(Base):
     user_notes = Column(Text, nullable=True)
     ai_summary = Column(Text, nullable=True)
     link_source = Column(Text, nullable=True)
+
+    # Semantic search fields
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
+    search_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    search_context_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 

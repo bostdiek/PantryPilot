@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database Service
   db:
-    image: postgres:15-alpine
+    image: ankane/pgvector:v0.8.0-pg15
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
