@@ -353,13 +353,16 @@ dependencies = [
     { name = "azure-communication-email" },
     { name = "beautifulsoup4" },
     { name = "fastapi", extra = ["standard"] },
+    { name = "google-genai" },
     { name = "google-generativeai" },
     { name = "greenlet" },
     { name = "gunicorn" },
     { name = "httpx" },
     { name = "itsdangerous" },
     { name = "markdownify" },
+    { name = "numpy" },
     { name = "openai" },
+    { name = "pgvector" },
     { name = "pillow" },
     { name = "pydantic-ai" },
     { name = "pydantic-settings" },
@@ -395,13 +398,16 @@ requires-dist = [
     { name = "azure-communication-email", specifier = ">=1.1.0" },
     { name = "beautifulsoup4", specifier = ">=4.14.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.116.1" },
+    { name = "google-genai", specifier = ">=1.57.0" },
     { name = "google-generativeai", specifier = ">=0.8.5" },
     { name = "greenlet", specifier = ">=3.0.0" },
     { name = "gunicorn", specifier = ">=23.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "itsdangerous", specifier = ">=2.2.0" },
     { name = "markdownify", specifier = ">=1.2.2" },
+    { name = "numpy", specifier = ">=2.4.1" },
     { name = "openai", specifier = ">=1.109.1" },
+    { name = "pgvector", specifier = ">=0.4.2" },
     { name = "pillow", specifier = ">=11.3.0" },
     { name = "pydantic-ai", specifier = ">=1.42.0" },
     { name = "pydantic-settings", specifier = ">=2.10.1" },
@@ -2693,6 +2699,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fa/2a/52a8da6fe965dea6192eb716b357558e103aea0a1e9a8352ad575a8406ca/pathvalidate-3.3.1.tar.gz", hash = "sha256:b18c07212bfead624345bb8e1d6141cdcf15a39736994ea0b94035ad2b1ba177", size = 63262 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9a/70/875f4a23bfc4731703a5835487d0d2fb999031bd415e7d17c0ae615c18b7/pathvalidate-3.3.1-py3-none-any.whl", hash = "sha256:5263baab691f8e1af96092fa5137ee17df5bdfbd6cff1fcac4d6ef4bc2e1735f", size = 24305 },
+]
+
+[[package]]
+name = "pgvector"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/25/6c/6d8b4b03b958c02fa8687ec6063c49d952a189f8c91ebbe51e877dfab8f7/pgvector-0.4.2.tar.gz", hash = "sha256:322cac0c1dc5d41c9ecf782bd9991b7966685dee3a00bc873631391ed949513a", size = 31354 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/26/6cee8a1ce8c43625ec561aff19df07f9776b7525d9002c86bceb3e0ac970/pgvector-0.4.2-py3-none-any.whl", hash = "sha256:549d45f7a18593783d5eec609ea1684a724ba8405c4cb182a0b2b08aeff04e08", size = 27441 },
 ]
 
 [[package]]
