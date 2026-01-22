@@ -3,8 +3,10 @@ import {
   createRecipe as apiCreateRecipe,
   deleteRecipe as apiDeleteRecipe,
   updateRecipe as apiUpdateRecipe,
+  extractDuplicateInfo,
   getAllRecipes,
   getRecipeById,
+  type DuplicateRecipeError,
 } from '../api/endpoints/recipes';
 import { logger } from '../lib/logger';
 import type { AIDraftPayload } from '../types/AIDraft';
@@ -60,10 +62,19 @@ interface RecipeState {
   formSuggestion: RecipeCreate | null;
   isAISuggestion: boolean;
 
+  // Duplicate detection state
+  duplicateInfo: DuplicateRecipeError | null;
+  pendingRecipeData: RecipeCreate | null;
+
   // Actions
   fetchRecipes: () => Promise<void>;
   fetchRecipeById: (id: string) => Promise<Recipe | null>;
-  addRecipe: (recipe: RecipeCreate) => Promise<Recipe | null>;
+  addRecipe: (
+    recipe: RecipeCreate,
+    options?: { force?: boolean }
+  ) => Promise<Recipe | null>;
+  forceCreateRecipe: () => Promise<Recipe | null>;
+  clearDuplicateState: () => void;
   updateRecipe: (
     id: string,
     updates: Partial<Recipe>
@@ -198,6 +209,8 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
   pagination: defaultPagination,
   formSuggestion: null,
   isAISuggestion: false,
+  duplicateInfo: null,
+  pendingRecipeData: null,
 
   fetchRecipes: async () => {
     set({ isLoading: true, error: null });
@@ -258,10 +271,10 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
     }
   },
 
-  addRecipe: async (recipe: RecipeCreate) => {
-    set({ isLoading: true, error: null });
+  addRecipe: async (recipe: RecipeCreate, options?: { force?: boolean }) => {
+    set({ isLoading: true, error: null, duplicateInfo: null });
     try {
-      const newRecipe = await apiCreateRecipe(recipe);
+      const newRecipe = await apiCreateRecipe(recipe, options);
 
       logger.debug('API response from addRecipe:', newRecipe);
 
@@ -271,6 +284,7 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       set({
         recipes: allRecipes,
         isLoading: false,
+        pendingRecipeData: null,
       });
 
       // Apply filters after adding
@@ -279,6 +293,20 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
       return newRecipe;
     } catch (error) {
       logger.error('Error adding recipe:', error);
+
+      // Check if this is a duplicate error (409 Conflict)
+      const dupInfo = extractDuplicateInfo(error);
+      if (dupInfo) {
+        logger.debug('Duplicate recipe detected:', dupInfo);
+        set({
+          duplicateInfo: dupInfo,
+          pendingRecipeData: recipe,
+          isLoading: false,
+          error: null, // Don't set error for duplicates - handled by modal
+        });
+        return null;
+      }
+
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -291,6 +319,24 @@ export const useRecipeStore = create<RecipeState>((set, get) => ({
 
       return null;
     }
+  },
+
+  forceCreateRecipe: async () => {
+    const pendingData = get().pendingRecipeData;
+    if (!pendingData) {
+      logger.warn('No pending recipe data to force create');
+      return null;
+    }
+
+    // Call addRecipe with force=true
+    return get().addRecipe(pendingData, { force: true });
+  },
+
+  clearDuplicateState: () => {
+    set({
+      duplicateInfo: null,
+      pendingRecipeData: null,
+    });
   },
 
   updateRecipe: async (id: string, recipe: RecipeUpdate) => {

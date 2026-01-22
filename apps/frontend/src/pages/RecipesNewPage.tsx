@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getRecipeById } from '../api/endpoints/recipes';
 import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
+import {
+  DuplicateRecipeModal,
+  type SimilarRecipeMatch,
+} from '../components/recipes/DuplicateRecipeModal';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -18,6 +23,7 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
+import type { Recipe } from '../types/Recipe';
 import {
   RECIPE_CATEGORIES,
   RECIPE_DIFFICULTIES,
@@ -66,9 +72,16 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
 
 const RecipesNewPage: FC = () => {
   const navigate = useNavigate();
-  const { success } = useToast();
-  const { addRecipe, formSuggestion, isAISuggestion, clearFormSuggestion } =
-    useRecipeStore();
+  const { success, info } = useToast();
+  const {
+    addRecipe,
+    formSuggestion,
+    isAISuggestion,
+    clearFormSuggestion,
+    duplicateInfo,
+    forceCreateRecipe,
+    clearDuplicateState,
+  } = useRecipeStore();
   const [showAISuggestion, setShowAISuggestion] = useState(true);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -102,6 +115,14 @@ const RecipesNewPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
   const [isAddByPhotoModalOpen, setIsAddByPhotoModalOpen] = useState(false);
+
+  // Duplicate modal state
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [isCreatingAnyway, setIsCreatingAnyway] = useState(false);
+  const [existingRecipe, setExistingRecipe] = useState<Recipe | null>(null);
+  const [similarRecipes, setSimilarRecipes] = useState<SimilarRecipeMatch[]>(
+    []
+  );
 
   // Shared paste handling hook
   const {
@@ -221,6 +242,84 @@ const RecipesNewPage: FC = () => {
       }
     };
   }, [formSuggestion, clearFormSuggestion]);
+
+  // Handle duplicate detection - open modal and fetch full recipe details
+  useEffect(() => {
+    if (duplicateInfo) {
+      const fetchDuplicateDetails = async () => {
+        try {
+          // If there's an exact match, fetch the full recipe
+          if (duplicateInfo.existing_recipe_id) {
+            const recipe = await getRecipeById(
+              duplicateInfo.existing_recipe_id
+            );
+            setExistingRecipe(recipe);
+            setSimilarRecipes([]);
+          }
+          // If there are similar recipes, fetch their details
+          else if (
+            duplicateInfo.similar_recipes &&
+            duplicateInfo.similar_recipes.length > 0
+          ) {
+            const similarMatches: SimilarRecipeMatch[] = await Promise.all(
+              duplicateInfo.similar_recipes.map(async (match) => {
+                const recipe = await getRecipeById(match.id);
+                return { recipe, similarity: match.similarity };
+              })
+            );
+            setSimilarRecipes(similarMatches);
+            setExistingRecipe(null);
+          }
+          setIsDuplicateModalOpen(true);
+        } catch (err) {
+          logger.error('Failed to fetch duplicate recipe details:', err);
+          // If we can't fetch details, show the modal anyway with basic info
+          setIsDuplicateModalOpen(true);
+        }
+      };
+
+      fetchDuplicateDetails();
+    }
+  }, [duplicateInfo]);
+
+  // Duplicate modal handlers
+  const handleViewExisting = (recipeId: string) => {
+    clearDuplicateState();
+    setIsDuplicateModalOpen(false);
+    navigate(`/recipes/${recipeId}`);
+  };
+
+  const handleCreateAnyway = async () => {
+    setIsCreatingAnyway(true);
+    try {
+      const result = await forceCreateRecipe();
+      if (result) {
+        success('Recipe created successfully!');
+        clearDuplicateState();
+        setIsDuplicateModalOpen(false);
+        navigate('/recipes');
+      } else {
+        setError('Failed to create recipe. Please try again.');
+        setIsDuplicateModalOpen(false);
+      }
+    } catch (err) {
+      logger.error('Failed to force create recipe:', err);
+      setError(
+        sanitizeErrorMessage(err, 'Failed to create recipe. Please try again.')
+      );
+      setIsDuplicateModalOpen(false);
+    } finally {
+      setIsCreatingAnyway(false);
+    }
+  };
+
+  const handleDuplicateModalClose = () => {
+    if (!isCreatingAnyway) {
+      clearDuplicateState();
+      setIsDuplicateModalOpen(false);
+      info('Recipe creation cancelled.');
+    }
+  };
 
   // Check if there are unsaved changes
   const hasUnsavedChanges =
@@ -799,6 +898,20 @@ const RecipesNewPage: FC = () => {
         <AddByPhotoModal
           isOpen={isAddByPhotoModalOpen}
           onClose={() => setIsAddByPhotoModalOpen(false)}
+        />
+
+        {/* Duplicate Recipe Modal */}
+        <DuplicateRecipeModal
+          isOpen={isDuplicateModalOpen}
+          onClose={handleDuplicateModalClose}
+          duplicateType={
+            duplicateInfo?.existing_recipe_id ? 'exact' : 'similar'
+          }
+          existingRecipe={existingRecipe ?? undefined}
+          similarRecipes={similarRecipes}
+          onViewExisting={handleViewExisting}
+          onCreateAnyway={handleCreateAnyway}
+          isCreatingAnyway={isCreatingAnyway}
         />
       </Card>
     </Container>

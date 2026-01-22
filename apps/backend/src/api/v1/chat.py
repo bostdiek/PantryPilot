@@ -104,6 +104,9 @@ async def _mark_message_as_failed(db: AsyncSession, message_id: UUID) -> None:
     Errors during cleanup are logged but not raised to avoid masking the original error.
     """
     try:
+        # If an earlier DB operation failed, the session may be in an aborted
+        # transaction state. Roll back so cleanup queries can run.
+        await db.rollback()
         db_result = await db.execute(
             select(ChatMessage).where(ChatMessage.id == message_id)
         )
@@ -854,6 +857,12 @@ async def stream_chat_message(
                 data={},
             ).to_sse()
         except Exception as exc:
+            try:
+                # Ensure the session isn't stuck in a failed transaction before
+                # attempting cleanup writes/reads.
+                await db.rollback()
+            except Exception:
+                logger.exception("Failed to rollback session after streaming error")
             # Mark orphaned placeholder message as failed to prevent dangling records
             await _mark_message_as_failed(db, message_id)
 
