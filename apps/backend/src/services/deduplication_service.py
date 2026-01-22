@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Similarity threshold for fuzzy matching (0.0-1.0)
-RECIPE_SIMILARITY_THRESHOLD = 0.8
+# Lowered to 0.5 to catch variations like "Homemade Apple Pie" vs "Apple Pie"
+RECIPE_SIMILARITY_THRESHOLD = 0.5
 INGREDIENT_SIMILARITY_THRESHOLD = 0.85
 
 
@@ -81,16 +82,13 @@ async def check_recipe_duplicate(
         ORDER BY sim DESC
         LIMIT 5
     """
+    ).bindparams(
+        name=name,
+        user_id=user_id,
+        threshold=RECIPE_SIMILARITY_THRESHOLD,
     )
 
-    fuzzy_result = await db.execute(
-        fuzzy_stmt,
-        {
-            "name": name,
-            "user_id": user_id,
-            "threshold": RECIPE_SIMILARITY_THRESHOLD,
-        },
-    )
+    fuzzy_result = await db.execute(fuzzy_stmt)
     similar = fuzzy_result.mappings().all()
 
     if similar:
@@ -155,16 +153,13 @@ async def check_ingredient_duplicate(
         ORDER BY sim DESC
         LIMIT 3
     """
+    ).bindparams(
+        name=ingredient_name,
+        user_id=user_id,
+        threshold=INGREDIENT_SIMILARITY_THRESHOLD,
     )
 
-    fuzzy_result = await db.execute(
-        fuzzy_stmt,
-        {
-            "name": ingredient_name,
-            "user_id": user_id,
-            "threshold": INGREDIENT_SIMILARITY_THRESHOLD,
-        },
-    )
+    fuzzy_result = await db.execute(fuzzy_stmt)
     similar = fuzzy_result.mappings().all()
 
     if similar:

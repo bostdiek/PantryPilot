@@ -88,29 +88,41 @@ async def create_recipe(
         HTTPException: If there's an integrity error or other database issue.
         HTTPException 409: If a duplicate recipe is detected and force=False.
     """
-    # Check for duplicates unless force=True
-    if not force:
-        ingredient_names = (
-            [i.name for i in recipe_data.ingredients] if recipe_data.ingredients else []
-        )
-        dup_check = await check_recipe_duplicate(
-            db, current_user.id, recipe_data.title, ingredient_names
+    # Always check for exact duplicates (enforced by unique index anyway)
+    # When force=True, only allow bypassing similar matches, not exact matches
+    ingredient_names = (
+        [i.name for i in recipe_data.ingredients] if recipe_data.ingredients else []
+    )
+    dup_check = await check_recipe_duplicate(
+        db, current_user.id, recipe_data.title, ingredient_names
+    )
+
+    # Exact matches are never allowed (would violate unique constraint)
+    if dup_check["exact_match"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": (
+                    f"Exact duplicate: A recipe with the name "
+                    f"'{recipe_data.title}' already exists"
+                ),
+                "existing_recipe_id": str(dup_check["exact_match"].id),
+                "similar_recipes": [],
+                "hint": "Please choose a different name or edit the existing recipe",
+            },
         )
 
-        if dup_check["is_duplicate"]:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "message": f"Potential duplicate: {dup_check['reason']}",
-                    "existing_recipe_id": (
-                        str(dup_check["exact_match"].id)
-                        if dup_check["exact_match"]
-                        else None
-                    ),
-                    "similar_recipes": dup_check["similar_matches"],
-                    "hint": "Add ?force=true to create anyway",
-                },
-            )
+    # Similar matches can be bypassed with force=True
+    if not force and dup_check["is_duplicate"]:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": f"Potential duplicate: {dup_check['reason']}",
+                "existing_recipe_id": None,
+                "similar_recipes": dup_check["similar_matches"],
+                "hint": "Add ?force=true to create anyway",
+            },
+        )
 
     try:
         # Create the recipe first
