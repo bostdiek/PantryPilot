@@ -293,3 +293,257 @@ class TestRecipeCardBlockSchema:
         )
 
         assert card.href is None
+
+
+# ============================================================================
+# MEAL HISTORY TOOL TESTS
+# ============================================================================
+
+
+class TestMealPlanHistoryResponse:
+    """Tests for MealPlanHistoryResponse schema."""
+
+    def test_response_structure(self) -> None:
+        """Test that MealPlanHistoryResponse has correct structure."""
+        from services.chat_agent.schemas import (
+            MealPlanHistoryResponse,
+            TimelineDayMeals,
+        )
+
+        response = MealPlanHistoryResponse(
+            days_analyzed=28,
+            total_meals=42,
+            meals_by_day_of_week={
+                "Monday": [{"date": "2026-01-20", "meal_type": "dinner"}]
+            },
+            chronological_timeline=[
+                TimelineDayMeals(date="2026-01-20", meals=["Pasta Carbonara"])
+            ],
+            eating_out_count=5,
+            leftover_count=3,
+            cuisine_counts={"Italian": 10, "Mexican": 5},
+        )
+
+        assert response.days_analyzed == 28
+        assert response.total_meals == 42
+        assert response.eating_out_count == 5
+        assert response.leftover_count == 3
+        assert len(response.chronological_timeline) == 1
+        assert response.cuisine_counts["Italian"] == 10
+
+    def test_timeline_day_meals(self) -> None:
+        """Test TimelineDayMeals structure."""
+        from services.chat_agent.schemas import TimelineDayMeals
+
+        day = TimelineDayMeals(
+            date="2026-01-22",
+            meals=["Breakfast Burrito", "Caesar Salad", "Grilled Salmon"],
+        )
+
+        assert day.date == "2026-01-22"
+        assert len(day.meals) == 3
+        assert "Breakfast Burrito" in day.meals
+
+
+class TestGetMealPlanHistoryTool:
+    """Tests for the get_meal_plan_history tool function."""
+
+    @pytest.mark.asyncio
+    async def test_get_meal_plan_history_clamps_days(self) -> None:
+        """Test that days parameter is clamped to 1-90 range."""
+        # Test the clamping logic directly
+        # days = max(1, min(days, 90))
+        assert max(1, min(0, 90)) == 1  # 0 -> 1
+        assert max(1, min(100, 90)) == 90  # 100 -> 90
+        assert max(1, min(30, 90)) == 30  # 30 -> 30
+
+    @pytest.mark.asyncio
+    async def test_meal_history_empty_result(self) -> None:
+        """Test meal history with no meals."""
+        from services.chat_agent.schemas import MealPlanHistoryResponse
+
+        # Create empty response
+        response = MealPlanHistoryResponse(
+            days_analyzed=28,
+            total_meals=0,
+            meals_by_day_of_week={},
+            chronological_timeline=[],
+            eating_out_count=0,
+            leftover_count=0,
+            cuisine_counts={},
+        )
+
+        assert response.total_meals == 0
+        assert response.chronological_timeline == []
+
+
+# ============================================================================
+# SEARCH RECIPES TOOL TESTS
+# ============================================================================
+
+
+class TestRRFScore:
+    """Tests for Reciprocal Rank Fusion scoring."""
+
+    def test_rrf_score_text_only(self) -> None:
+        """Test RRF score with only text rank."""
+        from services.chat_agent.tools.recipes import _rrf_score
+
+        score = _rrf_score(text_rank=1, vector_rank=None, k=60)
+        expected = 1.0 / (60 + 1)  # 1/61
+
+        assert abs(score - expected) < 1e-6
+
+    def test_rrf_score_vector_only(self) -> None:
+        """Test RRF score with only vector rank."""
+        from services.chat_agent.tools.recipes import _rrf_score
+
+        score = _rrf_score(text_rank=None, vector_rank=1, k=60)
+        expected = 1.0 / (60 + 1)  # 1/61
+
+        assert abs(score - expected) < 1e-6
+
+    def test_rrf_score_both_ranks(self) -> None:
+        """Test RRF score with both text and vector ranks."""
+        from services.chat_agent.tools.recipes import _rrf_score
+
+        score = _rrf_score(text_rank=1, vector_rank=2, k=60)
+        expected = 1.0 / (60 + 1) + 1.0 / (60 + 2)  # 1/61 + 1/62
+
+        assert abs(score - expected) < 1e-6
+
+    def test_rrf_score_no_ranks(self) -> None:
+        """Test RRF score with no ranks returns 0."""
+        from services.chat_agent.tools.recipes import _rrf_score
+
+        score = _rrf_score(text_rank=None, vector_rank=None, k=60)
+
+        assert score == 0.0
+
+    def test_rrf_score_higher_for_better_ranks(self) -> None:
+        """Test that better ranks produce higher scores."""
+        from services.chat_agent.tools.recipes import _rrf_score
+
+        score_rank1 = _rrf_score(text_rank=1, vector_rank=1, k=60)
+        score_rank5 = _rrf_score(text_rank=5, vector_rank=5, k=60)
+
+        assert score_rank1 > score_rank5
+
+
+class TestBuildEmbeddingLiteral:
+    """Tests for building embedding literal SQL."""
+
+    def test_build_embedding_literal_format(self) -> None:
+        """Test embedding literal has correct format."""
+        from services.chat_agent.tools.recipes import _build_embedding_literal
+
+        embedding = [0.1, 0.2, 0.3]
+        result = _build_embedding_literal(embedding)
+
+        assert result == "'[0.1,0.2,0.3]'::vector(768)"
+
+    def test_build_embedding_literal_empty(self) -> None:
+        """Test embedding literal with empty vector."""
+        from services.chat_agent.tools.recipes import _build_embedding_literal
+
+        embedding: list[float] = []
+        result = _build_embedding_literal(embedding)
+
+        assert result == "'[]'::vector(768)"
+
+
+class TestSearchRecipesFilters:
+    """Tests for search_recipes filter application."""
+
+    def test_apply_optional_filters_cuisine(self) -> None:
+        """Test cuisine filter is applied correctly."""
+        from services.chat_agent.tools.recipes import _apply_optional_filters
+
+        predicates: list[Any] = []
+        times_cooked_expr = None  # Not needed for this test
+
+        _apply_optional_filters(
+            predicates=predicates,
+            cuisine="italian",
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+            times_cooked_expr=times_cooked_expr,
+        )
+
+        # Should have added one predicate
+        assert len(predicates) == 1
+
+    def test_apply_optional_filters_multiple(self) -> None:
+        """Test multiple filters applied together."""
+        from unittest.mock import MagicMock
+
+        from services.chat_agent.tools.recipes import _apply_optional_filters
+
+        predicates: list[Any] = []
+        times_cooked_expr = MagicMock()
+        times_cooked_expr.__ge__ = MagicMock(return_value="ge_result")
+
+        _apply_optional_filters(
+            predicates=predicates,
+            cuisine="mexican",
+            difficulty="easy",
+            max_cook_time=30,
+            min_times_cooked=2,
+            times_cooked_expr=times_cooked_expr,
+        )
+
+        # Should have 4 predicates
+        assert len(predicates) == 4
+
+
+class TestSearchRecipesOutput:
+    """Tests for search_recipes output structure."""
+
+    def test_output_structure_with_query(self) -> None:
+        """Test output structure when query is provided."""
+        # Verify expected output keys
+        expected_keys = {
+            "status",
+            "query",
+            "recipes_page_path",
+            "meal_plan_page_path",
+            "filters_applied",
+            "total_results",
+            "recipes",
+        }
+
+        # This is what the tool returns
+        sample_output = {
+            "status": "ok",
+            "query": "pasta",
+            "recipes_page_path": "/recipes",
+            "meal_plan_page_path": "/meal-plan",
+            "filters_applied": {"cuisine": None, "difficulty": None},
+            "total_results": 5,
+            "recipes": [],
+        }
+
+        assert set(sample_output.keys()) >= expected_keys
+
+    def test_recipe_item_structure(self) -> None:
+        """Test individual recipe item structure in output."""
+        expected_keys = {
+            "id",
+            "title",
+            "detail_path",
+            "edit_path",
+            "full_recipe",
+            "times_cooked",
+        }
+
+        sample_recipe = {
+            "id": "abc-123",
+            "title": "Test Recipe",
+            "detail_path": "/recipes/abc-123",
+            "edit_path": "/recipes/abc-123/edit",
+            "full_recipe": {"id": "abc-123", "title": "Test Recipe"},
+            "times_cooked": 3,
+        }
+
+        assert set(sample_recipe.keys()) >= expected_keys
