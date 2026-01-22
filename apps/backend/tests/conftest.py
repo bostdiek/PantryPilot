@@ -107,8 +107,6 @@ class _FakeSession:
         # If the object has an 'id' attribute that is None, generate a UUID
         # This simulates what the database would do for UUID primary keys
         if hasattr(obj, "id") and obj.id is None:
-            import uuid
-
             obj.id = uuid.uuid4()
         return None
 
@@ -129,8 +127,6 @@ class _FakeSession:
     ):  # pragma: no cover - ensure id set
         # Ensure UUID is set on refresh (simulates DB auto-generation)
         if hasattr(obj, "id") and obj.id is None:
-            import uuid
-
             obj.id = uuid.uuid4()
         return None
 

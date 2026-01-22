@@ -55,8 +55,22 @@ def upgrade() -> None:
         WITH (m = 16, ef_construction = 64)
     """)
 
-    # Clean up duplicate recipe names before creating unique index
-    # Keep the oldest recipe for each (user_id, LOWER(name)) combination
+    # ⚠️ DESTRUCTIVE OPERATION: Clean up duplicate recipe names
+    # This keeps the OLDEST recipe for each (user_id, LOWER(name)) combination.
+    # Duplicates (newer entries with same name) will be DELETED.
+    #
+    # IMPORTANT: Ensure you have a database backup before running this migration!
+    # Run: make db-backup  (or see db/backup.sh for manual backup)
+    #
+    # To preview affected records before migration:
+    #   SELECT id, user_id, name, created_at FROM recipe_names
+    #   WHERE id IN (
+    #     SELECT id FROM (
+    #       SELECT id, ROW_NUMBER() OVER (
+    #         PARTITION BY user_id, LOWER(name) ORDER BY created_at ASC
+    #       ) as rn FROM recipe_names
+    #     ) t WHERE rn > 1
+    #   );
     op.execute("""
         DELETE FROM recipe_names
         WHERE id IN (
@@ -73,8 +87,10 @@ def upgrade() -> None:
         )
     """)
 
-    # Clean up duplicate ingredient names before creating unique index
-    # Keep the oldest ingredient for each (user_id, LOWER(ingredient_name)) combination
+    # ⚠️ DESTRUCTIVE OPERATION: Clean up duplicate ingredient names
+    # This keeps the OLDEST ingredient for each (user_id, LOWER(ingredient_name))
+    # combination. Duplicates (newer entries with same name) will be DELETED.
+    # See backup instructions above.
     op.execute("""
         DELETE FROM ingredient_names
         WHERE id IN (

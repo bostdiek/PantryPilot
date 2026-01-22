@@ -107,7 +107,16 @@ async def generate_embedding(text: str) -> list[float]:
 
     # Normalize for cosine similarity (required for 768 dimensions)
     embedding = np.array(result.embeddings[0].values)
-    normalized = embedding / np.linalg.norm(embedding)
+    norm = np.linalg.norm(embedding)
+
+    # Handle zero-norm edge case (all zeros from API - extremely unlikely but possible)
+    if norm == 0:
+        raise ValueError(
+            "Embedding has zero norm (all zeros). Cannot normalize. "
+            "This may indicate an issue with the input text or API response."
+        )
+
+    normalized = embedding / norm
 
     return list(normalized.tolist())
 
@@ -132,7 +141,16 @@ async def generate_query_embedding(query: str) -> list[float]:
         raise ValueError("No embeddings returned from API")
 
     embedding = np.array(result.embeddings[0].values)
-    normalized = embedding / np.linalg.norm(embedding)
+    norm = np.linalg.norm(embedding)
+
+    # Handle zero-norm edge case
+    if norm == 0:
+        raise ValueError(
+            "Query embedding has zero norm (all zeros). Cannot normalize. "
+            "This may indicate an issue with the query text or API response."
+        )
+
+    normalized = embedding / norm
 
     return list(normalized.tolist())
 

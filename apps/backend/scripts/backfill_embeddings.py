@@ -100,6 +100,7 @@ async def backfill_embeddings(
                         context, embedding = await generate_recipe_embedding(recipe)
                         recipe.search_context = context
                         recipe.embedding = embedding
+                        recipe.search_context_generated_at = datetime.now(UTC)
                         stats["succeeded"] += 1
                         remaining = stats["total_pending"] - processed
                         logger.info(

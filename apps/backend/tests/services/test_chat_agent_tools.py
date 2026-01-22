@@ -430,28 +430,6 @@ class TestRRFScore:
         assert score_rank1 > score_rank5
 
 
-class TestBuildEmbeddingLiteral:
-    """Tests for building embedding literal SQL."""
-
-    def test_build_embedding_literal_format(self) -> None:
-        """Test embedding literal has correct format."""
-        from services.chat_agent.tools.recipes import _build_embedding_literal
-
-        embedding = [0.1, 0.2, 0.3]
-        result = _build_embedding_literal(embedding)
-
-        assert result == "'[0.1,0.2,0.3]'::vector(768)"
-
-    def test_build_embedding_literal_empty(self) -> None:
-        """Test embedding literal with empty vector."""
-        from services.chat_agent.tools.recipes import _build_embedding_literal
-
-        embedding: list[float] = []
-        result = _build_embedding_literal(embedding)
-
-        assert result == "'[]'::vector(768)"
-
-
 class TestSearchRecipesFilters:
     """Tests for search_recipes filter application."""
 

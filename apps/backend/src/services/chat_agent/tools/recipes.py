@@ -11,9 +11,8 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from pydantic_ai import RunContext
-from sqlalchemy import and_, desc, func, literal_column, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import selectinload
-from sqlalchemy.sql.elements import ColumnElement
 
 from models.meal_history import Meal
 from models.recipe_ingredients import RecipeIngredient
@@ -30,10 +29,6 @@ SortBy = Literal["relevance", "name", "times_cooked", "cook_time"]
 # For short queries like "phad thai", that threshold can be too strict, causing
 # expected near-matches to be filtered out. We apply our own lower bound.
 MIN_TEXT_SIMILARITY = 0.10
-
-
-def _build_embedding_literal(query_embedding: list[float]) -> str:
-    return f"'[{','.join(str(x) for x in query_embedding)}]'::vector(768)"
 
 
 def _rrf_score(*, text_rank: int | None, vector_rank: int | None, k: int) -> float:
@@ -202,9 +197,8 @@ async def _hybrid_search_with_query(
         .limit(cte_limit)
     )
 
-    embedding_literal = _build_embedding_literal(query_embedding)
-    embedding_sql: ColumnElement[Any] = literal_column(embedding_literal)
-    vector_distance = Recipe.embedding.op("<=>")(embedding_sql)
+    # Use pgvector's native cosine_distance - fully parameterized, safe
+    vector_distance = Recipe.embedding.cosine_distance(query_embedding)
     vector_stmt = (
         select(Recipe, times_cooked_expr.label("times_cooked"))
         .outerjoin(times_cooked_sq, Recipe.id == times_cooked_sq.c.recipe_id)
