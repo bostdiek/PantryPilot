@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from dependencies.db import AsyncSessionLocal
+from models.recipe_ingredients import RecipeIngredient
 from models.recipes_names import Recipe
 from services.embedding_service import generate_recipe_embedding
 
@@ -76,7 +77,7 @@ async def backfill_embeddings(
                 .where(Recipe.embedding.is_(None))
                 .options(
                     selectinload(Recipe.recipeingredients).selectinload(
-                        lambda ri: ri.ingredient
+                        RecipeIngredient.ingredient
                     )
                 )
                 .limit(min(BATCH_SIZE, (limit - processed) if limit else BATCH_SIZE))
@@ -96,7 +97,8 @@ async def backfill_embeddings(
 
                 for attempt in range(MAX_RETRIES):
                     try:
-                        embedding = await generate_recipe_embedding(recipe)
+                        context, embedding = await generate_recipe_embedding(recipe)
+                        recipe.search_context = context
                         recipe.embedding = embedding
                         stats["succeeded"] += 1
                         remaining = stats["total_pending"] - processed
