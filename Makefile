@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations clean-keep-db lan-ip frontend-lan backend-lan dev-lan dev-lan-docker check-node test-frontend-docker test-frontend-coverage-docker
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations backfill-embeddings backfill-embeddings-dry-run backfill-embeddings-local backfill-embeddings-local-dry-run clean-keep-db lan-ip frontend-lan backend-lan dev-lan dev-lan-docker check-node test-frontend-docker test-frontend-coverage-docker
 
 # Image / build targets (added)
 .PHONY: build-frontend build-backend build-all build-prod-frontend build-prod-backend build-prod-all buildx-setup buildx-push
@@ -40,6 +40,10 @@ help:
 	@echo "  db-restore FILE=   - Restore database from backup file"
 	@echo "  db-maintenance CMD= - Run database maintenance (analyze, vacuum, stats, etc.)"
 	@echo "  db-shell           - Open PostgreSQL shell (ENV=dev default)"
+	@echo "  backfill-embeddings - Backfill embeddings for recipes (Docker, local dev)"
+	@echo "  backfill-embeddings-dry-run - Show recipes needing embeddings (Docker, local dev)"
+	@echo "  backfill-embeddings-local - Backfill embeddings (direct execution, for cloud)"
+	@echo "  backfill-embeddings-local-dry-run - Show recipes needing embeddings (direct, for cloud)"
 	@echo ""
 	@echo "Development:"
 	@echo "  dev               - Alias for 'up' (development)"
@@ -480,6 +484,18 @@ check-migrations:
 	# Validate Alembic migrations by applying to a temporary database
 	@chmod +x scripts/check_migrations.sh >/dev/null 2>&1 || true
 	@./scripts/check_migrations.sh "$(ENV_FILE)" "$(COMPOSE_FILES)"
+
+backfill-embeddings:  ## Backfill embeddings for recipes without one (Docker)
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec backend sh -lc "uv run python scripts/backfill_embeddings.py"
+
+backfill-embeddings-dry-run:  ## Show recipes that need embeddings (no changes, Docker)
+	docker compose --env-file $(ENV_FILE) $(COMPOSE_FILES) exec backend sh -lc "uv run python scripts/backfill_embeddings.py --dry-run"
+
+backfill-embeddings-local:  ## Backfill embeddings (direct execution, for cloud/non-Docker)
+	cd apps/backend && PYTHONPATH=./src uv run python scripts/backfill_embeddings.py
+
+backfill-embeddings-local-dry-run:  ## Show recipes needing embeddings (direct execution, for cloud/non-Docker)
+	cd apps/backend && PYTHONPATH=./src uv run python scripts/backfill_embeddings.py --dry-run
 
 # =============================================================================
 # Cleanup and Maintenance Commands
