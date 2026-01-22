@@ -31,9 +31,14 @@ def upgrade() -> None:
     # can be created via SQL.
     try:
         op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    except Exception:
-        # Silently continue - Azure PostgreSQL handles extension management differently
-        pass
+    except sa.exc.DBAPIError as e:
+        # Only ignore the specific Azure extension allow-list error
+        if 'extension "vector" is not allow-listed' in str(e):
+            # Azure PostgreSQL: extension must be enabled via azure.extensions config
+            pass
+        else:
+            # Re-raise any other database errors (permissions, connection, etc.)
+            raise
 
     # Add embedding column (768 dimensions for Gemini)
     op.add_column(

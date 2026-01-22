@@ -93,9 +93,6 @@ resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases
     charset: 'UTF8'
     collation: 'en_US.UTF8'
   }
-  dependsOn: [
-    vectorExtension
-  ]
 }
 
 // Allow Azure services to connect
