@@ -75,6 +75,16 @@ resource postgreSQLServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-
   }
 }
 
+// Enable the vector extension for pgvector support
+resource vectorExtension 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-06-01-preview' = {
+  parent: postgreSQLServer
+  name: 'azure.extensions'
+  properties: {
+    value: 'vector'
+    source: 'user-override'
+  }
+}
+
 // Create the PantryPilot database
 resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-01-preview' = {
   parent: postgreSQLServer
@@ -83,6 +93,9 @@ resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases
     charset: 'UTF8'
     collation: 'en_US.UTF8'
   }
+  dependsOn: [
+    vectorExtension
+  ]
 }
 
 // Allow Azure services to connect

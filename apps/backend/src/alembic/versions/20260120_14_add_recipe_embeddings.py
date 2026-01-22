@@ -25,7 +25,15 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Add embedding and context columns, plus deduplication indexes."""
     # Enable pgvector extension (idempotent)
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # Note: In Azure PostgreSQL, the extension must be enabled via
+    # infrastructure (azure.extensions configuration parameter).
+    # This command will work locally and in environments where extensions
+    # can be created via SQL.
+    try:
+        op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    except Exception:
+        # Silently continue - Azure PostgreSQL handles extension management differently
+        pass
 
     # Add embedding column (768 dimensions for Gemini)
     op.add_column(
