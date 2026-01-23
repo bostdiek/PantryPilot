@@ -113,11 +113,7 @@ const LoginPage: FC = () => {
       <div className="flex min-h-screen flex-col items-center justify-center">
         {/* Logo at the top */}
         <div className="mb-8 flex flex-col items-center gap-3">
-          <img
-            src={logoSvg}
-            alt="Smart Meal Planner"
-            className="h-20 w-20"
-          />
+          <img src={logoSvg} alt="Smart Meal Planner" className="h-20 w-20" />
           <h1 className="text-2xl font-bold text-gray-800">
             Smart Meal Planner
           </h1>
