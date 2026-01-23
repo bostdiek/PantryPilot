@@ -112,6 +112,10 @@ async def _load_full_recipes(
         return {}
 
     recipe_ids = list({r.id for r in recipes})
+
+    # Ensure any pending operations are complete before new query
+    await ctx.deps.db.flush()
+
     stmt = (
         select(Recipe)
         .where(Recipe.id.in_(recipe_ids))

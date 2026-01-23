@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import lru_cache
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient, HTTPStatusError
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.google import GoogleModel
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
@@ -80,18 +82,36 @@ When users ask you to help plan their meals for a week:
    - Eating out: propose_meal_for_day with is_eating_out=true
    - Add notes for context: "Leftovers from Sunday's lasagna"
 
-7. NEW RECIPE FLOW:
-   When user likes a new recipe from the web, give them options:
+7. PROPOSING MEALS (CRITICAL - USE THE RIGHT TOOL):
+   When proposing a meal for a specific day, ALWAYS use propose_meal_for_day:
 
-   Example prompt:
-   "I found this amazing Chicken Tikka Masala! Would you like to:
-   1. Save it AND add it to Sunday's plan?
-   2. Save it for later without adding to this week?
-   Just let me know!"
+   FOR EXISTING RECIPES (from user's collection):
+   - Use propose_meal_for_day with existing_recipe_id and existing_recipe_title
+   - Example: propose_meal_for_day(date="2026-01-25", day_label="Saturday",
+              existing_recipe_id="uuid-here", existing_recipe_title="Classic Lasagna")
 
-   - If they choose option 1: Use suggest_recipe, then propose_meal_for_day
-   - If they choose option 2: Just use suggest_recipe, continue to next day
-   - Always wait for their decision before proceeding
+   FOR NEW RECIPES (from web search):
+   - Use propose_meal_for_day with new_recipe_title, new_recipe_source_url,
+     and new_recipe_description
+   - Example: propose_meal_for_day(date="2026-01-25", day_label="Saturday",
+              new_recipe_title="Beef Bourguignon",
+              new_recipe_source_url="https://example.com/beef-bourguignon",
+              new_recipe_description="A classic French beef stew...")
+   - This shows a card with "Save to Recipe Book" and "Add to Meal Plan" buttons
+   - The user can choose to save the recipe first before adding to their plan
+
+   IMPORTANT: Do NOT use suggest_recipe during meal planning. Use propose_meal_for_day
+   for ALL meal plan proposals. The suggest_recipe tool is ONLY for when a user wants
+   to save a recipe WITHOUT adding it to a meal plan.
+
+8. SUGGEST_RECIPE TOOL (NOT for meal planning):
+   Only use suggest_recipe when:
+   - User asks to save a recipe for later WITHOUT adding to meal plan
+   - User is browsing recipes outside of meal planning context
+   - User explicitly says "save for later" or "add to my collection"
+
+   Do NOT use suggest_recipe during the meal planning workflow. Always use
+   propose_meal_for_day instead, which handles both existing and new recipes.
 
 PERSONALITY & STYLE:
 - Be enthusiastic about meal planning! 🍽️
@@ -228,6 +248,37 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         output_type=AssistantMessage,
         name="Nibble",
     )
+
+    # Add dynamic instructions with current date/time context
+    # NOTE: Since this agent is configured with `instructions=...`, dynamic
+    # context must be provided via `@agent.instructions` (not `@agent.system_prompt`).
+    @agent.instructions
+    def add_datetime_context(ctx: RunContext[ChatAgentDeps]) -> str:
+        """Add current date/time context to help with meal planning."""
+        dt = ctx.deps.current_datetime
+        tz = ctx.deps.user_timezone
+
+        # Prefer displaying dates in the user's timezone to avoid "today" drifting.
+        try:
+            tzinfo = ZoneInfo(tz)
+            local_dt = dt.astimezone(tzinfo)
+        except Exception:
+            local_dt = dt
+
+        # Format: "Thursday, January 23, 2026 at 3:45 PM (America/New_York)"
+        formatted_date = local_dt.strftime("%A, %B %d, %Y at %I:%M %p")
+        today_iso = local_dt.date().isoformat()
+        tomorrow_iso = (local_dt + timedelta(days=1)).date().isoformat()
+        tomorrow_label = (local_dt + timedelta(days=1)).strftime("%A")
+
+        return (
+            "\n\nCURRENT DATE AND TIME:\n"
+            f"Today is {formatted_date} ({tz}).\n"
+            f"Today (ISO): {today_iso}.\n"
+            f"Tomorrow (ISO): {tomorrow_iso} ({tomorrow_label}).\n"
+            "When using propose_meal_for_day, always use the correct ISO date for the "
+            "user's request."
+        )
 
     # Register tools using extracted implementations
     agent.tool(name="get_meal_plan_history")(tool_get_meal_plan_history)

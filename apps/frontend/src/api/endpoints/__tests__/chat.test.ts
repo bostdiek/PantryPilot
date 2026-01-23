@@ -88,9 +88,16 @@ describe('chat API endpoints', () => {
             'Content-Type': 'application/json',
             Authorization: 'Bearer test-token',
           }),
-          body: JSON.stringify({ content: 'Hello' }),
         })
       );
+      // Verify the body contains the expected content
+      const callArgs = (global.fetch as ReturnType<typeof vi.fn>).mock
+        .calls[0][1];
+      const body = JSON.parse(callArgs.body);
+      expect(body.content).toBe('Hello');
+      expect(body.client_context).toBeDefined();
+      expect(body.client_context.user_timezone).toBeDefined();
+      expect(body.client_context.current_datetime).toBeDefined();
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
