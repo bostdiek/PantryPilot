@@ -5,6 +5,7 @@ import type { ChatContentBlock } from '../../types/Chat';
 import {
   ActionBlock,
   LinkBlock,
+  MealProposalBlock,
   RecipeCardBlock,
   TextBlock,
   UnknownBlock,
@@ -61,6 +62,8 @@ function renderBlock(
           onCancel={onCancelAction}
         />
       );
+    case 'meal_proposal':
+      return <MealProposalBlock key={key} block={block} />;
     default:
       return <UnknownBlock key={key} block={block} />;
   }

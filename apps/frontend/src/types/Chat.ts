@@ -55,6 +55,44 @@ export interface ActionBlock {
 }
 
 /**
+ * Reference to a recipe in user's collection.
+ */
+export interface ExistingRecipeOption {
+  id: string;
+  title: string;
+  image_url?: string | null;
+  detail_path?: string | null;
+}
+
+/**
+ * Reference to a new recipe from web search.
+ */
+export interface NewRecipeOption {
+  title: string;
+  source_url: string;
+  description?: string | null;
+}
+
+/**
+ * Meal plan proposal block for a specific day.
+ *
+ * Used during meal planning conversations to present recipe options
+ * with Accept/Reject functionality. Does not automatically add to
+ * meal plan; requires user acceptance.
+ */
+export interface MealProposalBlock {
+  type: 'meal_proposal';
+  proposal_id: string; // For tracking accept/reject (e.g., "2026-01-26-proposal")
+  date: string; // ISO date (YYYY-MM-DD)
+  day_label: string; // Human-friendly day name ("Monday", "Taco Tuesday", etc.)
+  existing_recipe?: ExistingRecipeOption | null;
+  new_recipe?: NewRecipeOption | null;
+  is_leftover?: boolean;
+  is_eating_out?: boolean;
+  notes?: string | null;
+}
+
+/**
  * Discriminated union of all content block types.
  * Use `block.type` to discriminate between variants.
  */
@@ -62,7 +100,8 @@ export type ChatContentBlock =
   | TextBlock
   | LinkBlock
   | RecipeCardBlock
-  | ActionBlock;
+  | ActionBlock
+  | MealProposalBlock;
 
 // -----------------------------------------------------------------------------
 // SSE Event Types
