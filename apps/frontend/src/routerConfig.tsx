@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, redirect } from 'react-router-dom';
-import { getDraftById } from './api/endpoints/aiDrafts';
+import { getDraftById, getDraftByIdOwner } from './api/endpoints/aiDrafts';
 import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
@@ -102,9 +102,39 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
 
       logger.debug('New recipe loader: Form prefilled from AI suggestion');
     } catch (error) {
-      logger.error('New recipe loader: Failed to load draft', error);
-      // Don't throw - let the component handle the error state
-      // The component can check for the error and show a friendly message
+      logger.error('New recipe loader: Failed to load draft with token', error);
+
+      // If the token is expired or invalid, try to fetch using owner auth as fallback
+      // This allows users to still access their own drafts even if the token expired
+      if (
+        error instanceof Error &&
+        (error.message.includes('Invalid or expired draft token') ||
+          error.message.includes('401'))
+      ) {
+        logger.warn('Draft token expired, attempting to fetch as owner...');
+
+        try {
+          // Try to fetch using the owner-only endpoint (uses Bearer token)
+          const draftResponse = await getDraftByIdOwner(draftId);
+          logger.debug('Draft fetched successfully as owner');
+
+          // Set the form from the suggestion
+          const { setFormFromSuggestion } = useRecipeStore.getState();
+          setFormFromSuggestion(draftResponse.payload);
+
+          logger.debug(
+            'New recipe loader: Form prefilled from AI suggestion (owner fallback)'
+          );
+        } catch (ownerError) {
+          logger.error('Failed to fetch draft as owner', ownerError);
+          // Redirect to clean new recipe page since we can't load the draft
+          const cleanUrl = new URL(url);
+          cleanUrl.searchParams.delete('ai');
+          cleanUrl.searchParams.delete('draftId');
+          cleanUrl.searchParams.delete('token');
+          return redirect(cleanUrl.pathname + cleanUrl.search);
+        }
+      }
     }
   }
 

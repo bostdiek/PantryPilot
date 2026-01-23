@@ -146,7 +146,6 @@ EXAMPLE CORRECT RESPONSES:
 YOUR CAPABILITIES:
 - Help plan weekly meals and grocery lists
 - Suggest recipes based on ingredients
-- Manage pantry inventory
 - Provide cooking tips and substitutions
 
 USER PREFERENCES & SETTINGS:
