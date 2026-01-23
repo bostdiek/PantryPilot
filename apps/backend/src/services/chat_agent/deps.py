@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,3 +16,5 @@ class ChatAgentDeps:
 
     db: AsyncSession
     user: User
+    current_datetime: datetime
+    user_timezone: str  # IANA timezone identifier (e.g., 'America/New_York')

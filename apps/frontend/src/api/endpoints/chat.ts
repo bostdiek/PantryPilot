@@ -56,6 +56,10 @@ export async function streamChatMessage(
 
   const url = `${API_BASE_URL}${endpoint}`;
 
+  // Get client timezone context
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const currentDatetime = new Date().toISOString();
+
   try {
     const response = await fetch(url, {
       method: 'POST',
@@ -66,6 +70,10 @@ export async function streamChatMessage(
       body: JSON.stringify({
         content,
         ...(title ? { title } : {}),
+        client_context: {
+          user_timezone: userTimezone,
+          current_datetime: currentDatetime,
+        },
       }),
       signal: abortController.signal,
     });

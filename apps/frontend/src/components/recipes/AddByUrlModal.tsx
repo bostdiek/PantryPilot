@@ -1,5 +1,5 @@
-import { useState, type FC, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, type FC, type FormEvent } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   extractRecipeFromUrl,
   extractRecipeStreamFetch,
@@ -17,10 +17,17 @@ import { Input } from '../ui/Input';
 interface AddByUrlModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Optional URL to prefill the input field */
+  prefillUrl?: string;
 }
 
-export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
+export const AddByUrlModal: FC<AddByUrlModalProps> = ({
+  isOpen,
+  onClose,
+  prefillUrl,
+}) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [url, setUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +35,13 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
   const [useStreaming] = useState(true);
   const [abortController, setAbortController] =
     useState<AbortController | null>(null);
+
+  // Prefill URL when modal opens with a prefill value
+  useEffect(() => {
+    if (isOpen && prefillUrl) {
+      setUrl(prefillUrl);
+    }
+  }, [isOpen, prefillUrl]);
 
   const handleClose = () => {
     // Cancel any ongoing stream
@@ -88,8 +102,16 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({ isOpen, onClose }) => {
                 // Set the draft in the store
                 const { setFormFromSuggestion } = useRecipeStore.getState();
                 setFormFromSuggestion(draft.payload);
-                // Navigate to new recipe page with AI flag
-                navigate('/recipes/new?ai=1');
+                // Navigate to new recipe page with AI flag, preserving meal plan params
+                const params = new URLSearchParams();
+                params.set('ai', '1');
+                // Preserve meal plan params if present
+                const mealPlanDate = searchParams.get('mealPlanDate');
+                const mealPlanDayLabel = searchParams.get('mealPlanDayLabel');
+                if (mealPlanDate) params.set('mealPlanDate', mealPlanDate);
+                if (mealPlanDayLabel)
+                  params.set('mealPlanDayLabel', mealPlanDayLabel);
+                navigate(`/recipes/new?${params.toString()}`);
               } catch (err) {
                 logger.error('Failed to fetch draft after streaming:', err);
                 setError('Failed to load extracted recipe. Please try again.');

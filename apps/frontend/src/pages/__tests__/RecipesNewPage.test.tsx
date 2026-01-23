@@ -20,7 +20,10 @@ vi.mock('../../utils/offlineSync', () => ({ saveRecipeOffline: vi.fn() }));
 vi.mock('../../hooks/useUnsavedChanges', () => ({
   useUnsavedChanges: () => {},
 }));
-vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => vi.fn(),
+  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+}));
 vi.mock('../../components/ui/useToast', () => ({
   useToast: () => ({ success: vi.fn() }),
 }));

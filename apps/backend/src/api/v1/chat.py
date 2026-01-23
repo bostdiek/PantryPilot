@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
@@ -52,6 +52,49 @@ logger = logging.getLogger(__name__)
 # Maximum content length for SSE events before truncation
 # Balances between useful preview and staying well under MAX_SSE_EVENT_BYTES
 MAX_CONTENT_PREVIEW_CHARS: int = 500
+
+# If the client's clock is wildly wrong, it can cause the agent to propose meals
+# for the wrong week/year (e.g., "tomorrow" resolving to an old date).
+# We treat large skews as invalid client context and fall back to server time.
+MAX_CLIENT_SERVER_DATETIME_SKEW: timedelta = timedelta(hours=36)
+
+
+def _resolve_current_datetime(
+    client_datetime_str: str | None,
+    *,
+    server_now: datetime,
+) -> datetime:
+    """Resolve the datetime context to inject into the chat agent.
+
+    The frontend sends an ISO timestamp for better timezone awareness, but the
+    server must not trust it blindly because client clocks can be incorrect.
+    When the client value is missing, invalid, or far from server time, we
+    fall back to server_now.
+    """
+    if server_now.tzinfo is None:
+        raise ValueError("server_now must be timezone-aware")
+
+    if not client_datetime_str:
+        return server_now
+
+    try:
+        parsed = datetime.fromisoformat(client_datetime_str.replace("Z", "+00:00"))
+    except ValueError:
+        return server_now
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+
+    parsed_utc = parsed.astimezone(UTC)
+    if abs(parsed_utc - server_now.astimezone(UTC)) > MAX_CLIENT_SERVER_DATETIME_SKEW:
+        logger.warning(
+            "Ignoring client current_datetime due to large skew: client=%s server=%s",
+            parsed_utc.isoformat(),
+            server_now.astimezone(UTC).isoformat(),
+        )
+        return server_now
+
+    return parsed_utc
 
 
 def _get_user_friendly_error_message(exc: Exception) -> str:
@@ -787,7 +830,7 @@ async def cancel_chat_action(
     response_class=StreamingResponse,
     dependencies=[Depends(check_rate_limit)],
 )
-async def stream_chat_message(
+async def stream_chat_message(  # noqa: C901
     conversation_id: UUID,
     payload: ChatStreamRequest,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -837,7 +880,7 @@ async def stream_chat_message(
         user_id=current_user.id,
     )
 
-    async def event_stream() -> AsyncGenerator[str, None]:
+    async def event_stream() -> AsyncGenerator[str, None]:  # noqa: C901
         yield ChatSseEvent(
             event="status",
             conversation_id=conversation_id,
@@ -850,7 +893,23 @@ async def stream_chat_message(
             # Track blocks emitted from tool results (e.g., recipe cards)
             tool_emitted_blocks: list[dict[str, Any]] = []
 
-            deps = ChatAgentDeps(db=db, user=current_user)
+            # Extract timezone context from client
+            client_ctx = payload.client_context or {}
+            user_timezone = client_ctx.get("user_timezone", "UTC")
+            client_datetime_str = client_ctx.get("current_datetime")
+
+            # Validate client-provided timestamp with 36-hour max skew tolerance,
+            # fall back to server time when invalid or too skewed
+            current_dt = _resolve_current_datetime(
+                client_datetime_str, server_now=datetime.now(UTC)
+            )
+
+            deps = ChatAgentDeps(
+                db=db,
+                user=current_user,
+                current_datetime=current_dt,
+                user_timezone=user_timezone,
+            )
             async for agent_event in agent.run_stream_events(
                 payload.content, deps=deps, message_history=message_history
             ):

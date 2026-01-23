@@ -61,6 +61,7 @@ export interface ChatState {
   clearConversation: (id: string) => void;
   acceptAction: (actionId: string) => Promise<void>;
   cancelAction: (actionId: string) => Promise<void>;
+  appendLocalAssistantMessage: (text: string, conversationId?: string) => void;
   clearError: () => void;
 }
 
@@ -590,6 +591,51 @@ export const useChatStore = create<ChatState>()(
           logger.error('Failed to cancel action:', err);
           throw err;
         }
+      },
+
+      appendLocalAssistantMessage: (
+        text: string,
+        conversationIdOverride?: string
+      ) => {
+        const trimmed = text.trim();
+        if (!trimmed) return;
+
+        const conversationId =
+          conversationIdOverride ?? get().activeConversationId;
+        if (!conversationId) return;
+
+        // Only append if the conversation exists locally.
+        // (This prevents creating messages for unknown/expired conversation IDs.)
+        const conversationExists = get().conversations.some(
+          (conversation) => conversation.id === conversationId
+        );
+        if (!conversationExists) return;
+
+        const now = getNowIso();
+        const message: Message = {
+          id: createId(),
+          conversationId,
+          role: 'assistant',
+          blocks: [{ type: 'text', text: trimmed }],
+          createdAt: now,
+        };
+
+        set((state) => {
+          const nextMessages = capMessages([
+            ...(state.messagesByConversationId[conversationId] ?? []),
+            message,
+          ]);
+
+          return {
+            messagesByConversationId: {
+              ...state.messagesByConversationId,
+              [conversationId]: nextMessages,
+            },
+            conversations: state.conversations.map((c) =>
+              c.id === conversationId ? { ...c, lastMessageAt: now } : c
+            ),
+          };
+        });
       },
 
       clearError: () => {

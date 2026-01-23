@@ -5,6 +5,7 @@
 export { ActionBlock } from './ActionBlock';
 export type { ActionStatus } from './ActionBlock';
 export { LinkBlock } from './LinkBlock';
+export { MealProposalBlock } from './MealProposalBlock';
 export { RecipeCardBlock } from './RecipeCardBlock';
 export { TextBlock } from './TextBlock';
 export { UnknownBlock } from './UnknownBlock';

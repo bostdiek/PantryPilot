@@ -2,10 +2,19 @@ import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { act } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { useChatStore } from '../../stores/useChatStore';
 import AssistantPage from '../AssistantPage';
+
+function renderAssistant(initialEntry = '/assistant') {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <AssistantPage />
+    </MemoryRouter>
+  );
+}
 
 describe('AssistantPage', () => {
   beforeEach(() => {
@@ -26,7 +35,7 @@ describe('AssistantPage', () => {
   test('renders the heading and help text', async () => {
     const loadSpy = vi.spyOn(useChatStore.getState(), 'loadConversations');
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     expect(
       screen.getByRole('heading', { name: 'SmartMeal Assistant' })
@@ -43,7 +52,7 @@ describe('AssistantPage', () => {
       useChatStore.setState({ hasHydrated: false });
     });
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
@@ -51,7 +60,7 @@ describe('AssistantPage', () => {
   test('creates a conversation on first hydrate when empty', async () => {
     const createSpy = vi.spyOn(useChatStore.getState(), 'createConversation');
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     await waitFor(() => expect(createSpy).toHaveBeenCalled());
   });
@@ -74,7 +83,7 @@ describe('AssistantPage', () => {
       });
     });
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     await waitFor(() => expect(switchSpy).toHaveBeenCalledWith('c1'));
   });
@@ -112,7 +121,7 @@ describe('AssistantPage', () => {
       });
     });
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     expect(screen.getByRole('list')).toBeInTheDocument();
     expect(screen.getByText('Hello')).toBeInTheDocument();
@@ -125,7 +134,7 @@ describe('AssistantPage', () => {
     const user = userEvent.setup();
     const createSpy = vi.spyOn(useChatStore.getState(), 'createConversation');
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     const composer = screen.getByLabelText('Message Nibble');
     expect(composer).not.toHaveFocus();
@@ -171,9 +180,38 @@ describe('AssistantPage', () => {
       });
     });
 
-    render(<AssistantPage />);
+    renderAssistant();
 
     const status = screen.getByRole('status');
     await waitFor(() => expect(status).toHaveTextContent('Nibble: Welcome!'));
+  });
+
+  test('honors ?conversationId=... by switching conversations', async () => {
+    const switchSpy = vi.spyOn(useChatStore.getState(), 'switchConversation');
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'c1',
+            title: 'Chat 1',
+            createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+            lastMessageAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+          },
+          {
+            id: 'c2',
+            title: 'Chat 2',
+            createdAt: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+            lastMessageAt: new Date('2026-01-02T00:00:00.000Z').toISOString(),
+          },
+        ],
+        activeConversationId: 'c1',
+        messagesByConversationId: { c1: [], c2: [] },
+      });
+    });
+
+    renderAssistant('/assistant?conversationId=c2');
+
+    await waitFor(() => expect(switchSpy).toHaveBeenCalledWith('c2'));
   });
 });

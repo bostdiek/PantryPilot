@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import { ChatInput } from '../components/chat/ChatInput';
 import { ChatMessage } from '../components/chat/ChatMessage';
@@ -7,6 +8,7 @@ import { Container } from '../components/ui/Container';
 import { useChatStore } from '../stores/useChatStore';
 
 export default function AssistantPage() {
+  const [searchParams] = useSearchParams();
   const hasHydrated = useChatStore((s) => s.hasHydrated);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
@@ -90,6 +92,25 @@ export default function AssistantPage() {
     conversations,
     createConversation,
     hasHydrated,
+    switchConversation,
+  ]);
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const requestedConversationId = searchParams.get('conversationId');
+    if (!requestedConversationId) return;
+    if (requestedConversationId === activeConversationId) return;
+
+    const exists = conversations.some((c) => c.id === requestedConversationId);
+    if (!exists) return;
+
+    void switchConversation(requestedConversationId);
+  }, [
+    activeConversationId,
+    conversations,
+    hasHydrated,
+    searchParams,
     switchConversation,
   ]);
 
