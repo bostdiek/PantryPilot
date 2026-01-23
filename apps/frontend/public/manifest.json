@@ -1,6 +1,6 @@
 {
-  "name": "PantryPilot",
-  "short_name": "PantryPilot",
+  "name": "Smart Meal Planner",
+  "short_name": "Smart Meal Planner",
   "description": "AI-powered recipe recommendation and meal planning system",
   "start_url": "/",
   "display": "standalone",
