@@ -75,12 +75,12 @@ resource postgreSQLServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-
   }
 }
 
-// Enable the vector extension for pgvector support
-resource vectorExtension 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-06-01-preview' = {
+// Enable required PostgreSQL extensions
+resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-06-01-preview' = {
   parent: postgreSQLServer
   name: 'azure.extensions'
   properties: {
-    value: 'vector'
+    value: 'pg_trgm,uuid-ossp,vector'
     source: 'user-override'
   }
 }
