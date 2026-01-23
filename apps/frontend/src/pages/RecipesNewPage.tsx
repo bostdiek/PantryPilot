@@ -484,8 +484,8 @@ const RecipesNewPage: FC = () => {
 
       if (result) {
         const createdRecipeId =
-          typeof result === 'object' && result !== null && 'id' in result
-            ? (result as { id?: string }).id
+          result && typeof result === 'object' && 'id' in result
+            ? ((result as { id?: string | null }).id ?? undefined)
             : undefined;
 
         const proposalKey = searchParams.get('proposalKey');

@@ -898,13 +898,11 @@ async def stream_chat_message(  # noqa: C901
             user_timezone = client_ctx.get("user_timezone", "UTC")
             client_datetime_str = client_ctx.get("current_datetime")
 
-            # NOTE: We intentionally do NOT trust client-provided timestamps for
-            # meal planning.
-            # A wrong device clock can cause the agent to propose meals for the
-            # wrong year.
-            # We still accept the user's IANA timezone to interpret "today/tomorrow".
-            _ = client_datetime_str
-            current_dt = datetime.now(UTC)
+            # Validate client-provided timestamp with 36-hour max skew tolerance,
+            # fall back to server time when invalid or too skewed
+            current_dt = _resolve_current_datetime(
+                client_datetime_str, server_now=datetime.now(UTC)
+            )
 
             deps = ChatAgentDeps(
                 db=db,
