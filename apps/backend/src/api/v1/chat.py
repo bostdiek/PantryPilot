@@ -486,6 +486,48 @@ def _extract_tool_arguments(part: object) -> dict[str, object]:
     return {}
 
 
+def _truncate_large_fields_for_sse(
+    result: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Remove or truncate large fields from tool results for SSE events.
+
+    Tool results are persisted to the database in full, but SSE events have
+    a 16KB size limit. This function creates a safe copy for SSE transmission
+    by removing large content fields that would exceed the limit.
+
+    The agent already has access to the full content during execution - this
+    truncation only affects what gets sent to the frontend for display.
+    """
+    if result is None:
+        return None
+
+    # Create a shallow copy to avoid modifying the original
+    sse_safe_result = dict(result)
+
+    # Remove large content fields that are commonly returned by tools
+    # The AI already has this content in context; it doesn't need it in the SSE stream
+    if "content" in sse_safe_result:
+        content = sse_safe_result["content"]
+        if isinstance(content, str) and len(content) > 500:
+            # Replace with a truncated summary
+            sse_safe_result["content"] = content[:500] + "... (truncated for display)"
+
+    # Handle search_recipes results - only stream query info, not the full results
+    # The AI already has the results; the frontend doesn't need them in the SSE stream
+    if "recipes" in sse_safe_result:
+        recipes = sse_safe_result["recipes"]
+        total_results = sse_safe_result.get("total_results")
+        if isinstance(total_results, int):
+            total = total_results
+        elif isinstance(recipes, list):
+            total = len(recipes)
+        else:
+            total = 0
+        sse_safe_result["recipes"] = f"({total} recipes found)"
+
+    return sse_safe_result
+
+
 async def _handle_agent_stream_event(
     event: object,
     *,
@@ -569,7 +611,9 @@ async def _handle_agent_stream_event(
         # Build list of SSE events to emit
         sse_events: list[str] = []
 
-        # Always emit tool.result event
+        # Emit tool.result event with truncated content to avoid SSE payload size limits
+        # The full result is already persisted to the database above
+        sse_safe_result = _truncate_large_fields_for_sse(persisted_result)
         sse_events.append(
             ChatSseEvent(
                 event="tool.result",
@@ -579,7 +623,7 @@ async def _handle_agent_stream_event(
                     "tool_call_id": event.tool_call_id,
                     "tool_name": tool_name,
                     "status": "success",
-                    "result": persisted_result,
+                    "result": sse_safe_result,
                 },
             ).to_sse()
         )
