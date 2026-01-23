@@ -1,5 +1,6 @@
 import { useState, type FC, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import logoSvg from '../assets/logo/smartmealplanner-logo.svg';
 import { login } from '../api/endpoints/auth';
 import { userProfileApi } from '../api/endpoints/userProfile';
 import { Button } from '../components/ui/Button';
@@ -110,6 +111,14 @@ const LoginPage: FC = () => {
   return (
     <Container size="sm">
       <div className="flex min-h-screen flex-col items-center justify-center">
+        {/* Logo at the top */}
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <img src={logoSvg} alt="Smart Meal Planner" className="h-20 w-20" />
+          <h1 className="text-2xl font-bold text-gray-800">
+            Smart Meal Planner
+          </h1>
+        </div>
+
         <Card variant="default" className="w-full max-w-md p-6">
           <h1 className="mb-6 text-center text-2xl font-bold">
             Login to Smart Meal Planner
