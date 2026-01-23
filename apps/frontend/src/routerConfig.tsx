@@ -9,6 +9,7 @@ import { logger } from './lib/logger';
 import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
+import { ApiErrorImpl } from './types/api';
 // Lazy loaded pages for code-splitting (use top-level `lazy` import)
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -101,16 +102,19 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
       setFormFromSuggestion(draftResponse.payload);
 
       logger.debug('New recipe loader: Form prefilled from AI suggestion');
+      
+      // Redirect to clean URL to remove token from address bar
+      const cleanUrl = new URL(url);
+      cleanUrl.searchParams.delete('ai');
+      cleanUrl.searchParams.delete('draftId');
+      cleanUrl.searchParams.delete('token');
+      return redirect(cleanUrl.pathname + cleanUrl.search);
     } catch (error) {
       logger.error('New recipe loader: Failed to load draft with token', error);
 
-      // If the token is expired or invalid, try to fetch using owner auth as fallback
+      // If the token is expired or invalid (401 status), try to fetch using owner auth as fallback
       // This allows users to still access their own drafts even if the token expired
-      if (
-        error instanceof Error &&
-        (error.message.includes('Invalid or expired draft token') ||
-          error.message.includes('401'))
-      ) {
+      if (error instanceof ApiErrorImpl && error.status === 401) {
         logger.warn('Draft token expired, attempting to fetch as owner...');
 
         try {
@@ -125,6 +129,13 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
           logger.debug(
             'New recipe loader: Form prefilled from AI suggestion (owner fallback)'
           );
+          
+          // Redirect to clean URL to remove token from address bar
+          const cleanUrl = new URL(url);
+          cleanUrl.searchParams.delete('ai');
+          cleanUrl.searchParams.delete('draftId');
+          cleanUrl.searchParams.delete('token');
+          return redirect(cleanUrl.pathname + cleanUrl.search);
         } catch (ownerError) {
           logger.error('Failed to fetch draft as owner', ownerError);
           // Redirect to clean new recipe page since we can't load the draft
