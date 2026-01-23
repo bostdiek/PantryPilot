@@ -94,7 +94,7 @@ function formatToolName(toolName: string): string {
     search_recipes: 'Searching recipes...',
     get_recipe: 'Fetching recipe details...',
     get_recipes: 'Fetching recipes...',
-    search_web: 'Searching the web...',
+    web_search: 'Searching the web...',
     get_user_preferences: 'Checking your preferences...',
     get_meal_plan: 'Loading meal plan...',
     create_meal_plan: 'Creating meal plan...',
