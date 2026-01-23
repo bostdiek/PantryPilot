@@ -114,7 +114,7 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
       setFormFromSuggestion(draftResponse.payload);
 
       logger.debug('New recipe loader: Form prefilled from AI suggestion');
-      
+
       // Redirect to clean URL to remove token from address bar
       return redirectToCleanUrl(url);
     } catch (error) {
@@ -137,7 +137,7 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
           logger.debug(
             'New recipe loader: Form prefilled from AI suggestion (owner fallback)'
           );
-          
+
           // Redirect to clean URL to remove token from address bar
           return redirectToCleanUrl(url);
         } catch (ownerError) {
