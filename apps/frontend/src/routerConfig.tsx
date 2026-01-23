@@ -67,6 +67,18 @@ const recipesLoader = async () => {
   return null;
 };
 
+/**
+ * Removes AI draft query parameters from a URL and returns a redirect response.
+ * Used to clean up the URL after processing AI draft deep links.
+ */
+const redirectToCleanUrl = (url: URL): Response => {
+  const cleanUrl = new URL(url);
+  cleanUrl.searchParams.delete('ai');
+  cleanUrl.searchParams.delete('draftId');
+  cleanUrl.searchParams.delete('token');
+  return redirect(cleanUrl.pathname + cleanUrl.search);
+};
+
 const newRecipeLoader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
   const ai = url.searchParams.get('ai');
@@ -104,11 +116,7 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
       logger.debug('New recipe loader: Form prefilled from AI suggestion');
       
       // Redirect to clean URL to remove token from address bar
-      const cleanUrl = new URL(url);
-      cleanUrl.searchParams.delete('ai');
-      cleanUrl.searchParams.delete('draftId');
-      cleanUrl.searchParams.delete('token');
-      return redirect(cleanUrl.pathname + cleanUrl.search);
+      return redirectToCleanUrl(url);
     } catch (error) {
       logger.error('New recipe loader: Failed to load draft with token', error);
 
@@ -131,19 +139,11 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
           );
           
           // Redirect to clean URL to remove token from address bar
-          const cleanUrl = new URL(url);
-          cleanUrl.searchParams.delete('ai');
-          cleanUrl.searchParams.delete('draftId');
-          cleanUrl.searchParams.delete('token');
-          return redirect(cleanUrl.pathname + cleanUrl.search);
+          return redirectToCleanUrl(url);
         } catch (ownerError) {
           logger.error('Failed to fetch draft as owner', ownerError);
           // Redirect to clean new recipe page since we can't load the draft
-          const cleanUrl = new URL(url);
-          cleanUrl.searchParams.delete('ai');
-          cleanUrl.searchParams.delete('draftId');
-          cleanUrl.searchParams.delete('token');
-          return redirect(cleanUrl.pathname + cleanUrl.search);
+          return redirectToCleanUrl(url);
         }
       }
     }

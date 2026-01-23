@@ -54,6 +54,16 @@ import {
   recipesLoader,
 } from '../routerConfig';
 
+/**
+ * Helper function to assert that a result is a redirect to the clean /recipes/new URL
+ */
+function expectRedirectToCleanUrl(result: any) {
+  expect(result).toHaveProperty('status');
+  expect(result.status).toBe(302);
+  const location = result.headers.get('location');
+  expect(location).toBe('/recipes/new');
+}
+
 describe('routerConfig loaders', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -113,10 +123,7 @@ describe('routerConfig loaders', () => {
     const result = await newRecipeLoader({ request: req } as any);
     expect(getDraftById).toHaveBeenCalledWith('d1', 't1');
     // result should be a redirect to clean URL
-    expect(result).toHaveProperty('status');
-    expect(result.status).toBe(302);
-    const location = result.headers.get('location');
-    expect(location).toBe('/recipes/new');
+    expectRedirectToCleanUrl(result);
   });
 
   it('newRecipeLoader falls back to owner endpoint when getDraftById returns 401', async () => {
@@ -142,10 +149,7 @@ describe('routerConfig loaders', () => {
     expect(getDraftByIdOwner).toHaveBeenCalledWith('d1');
     
     // Should redirect to clean URL
-    expect(result).toHaveProperty('status');
-    expect(result.status).toBe(302);
-    const location = result.headers.get('location');
-    expect(location).toBe('/recipes/new');
+    expectRedirectToCleanUrl(result);
   });
 
   it('newRecipeLoader redirects to clean URL when owner fallback fails', async () => {
@@ -174,10 +178,7 @@ describe('routerConfig loaders', () => {
     expect(getDraftByIdOwner).toHaveBeenCalledWith('d1');
     
     // Should redirect to clean URL
-    expect(result).toHaveProperty('status');
-    expect(result.status).toBe(302);
-    const location = result.headers.get('location');
-    expect(location).toBe('/recipes/new');
+    expectRedirectToCleanUrl(result);
   });
 
   it('recipeDetailLoader calls fetchRecipeById when id param provided', async () => {
