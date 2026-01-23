@@ -49,6 +49,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 logger = logging.getLogger(__name__)
 
+# Maximum content length for SSE events before truncation
+# Balances between useful preview and staying well under MAX_SSE_EVENT_BYTES
+MAX_CONTENT_PREVIEW_CHARS: int = 500
+
 
 def _get_user_friendly_error_message(exc: Exception) -> str:
     """Convert technical exceptions to user-friendly error messages.
@@ -501,16 +505,19 @@ def _truncate_large_fields_for_sse(
     if result is None:
         return None
 
-    # Create a shallow copy to avoid modifying the original
+    # Create a shallow copy to avoid modifying the original.
+    # This is safe because we only replace top-level values, not mutate nested objects.
     sse_safe_result = dict(result)
 
     # Remove large content fields that are commonly returned by tools
     # The AI already has this content in context; it doesn't need it in the SSE stream
     if "content" in sse_safe_result:
         content = sse_safe_result["content"]
-        if isinstance(content, str) and len(content) > 500:
+        if isinstance(content, str) and len(content) > MAX_CONTENT_PREVIEW_CHARS:
             # Replace with a truncated summary
-            sse_safe_result["content"] = content[:500] + "... (truncated for display)"
+            sse_safe_result["content"] = (
+                content[:MAX_CONTENT_PREVIEW_CHARS] + "... (truncated for display)"
+            )
 
     # Handle search_recipes results - only stream query info, not the full results
     # The AI already has the results; the frontend doesn't need them in the SSE stream
