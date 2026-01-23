@@ -18,6 +18,7 @@ from services.chat_agent.tools import (
     tool_fetch_url_as_markdown,
     tool_get_daily_weather,
     tool_get_meal_plan_history,
+    tool_propose_meal_for_day,
     tool_search_recipes,
     tool_suggest_recipe,
     tool_web_search,
@@ -153,6 +154,7 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     agent.tool(name="web_search")(tool_web_search)
     agent.tool(name="fetch_url_as_markdown")(tool_fetch_url_as_markdown)
     agent.tool(name="suggest_recipe")(tool_suggest_recipe)
+    agent.tool(name="propose_meal_for_day")(tool_propose_meal_for_day)
 
     return agent
 

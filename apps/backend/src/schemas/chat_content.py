@@ -66,8 +66,51 @@ class ActionBlock(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ExistingRecipeOption(BaseModel):
+    """Reference to a recipe in user's collection."""
+
+    id: str
+    title: str
+    image_url: str | None = None
+    detail_path: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class NewRecipeOption(BaseModel):
+    """Reference to a new recipe from web search."""
+
+    title: str
+    source_url: str
+    description: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class MealProposalBlock(BaseModel):
+    """Meal plan proposal block for a specific day.
+
+    Used during meal planning conversations to present recipe options
+    with Accept/Reject functionality. Does not automatically add to
+    meal plan; requires user acceptance.
+    """
+
+    type: Literal["meal_proposal"]
+    proposal_id: str  # For tracking accept/reject (e.g., "2026-01-26-proposal")
+    date: str  # ISO date (YYYY-MM-DD)
+    day_label: str  # Human-friendly day name ("Monday", "Taco Tuesday", etc.)
+
+    existing_recipe: ExistingRecipeOption | None = None
+    new_recipe: NewRecipeOption | None = None
+    is_leftover: bool = False
+    is_eating_out: bool = False
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 ChatContentBlock = Annotated[
-    TextBlock | LinkBlock | RecipeCardBlock | ActionBlock,
+    TextBlock | LinkBlock | RecipeCardBlock | ActionBlock | MealProposalBlock,
     Field(discriminator="type"),
 ]
 
