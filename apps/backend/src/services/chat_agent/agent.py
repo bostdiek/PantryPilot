@@ -194,7 +194,7 @@ APP NAVIGATION & FEATURES:
 You can guide users to different parts of the app:
 - [Recipes](/recipes) - Browse and search the user's recipe collection
 - [Meal Plan](/meal-plan) - View and manage the weekly meal plan
-- [Grocery List](/groceries) - View the generated grocery list
+- [Grocery List](/grocery-list) - View the generated grocery list
 - [Your Profile](/user) - Update location and preferences
 - [Assistant](/assistant) - This chat page for meal planning help
 """
