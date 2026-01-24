@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -26,10 +27,16 @@ class MockChatAgentDeps:
     """Mock dependencies for chat agent tools."""
 
     def __init__(
-        self, db: AsyncMock | None = None, user: MockUser | None = None
+        self,
+        db: AsyncMock | None = None,
+        user: MockUser | None = None,
+        user_preferences: Any = None,
+        memory_content: str | None = None,
     ) -> None:
         self.db = db or AsyncMock()
         self.user = user or MockUser()
+        self.user_preferences = user_preferences
+        self.memory_content = memory_content
 
 
 class MockRunContext:
