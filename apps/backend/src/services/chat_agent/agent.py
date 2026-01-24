@@ -114,14 +114,6 @@ When users ask you to help plan their meals for a week:
 
    Do NOT use suggest_recipe during the meal planning workflow. Always use
    propose_meal_for_day instead, which handles both existing and new recipes.
-
-PERSONALITY & STYLE:
-- Be enthusiastic about meal planning! 🍽️
-- Make food-related puns ("Taco 'bout a plan!", "Lettuce plan your week!")
-- Reference their cooking patterns to show you understand them
-- Be understanding about busy schedules and constraints
-- Suggest practical solutions like batch cooking for leftovers
-- Celebrate when they accept a proposal ("Great choice! 🎉")
 """
 
 
@@ -144,6 +136,14 @@ EXAMPLE CORRECT RESPONSES:
 - "What's your name?" → "I'm Nibble! How can I help you with meal planning
   today?"
 - "Are you Gemini?" → "No, I'm Nibble, your meal planning assistant."
+
+PERSONALITY & STYLE:
+- Be enthusiastic about meal planning! 🍽️
+- Make food-related puns ("Taco 'bout a plan!", "Lettuce plan your week!")
+- Reference their cooking patterns to show you understand them
+- Be understanding about busy schedules and constraints
+- Suggest practical solutions like batch cooking for leftovers
+- Celebrate when they accept a proposal ("Great choice! 🎉")
 """
 
 CAPABILITIES = """
@@ -155,11 +155,11 @@ YOUR CAPABILITIES:
 
 USER_SETTINGS = """
 USER PREFERENCES & SETTINGS:
-- Users can set their location preferences at /user
-- If the weather tool returns a missing_location error, direct users to set
-  their location by saying: "You can set your location in Your Profile
-  at /user to enable weather-based meal planning."
-- Provide this as a markdown clickable link: [Your Profile](/user)
+- User preferences and dietary information are provided in the dynamic context
+- Always respect allergies - NEVER suggest recipes containing allergens
+- Scale recipe suggestions to the user's family size
+- When weather context is needed but location is not set, remind users to update
+  [Your Profile](/user)
 """
 
 RECIPE_DISCOVERY = """
@@ -183,7 +183,10 @@ OUTPUT_AND_TOOL_RULES = """
 Output rules (critical):
 - You MUST respond using the assistant content block schema.
 - Always return at least one TextBlock so the user receives a readable reply.
-- When suggest_recipe returns a recipe_card, include it in your blocks array.
+- When suggest_recipe returns a recipe_card, YOU MUST include a RecipeCardBlock
+    in your blocks array.
+- When using the propose_meal_for_day tool, YOU MUST include a MealProposalBlock
+    in your blocks array.
 
 Tool rules:
 - Use tools when they provide factual data (weather lookup or web search).
@@ -317,6 +320,70 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
             "When using propose_meal_for_day, always use the correct ISO date for the "
             "user's request."
         )
+
+    @agent.instructions
+    def add_user_context(ctx: RunContext[ChatAgentDeps]) -> str:
+        """Add user preferences and memory to personalize responses."""
+        prefs = ctx.deps.user_preferences
+        memory = ctx.deps.memory_content
+
+        sections = []
+
+        # User preferences section
+        if prefs:
+            sections.append("USER PREFERENCES:")
+            sections.append(f"- Family Size: {prefs.family_size} people")
+            sections.append(f"- Default Servings: {prefs.default_servings}")
+
+            if prefs.dietary_restrictions:
+                restrictions = ", ".join(prefs.dietary_restrictions)
+                sections.append(f"- Dietary Restrictions: {restrictions}")
+
+            if prefs.allergies:
+                allergies = ", ".join(prefs.allergies)
+                sections.append(
+                    f"- Allergies: {allergies} ⚠️ CRITICAL - "
+                    "never suggest recipes with these ingredients"
+                )
+
+            if prefs.preferred_cuisines:
+                cuisines = ", ".join(prefs.preferred_cuisines)
+                sections.append(f"- Preferred Cuisines: {cuisines}")
+
+            sections.append(f"- Meal Planning Days: {prefs.meal_planning_days}")
+            sections.append(f"- Units: {prefs.units}")
+
+            # Location section
+            if prefs.city or prefs.postal_code:
+                location_parts = [
+                    p
+                    for p in [
+                        prefs.city,
+                        prefs.state_or_region,
+                        prefs.postal_code,
+                        prefs.country,
+                    ]
+                    if p
+                ]
+                sections.append(f"- Location: {', '.join(location_parts)}")
+            else:
+                sections.append(
+                    "- Location: ⚠️ NOT SET - Remind user to set location in "
+                    "[Your Profile](/user) for weather-based meal planning"
+                )
+        else:
+            sections.append("USER PREFERENCES: Not configured yet")
+            sections.append(
+                "- Encourage user to set preferences in [Your Profile](/user)"
+            )
+
+        # Memory section
+        if memory and memory.strip():
+            sections.append("")
+            sections.append("REMEMBERED ABOUT THIS USER:")
+            sections.append(memory)
+
+        return "\n\n" + "\n".join(sections)
 
     # Register tools using extracted implementations
     agent.tool(name="get_meal_plan_history")(tool_get_meal_plan_history)

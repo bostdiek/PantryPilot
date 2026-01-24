@@ -7,6 +7,7 @@ from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.user_preferences import UserPreferences
 from models.users import User
 
 
@@ -18,3 +19,7 @@ class ChatAgentDeps:
     user: User
     current_datetime: datetime
     user_timezone: str  # IANA timezone identifier (e.g., 'America/New_York')
+
+    # User context for personalization
+    user_preferences: UserPreferences | None = None
+    memory_content: str | None = None

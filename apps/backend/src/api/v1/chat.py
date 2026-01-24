@@ -25,6 +25,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.ratelimit import check_rate_limit
+from crud.user_preferences import UserPreferencesCRUD
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from models.chat_conversations import ChatConversation
@@ -43,6 +44,7 @@ from schemas.chat_streaming import (
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
 from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
+from services.memory_update import MemoryUpdateService
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -904,11 +906,22 @@ async def stream_chat_message(  # noqa: C901
                 client_datetime_str, server_now=datetime.now(UTC)
             )
 
+            # Load user preferences for personalization
+            user_prefs_crud = UserPreferencesCRUD()
+            user_prefs = await user_prefs_crud.get_by_user_id(db, current_user.id)
+
+            # Load memory document content
+            memory_service = MemoryUpdateService(db)
+            memory_doc = await memory_service.get_memory_document(current_user.id)
+            memory_content = memory_doc.content if memory_doc else None
+
             deps = ChatAgentDeps(
                 db=db,
                 user=current_user,
                 current_datetime=current_dt,
                 user_timezone=user_timezone,
+                user_preferences=user_prefs,
+                memory_content=memory_content,
             )
             async for agent_event in agent.run_stream_events(
                 payload.content, deps=deps, message_history=message_history
