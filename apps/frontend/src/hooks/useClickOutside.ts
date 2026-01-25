@@ -19,12 +19,30 @@ export function useClickOutside<T extends HTMLElement>(
   active: boolean = true
 ): RefObject<T | null> {
   const ref = useRef<T>(null);
+  // Track whether we should skip the current event (to avoid closing on the click that opened the modal)
+  const skipNextEvent = useRef(false);
 
   const handleClickOutside = useCallback(
     (event: MouseEvent | TouchEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        callback();
+      // Skip this event if we just became active (the opening click)
+      if (skipNextEvent.current) {
+        skipNextEvent.current = false;
+        return;
       }
+
+      const target = event.target as Node;
+
+      // If ref is not set yet, don't trigger callback (element not mounted)
+      if (!ref.current) {
+        return;
+      }
+
+      // If click is inside the ref element, don't trigger callback
+      if (ref.current.contains(target)) {
+        return;
+      }
+
+      callback();
     },
     [callback]
   );
@@ -34,13 +52,17 @@ export function useClickOutside<T extends HTMLElement>(
       return;
     }
 
-    // Use capture phase to ensure we catch the event before other handlers
-    document.addEventListener('mousedown', handleClickOutside, true);
-    document.addEventListener('touchstart', handleClickOutside, true);
+    // Skip the first click event after becoming active to avoid closing on the opening click
+    skipNextEvent.current = true;
+
+    // Use bubble phase (default) to let interactive elements handle their clicks first
+    // This prevents the outside click handler from closing modals before buttons can navigate
+    document.addEventListener('click', handleClickOutside);
+    document.addEventListener('touchend', handleClickOutside);
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside, true);
-      document.removeEventListener('touchstart', handleClickOutside, true);
+      document.removeEventListener('click', handleClickOutside);
+      document.removeEventListener('touchend', handleClickOutside);
     };
   }, [handleClickOutside, active]);
 

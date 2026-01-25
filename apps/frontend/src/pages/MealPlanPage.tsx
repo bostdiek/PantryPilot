@@ -20,7 +20,6 @@ import {
   useSortable,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { Menu, Transition } from '@headlessui/react';
 import {
   Fragment,
   useCallback,
@@ -33,6 +32,7 @@ import {
   type ReactNode,
 } from 'react';
 import { searchRecipes } from '../api/endpoints/recipes';
+import { AddMealDialog } from '../components/AddMealDialog';
 import { MobileMealPlanView } from '../components/MobileMealPlanView';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 import { DaySelectionDialog } from '../components/recipes/DaySelectionDialog';
@@ -177,6 +177,23 @@ const MealPlanPage: FC = () => {
   const [selectedRecipeForDay, setSelectedRecipeForDay] =
     useState<Recipe | null>(null);
 
+  // Desktop AddMealDialog state
+  const [desktopAddDialogOpen, setDesktopAddDialogOpen] = useState(false);
+  const [desktopAddDialogTarget, setDesktopAddDialogTarget] = useState<{
+    date: string;
+    dayOfWeek: string;
+  } | null>(null);
+
+  const handleDesktopAddClick = (date: string, dayOfWeek: string) => {
+    setDesktopAddDialogTarget({ date, dayOfWeek });
+    setDesktopAddDialogOpen(true);
+  };
+
+  const handleCloseDesktopAddDialog = () => {
+    setDesktopAddDialogOpen(false);
+    setDesktopAddDialogTarget(null);
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -291,6 +308,25 @@ const MealPlanPage: FC = () => {
         logger.error('Failed to remove entry:', error);
         // Don't close modal on error so user can try again
       }
+    }
+  }
+
+  // Week navigation handler (shared between desktop buttons and mobile navigation)
+  function handleWeekChange(direction: 'prev' | 'next' | 'today') {
+    const start =
+      currentWeek?.weekStartDate ?? fmtYmd(startOfSundayWeek(today));
+
+    if (direction === 'prev') {
+      void loadWeek(addDays(start, -7));
+    } else if (direction === 'next') {
+      void loadWeek(addDays(start, 7));
+    } else if (direction === 'today') {
+      const todayStart = fmtYmd(startOfSundayWeek(today));
+      if (currentWeek?.weekStartDate !== todayStart) {
+        void loadWeek(todayStart);
+      }
+      // Scroll to today after render
+      setTimeout(() => scrollToDay(toYyyyMmDd(today)), 0);
     }
   }
 
@@ -724,12 +760,7 @@ const MealPlanPage: FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                const start =
-                  currentWeek?.weekStartDate ??
-                  fmtYmd(startOfSundayWeek(today));
-                void loadWeek(addDays(start, -7));
-              }}
+              onClick={() => handleWeekChange('prev')}
               aria-label="Previous week"
             >
               Prev Week
@@ -737,12 +768,7 @@ const MealPlanPage: FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                const start =
-                  currentWeek?.weekStartDate ??
-                  fmtYmd(startOfSundayWeek(today));
-                void loadWeek(addDays(start, 7));
-              }}
+              onClick={() => handleWeekChange('next')}
               aria-label="Next week"
             >
               Next Week
@@ -750,14 +776,7 @@ const MealPlanPage: FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={async () => {
-                const todayStart = fmtYmd(startOfSundayWeek(today));
-                if (currentWeek?.weekStartDate !== todayStart) {
-                  await loadWeek(todayStart);
-                }
-                // center after (re)render
-                setTimeout(() => scrollToDay(toYyyyMmDd(today)), 0);
-              }}
+              onClick={() => handleWeekChange('today')}
               aria-label="Jump to today"
             >
               Today
@@ -770,9 +789,17 @@ const MealPlanPage: FC = () => {
           currentWeek={currentWeek}
           recipes={recipes}
           todayDate={toYyyyMmDd(today)}
+          currentWeekStart={currentWeek?.weekStartDate}
+          onWeekChange={handleWeekChange}
           onMarkCooked={handleMarkCooked}
           onRecipeClick={handleRecipeClick}
           onRemoveEntry={handleRemoveFromDay}
+          onAddLeftover={(date) =>
+            addEntry({ plannedForDate: date, isLeftover: true })
+          }
+          onAddEatingOut={(date) =>
+            addEntry({ plannedForDate: date, isEatingOut: true })
+          }
         />
 
         {/* Desktop View - Horizontal 7-Day Layout */}
@@ -854,68 +881,16 @@ const MealPlanPage: FC = () => {
                           </ul>
                         </SortableContext>
                         <div className="flex justify-end">
-                          <Menu
-                            as="div"
-                            className="relative inline-block text-left"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            aria-label={`Add to ${day.dayOfWeek}`}
+                            onClick={() =>
+                              handleDesktopAddClick(day.date, day.dayOfWeek)
+                            }
                           >
-                            <Menu.Button
-                              as={Button}
-                              variant="outline"
-                              size="sm"
-                              aria-label={`Add to ${day.dayOfWeek}`}
-                            >
-                              + Add
-                            </Menu.Button>
-                            <Transition
-                              enter="transition ease-out duration-100"
-                              enterFrom="transform opacity-0 scale-95"
-                              enterTo="transform opacity-100 scale-100"
-                              leave="transition ease-in duration-75"
-                              leaveFrom="transform opacity-100 scale-100"
-                              leaveTo="transform opacity-0 scale-95"
-                            >
-                              <Menu.Items className="absolute right-0 z-10 mt-2 w-36 origin-top-right rounded-md border border-gray-200 bg-white shadow-lg focus:outline-none">
-                                <div className="py-1 text-sm">
-                                  <Menu.Item as={Fragment}>
-                                    {({ active }) => (
-                                      <button
-                                        className={[
-                                          'block w-full px-3 py-1 text-left',
-                                          active ? 'bg-gray-100' : '',
-                                        ].join(' ')}
-                                        onClick={() =>
-                                          addEntry({
-                                            plannedForDate: day.date,
-                                            isLeftover: true,
-                                          })
-                                        }
-                                      >
-                                        Leftover
-                                      </button>
-                                    )}
-                                  </Menu.Item>
-                                  <Menu.Item as={Fragment}>
-                                    {({ active }) => (
-                                      <button
-                                        className={[
-                                          'block w-full px-3 py-1 text-left',
-                                          active ? 'bg-gray-100' : '',
-                                        ].join(' ')}
-                                        onClick={() =>
-                                          addEntry({
-                                            plannedForDate: day.date,
-                                            isEatingOut: true,
-                                          })
-                                        }
-                                      >
-                                        Eating Out
-                                      </button>
-                                    )}
-                                  </Menu.Item>
-                                </div>
-                              </Menu.Items>
-                            </Transition>
-                          </Menu>
+                            + Add
+                          </Button>
                         </div>
                       </DayDroppableCard>
                     </div>
@@ -1091,6 +1066,30 @@ const MealPlanPage: FC = () => {
             })
           ) || []
         }
+      />
+
+      {/* Desktop AddMealDialog */}
+      <AddMealDialog
+        isOpen={desktopAddDialogOpen}
+        onClose={handleCloseDesktopAddDialog}
+        targetDate={desktopAddDialogTarget?.date ?? ''}
+        dayOfWeek={desktopAddDialogTarget?.dayOfWeek ?? ''}
+        onAddLeftover={() => {
+          if (desktopAddDialogTarget) {
+            addEntry({
+              plannedForDate: desktopAddDialogTarget.date,
+              isLeftover: true,
+            });
+          }
+        }}
+        onAddEatingOut={() => {
+          if (desktopAddDialogTarget) {
+            addEntry({
+              plannedForDate: desktopAddDialogTarget.date,
+              isEatingOut: true,
+            });
+          }
+        }}
       />
     </Container>
   );
