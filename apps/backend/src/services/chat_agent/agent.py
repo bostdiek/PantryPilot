@@ -23,6 +23,7 @@ from services.chat_agent.tools import (
     tool_propose_meal_for_day,
     tool_search_recipes,
     tool_suggest_recipe,
+    tool_update_user_memory,
     tool_web_search,
 )
 
@@ -162,6 +163,63 @@ USER PREFERENCES & SETTINGS:
   [Your Profile](/user)
 """
 
+MEMORY_INSTRUCTIONS = """
+MEMORY MANAGEMENT (IMPORTANT - BE PROACTIVE):
+You have a personal memory document for each user that persists across conversations.
+Use the update_user_memory tool IMMEDIATELY when you learn anything useful about
+the user.
+
+⚠️ CRITICAL: Call update_user_memory in the SAME response where you learn new info.
+Don't wait for users to ask you to remember - BE PROACTIVE and save automatically.
+
+HOW MEMORY WORKS:
+- You receive the current memory content at the start of each conversation
+- Use update_user_memory to REPLACE the entire memory with updated content
+- Include ALL existing memory content plus your new additions
+- The memory is markdown-formatted and should be well-organized
+- Maximum 50,000 characters - keep it concise but comprehensive
+
+WHEN TO UPDATE MEMORY (update immediately when ANY of these appear):
+✅ DO update memory when users mention:
+- Family members, kids, ages, or household composition
+- Picky eaters, food preferences, or dislikes
+- Recurring meal traditions or weekly patterns
+- Cooking skill level, time constraints, or busy schedules
+- Recipe feedback ("loved it", "kids hated it", "made it twice")
+- Special dietary needs or restrictions
+- Kitchen equipment or cooking style preferences
+- Favorite cuisines or foods they want to explore
+
+❌ DON'T update memory for:
+- One-time requests with no lasting preference ("what can I make tonight?")
+- General cooking technique questions
+- Truly temporary situations ("we're out of milk today")
+
+MEMORY STRUCTURE:
+```markdown
+## Family & Household
+[Names, ages, individual preferences, picky eaters]
+
+## Meal Patterns & Traditions
+[Weekly routines, special days, exploration goals]
+
+## Cooking Style
+[Skill level, time availability, equipment]
+
+## Recipe Feedback
+[Specific recipes and reactions]
+
+## Notes
+[Other relevant details]
+```
+
+MANDATORY BEHAVIOR:
+1. When a user shares personal info → CALL update_user_memory in your response
+2. Include ALL existing memory content + new info (you're replacing, not appending)
+3. After updating, briefly acknowledge: "I'll remember that! 📝" or similar
+4. Even if unsure, err on the side of saving - users prefer you remember too much
+   than too little
+"""
 RECIPE_DISCOVERY = """
 RECIPE DISCOVERY WORKFLOW:
 When users ask for recipe suggestions or want to save a recipe from a website:
@@ -216,6 +274,8 @@ CHAT_SYSTEM_PROMPT = (
     + CAPABILITIES
     + "\n"
     + USER_SETTINGS
+    + "\n"
+    + MEMORY_INSTRUCTIONS
     + "\n"
     + APP_NAVIGATION
     + "\n"
@@ -393,6 +453,7 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     agent.tool(name="fetch_url_as_markdown")(tool_fetch_url_as_markdown)
     agent.tool(name="suggest_recipe")(tool_suggest_recipe)
     agent.tool(name="propose_meal_for_day")(tool_propose_meal_for_day)
+    agent.tool(name="update_user_memory")(tool_update_user_memory)
 
     return agent
 
