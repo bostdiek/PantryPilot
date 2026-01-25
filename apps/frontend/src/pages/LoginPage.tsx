@@ -1,8 +1,8 @@
 import { useState, type FC, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import logoSvg from '../assets/logo/smartmealplanner-logo.svg';
 import { login } from '../api/endpoints/auth';
 import { userProfileApi } from '../api/endpoints/userProfile';
+import logoSvg from '../assets/logo/smartmealplanner-logo.svg';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -117,6 +117,9 @@ const LoginPage: FC = () => {
           <h1 className="text-2xl font-bold text-gray-800">
             Smart Meal Planner
           </h1>
+          <p className="text-center text-sm text-gray-600">
+            Meet Nibble — your chat assistant for meal planning and groceries.
+          </p>
         </div>
 
         <Card variant="default" className="w-full max-w-md p-6">
@@ -132,6 +135,7 @@ const LoginPage: FC = () => {
               value={formData.username}
               onChange={handleInputChange('username')}
               placeholder="Enter your username"
+              autoComplete="username"
               required
               disabled={isLoading}
             />
@@ -143,6 +147,7 @@ const LoginPage: FC = () => {
               value={formData.password}
               onChange={handleInputChange('password')}
               placeholder="Enter your password"
+              autoComplete="current-password"
               required
               disabled={isLoading}
             />

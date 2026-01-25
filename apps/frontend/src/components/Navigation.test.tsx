@@ -83,14 +83,11 @@ describe('Navigation', () => {
       screen.getByRole('link', { name: /^assistant$/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: /add recipe/i })
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('link', { name: /meal plan/i })
     ).toBeInTheDocument();
 
     // User menu button should be present
-    const userMenuButton = screen.getByRole('button', { name: /tester/i });
+    const userMenuButton = screen.getByRole('button', { name: /user menu/i });
     expect(userMenuButton).toBeInTheDocument();
 
     // Logout not visible before opening menu

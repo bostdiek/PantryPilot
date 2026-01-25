@@ -55,6 +55,11 @@ describe('HomePage', () => {
 
     expect(screen.getByText('Hi, Test User!')).toBeInTheDocument();
     expect(screen.getByText('Ready to plan some meals?')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Ask Nibble for recipe ideas, meal plans, and a grocery list.'
+      )
+    ).toBeInTheDocument();
   });
 
   test('renders the recipes count section', () => {
