@@ -16,6 +16,12 @@ export interface UserPreferences {
   // Meal planning preferences
   mealPlanningDays: number; // How many days to plan ahead
   preferredCuisines: string[];
+
+  // Location preferences (for weather and meal planning)
+  city?: string;
+  stateOrRegion?: string;
+  postalCode?: string;
+  country?: string;
 }
 
 // Backend API types (snake_case to match backend)
@@ -30,6 +36,10 @@ export interface UserPreferencesResponse {
   units: 'metric' | 'imperial';
   meal_planning_days: number;
   preferred_cuisines: string[];
+  city?: string;
+  state_or_region?: string;
+  postal_code?: string;
+  country?: string;
 }
 
 export interface UserPreferencesUpdate {
@@ -41,6 +51,10 @@ export interface UserPreferencesUpdate {
   units?: 'metric' | 'imperial';
   meal_planning_days?: number;
   preferred_cuisines?: string[];
+  city?: string;
+  state_or_region?: string;
+  postal_code?: string;
+  country?: string;
 }
 
 export interface UserProfileResponse {
@@ -92,6 +106,10 @@ export function toFrontendPreferences(
     units: backendPrefs.units,
     mealPlanningDays: backendPrefs.meal_planning_days,
     preferredCuisines: backendPrefs.preferred_cuisines,
+    city: backendPrefs.city,
+    stateOrRegion: backendPrefs.state_or_region,
+    postalCode: backendPrefs.postal_code,
+    country: backendPrefs.country,
   };
 }
 
@@ -124,6 +142,18 @@ export function toBackendPreferences(
   if (frontendPrefs.preferredCuisines !== undefined) {
     update.preferred_cuisines = frontendPrefs.preferredCuisines;
   }
+  if (frontendPrefs.city !== undefined) {
+    update.city = frontendPrefs.city;
+  }
+  if (frontendPrefs.stateOrRegion !== undefined) {
+    update.state_or_region = frontendPrefs.stateOrRegion;
+  }
+  if (frontendPrefs.postalCode !== undefined) {
+    update.postal_code = frontendPrefs.postalCode;
+  }
+  if (frontendPrefs.country !== undefined) {
+    update.country = frontendPrefs.country;
+  }
 
   return update;
 }
@@ -138,6 +168,10 @@ export const defaultUserPreferences: UserPreferences = {
   units: 'imperial',
   mealPlanningDays: 7,
   preferredCuisines: [],
+  city: undefined,
+  stateOrRegion: undefined,
+  postalCode: undefined,
+  country: 'US',
 };
 
 // Common allergy options

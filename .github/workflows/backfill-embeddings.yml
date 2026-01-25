@@ -1,0 +1,109 @@
+# =============================================================================
+# Backfill Recipe Embeddings - Manual Trigger
+# =============================================================================
+name: Backfill Recipe Embeddings
+
+on:
+    workflow_dispatch:
+        inputs:
+            environment:
+                description: "Environment to backfill"
+                required: true
+                type: choice
+                options:
+                    - dev
+                    - prod
+            dry_run:
+                description: "Dry run (preview only, no changes)"
+                required: true
+                type: boolean
+                default: true
+            limit:
+                description: "Limit number of recipes (leave empty for all)"
+                required: false
+                type: string
+                default: ""
+
+concurrency:
+    group: backfill-embeddings-${{ inputs.environment }}
+    cancel-in-progress: false
+
+jobs:
+    backfill:
+        name: Backfill Embeddings (${{ inputs.environment }})
+        runs-on: ubuntu-latest
+        environment: ${{ inputs.environment }}
+        permissions:
+            contents: read
+            id-token: write
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v6
+
+            - name: Set environment variables
+              run: | # pragma: allowlist secret
+                  if [[ "${{ inputs.environment }}" == "prod" ]]; then
+                    echo "AZURE_RESOURCE_GROUP=rg-pantrypilot-prod" >> $GITHUB_ENV
+                    echo "CONTAINER_APP_NAME=pantrypilot-backend-prod" >> $GITHUB_ENV
+                  else
+                    echo "AZURE_RESOURCE_GROUP=rg-pantrypilot-dev" >> $GITHUB_ENV
+                    echo "CONTAINER_APP_NAME=pantrypilot-backend-dev" >> $GITHUB_ENV
+                  fi
+
+            - name: Log in to Azure
+              uses: azure/login@v2
+              with:
+                  client-id: ${{ secrets.AZURE_CLIENT_ID }}
+                  tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+                  subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+            - name: Build backfill command
+              id: build-command
+              run: |
+                  CMD="cd /home/site/wwwroot && PYTHONPATH=./src uv run python scripts/backfill_embeddings.py"
+
+                  if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+                    CMD="$CMD --dry-run"
+                  fi
+
+                  if [[ -n "${{ inputs.limit }}" ]]; then
+                    CMD="$CMD --limit ${{ inputs.limit }}"
+                  fi
+
+                  echo "command=$CMD" >> $GITHUB_OUTPUT
+                  echo "Running: $CMD"
+
+            - name: Run backfill script on Container App
+              run: |
+                  echo "## 🚀 Starting Embedding Backfill" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "**Environment:** ${{ inputs.environment }}" >> $GITHUB_STEP_SUMMARY
+                  echo "**Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+                  echo "**Limit:** ${{ inputs.limit || 'none (all recipes)' }}" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+
+                  # Run the command on the container app
+                  az containerapp exec \
+                    --name ${{ env.CONTAINER_APP_NAME }} \
+                    --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+                    --command "${{ steps.build-command.outputs.command }}" \
+                    || true
+
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "✅ Backfill command executed. Check logs above for results." >> $GITHUB_STEP_SUMMARY
+
+            - name: Get recent logs
+              if: always()
+              run: |
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "## 📋 Recent Container Logs" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  az containerapp logs show \
+                    --name ${{ env.CONTAINER_APP_NAME }} \
+                    --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+                    --tail 50 \
+                    --follow false \
+                    >> $GITHUB_STEP_SUMMARY || echo "Could not fetch logs"
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

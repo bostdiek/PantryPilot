@@ -10,9 +10,14 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 if TYPE_CHECKING:  # pragma: no cover - only for type checking
     from .ai_drafts import AIDraft
+    from .chat_conversations import ChatConversation
+    from .chat_messages import ChatMessage
+    from .chat_pending_actions import ChatPendingAction
+    from .chat_tool_calls import ChatToolCall
     from .ingredient_names import Ingredient
     from .meal_history import Meal
     from .recipes_names import Recipe
+    from .user_memory_documents import UserMemoryDocument
 
 from .base import Base
 
@@ -60,4 +65,29 @@ class User(Base):
     )
     ai_drafts: Mapped[list[AIDraft]] = relationship(
         "AIDraft", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    chat_conversations: Mapped[list[ChatConversation]] = relationship(
+        "ChatConversation", back_populates="user", cascade="all, delete-orphan"
+    )
+    chat_messages: Mapped[list[ChatMessage]] = relationship(
+        "ChatMessage", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    chat_pending_actions: Mapped[list[ChatPendingAction]] = relationship(
+        "ChatPendingAction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+    chat_tool_calls: Mapped[list[ChatToolCall]] = relationship(
+        "ChatToolCall",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    memory_document: Mapped[UserMemoryDocument | None] = relationship(
+        "UserMemoryDocument",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
     )

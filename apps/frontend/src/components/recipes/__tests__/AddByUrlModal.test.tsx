@@ -1,6 +1,8 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mocks for dependencies
@@ -37,6 +39,11 @@ vi.mock('../../../api/endpoints/aiDrafts', () => ({
 
 import { AddByUrlModal } from '../AddByUrlModal';
 
+// Helper to render with router context
+const renderWithRouter = (ui: React.ReactElement) => {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+};
+
 describe('AddByUrlModal', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -48,7 +55,7 @@ describe('AddByUrlModal', () => {
   });
 
   it('renders form fields and buttons', () => {
-    render(<AddByUrlModal isOpen={true} onClose={() => {}} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={() => {}} />);
 
     expect(screen.getByLabelText(/Recipe URL/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument();
@@ -59,7 +66,7 @@ describe('AddByUrlModal', () => {
 
   it('shows validation error when URL is empty or invalid', async () => {
     const user = userEvent.setup();
-    render(<AddByUrlModal isOpen={true} onClose={() => {}} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={() => {}} />);
 
     // Submit without entering URL using form submit to avoid HTML5 validation
     const form = document.querySelector('form') as HTMLFormElement;
@@ -100,7 +107,7 @@ describe('AddByUrlModal', () => {
     // getDraftByIdOwner should return a draft-like payload
     mockGetDraft.mockResolvedValue({ payload: { title: 'AI Recipe' } });
 
-    render(<AddByUrlModal isOpen={true} onClose={onClose} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -132,7 +139,7 @@ describe('AddByUrlModal', () => {
     // Fallback POST should return signed_url
     mockExtractPost.mockResolvedValue({ signed_url: '/signed/redirect' });
 
-    render(<AddByUrlModal isOpen={true} onClose={onClose} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -170,7 +177,7 @@ describe('AddByUrlModal', () => {
       }
     );
 
-    render(<AddByUrlModal isOpen={true} onClose={onClose} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -205,7 +212,7 @@ describe('AddByUrlModal', () => {
 
     mockGetDraft.mockRejectedValue(new Error('failed to fetch draft'));
 
-    render(<AddByUrlModal isOpen={true} onClose={() => {}} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={() => {}} />);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -233,7 +240,7 @@ describe('AddByUrlModal', () => {
 
     mockExtractPost.mockRejectedValue({ message: 'POST failed' });
 
-    render(<AddByUrlModal isOpen={true} onClose={() => {}} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={() => {}} />);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),

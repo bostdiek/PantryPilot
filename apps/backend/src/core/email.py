@@ -123,6 +123,7 @@ def send_verification_email(to_email: str, verification_token: str) -> bool:
         <p style="word-break: break-all; color: #666;">{verification_link}</p>
         <p style="color: #999; font-size: 12px; margin-top: 30px;">
             If you didn't create an account, you can safely ignore this email.
+            This link will expire in 1 hour.
         </p>
     </body>
     </html>
@@ -135,6 +136,7 @@ Thank you for signing up. Please verify your email address by visiting this link
 {verification_link}
 
 If you didn't create an account, you can safely ignore this email.
+This link will expire in 1 hour.
 """
     return send_email(to_email, subject, html_content, plain_text)
 

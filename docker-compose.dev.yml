@@ -33,6 +33,9 @@ services:
       FASTAPI_ENV: development
       FASTAPI_RELOAD: "true"
       PYTHONPATH: /app/src
+      # Allow overriding for LAN/mobile testing (e.g. make dev-lan-docker)
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     command: uv run fastapi dev src/main.py --host 0.0.0.0 --port 8000
     # Override health check for faster development cycles
     healthcheck:
@@ -54,7 +57,9 @@ services:
       - .env.dev
     environment:
       NODE_ENV: development
-      VITE_HMR_HOST: localhost
+      # Allow overriding for LAN/mobile testing (e.g. make dev-lan-docker)
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_HMR_HOST: ${VITE_HMR_HOST:-localhost}
     command: npm run dev -- --host 0.0.0.0 --port 5173
     # Override health check for development
     healthcheck:

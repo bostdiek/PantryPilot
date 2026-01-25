@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useClickOutside } from '../useClickOutside';
 
 describe('useClickOutside', () => {
@@ -24,17 +24,24 @@ describe('useClickOutside', () => {
     const outsideElement = document.createElement('div');
     document.body.appendChild(outsideElement);
 
-    const event = new MouseEvent('mousedown', {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(event, 'target', {
-      value: outsideElement,
-      enumerable: true,
-    });
+    const createClickEvent = () => {
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'target', {
+        value: outsideElement,
+        enumerable: true,
+      });
+      return event;
+    };
 
-    document.dispatchEvent(event);
+    // First click is skipped (to avoid closing modal on the opening click)
+    document.dispatchEvent(createClickEvent());
+    expect(callback).not.toHaveBeenCalled();
 
+    // Second click should trigger callback
+    document.dispatchEvent(createClickEvent());
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
@@ -48,7 +55,7 @@ describe('useClickOutside', () => {
     result.current.current = element;
 
     // Simulate a click inside (on child element)
-    const event = new MouseEvent('mousedown', {
+    const event = new MouseEvent('click', {
       bubbles: true,
       cancelable: true,
     });
@@ -73,17 +80,24 @@ describe('useClickOutside', () => {
     const outsideElement = document.createElement('div');
     document.body.appendChild(outsideElement);
 
-    const event = new TouchEvent('touchstart', {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(event, 'target', {
-      value: outsideElement,
-      enumerable: true,
-    });
+    const createTouchEvent = () => {
+      const event = new TouchEvent('touchend', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'target', {
+        value: outsideElement,
+        enumerable: true,
+      });
+      return event;
+    };
 
-    document.dispatchEvent(event);
+    // First touch is skipped (to avoid closing modal on the opening touch)
+    document.dispatchEvent(createTouchEvent());
+    expect(callback).not.toHaveBeenCalled();
 
+    // Second touch should trigger callback
+    document.dispatchEvent(createTouchEvent());
     expect(callback).toHaveBeenCalledTimes(1);
   });
 
@@ -91,7 +105,7 @@ describe('useClickOutside', () => {
     renderHook(() => useClickOutside(callback));
 
     // Simulate a click without setting ref
-    const event = new MouseEvent('mousedown', {
+    const event = new MouseEvent('click', {
       bubbles: true,
       cancelable: true,
     });
@@ -116,7 +130,7 @@ describe('useClickOutside', () => {
     const outsideElement = document.createElement('div');
     document.body.appendChild(outsideElement);
 
-    const event = new MouseEvent('mousedown', {
+    const event = new MouseEvent('click', {
       bubbles: true,
       cancelable: true,
     });
@@ -141,17 +155,24 @@ describe('useClickOutside', () => {
     const outsideElement = document.createElement('div');
     document.body.appendChild(outsideElement);
 
-    const event = new MouseEvent('mousedown', {
-      bubbles: true,
-      cancelable: true,
-    });
-    Object.defineProperty(event, 'target', {
-      value: outsideElement,
-      enumerable: true,
-    });
+    const createClickEvent = () => {
+      const event = new MouseEvent('click', {
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(event, 'target', {
+        value: outsideElement,
+        enumerable: true,
+      });
+      return event;
+    };
 
-    document.dispatchEvent(event);
+    // First click is skipped
+    document.dispatchEvent(createClickEvent());
+    expect(callback).not.toHaveBeenCalled();
 
+    // Second click should trigger callback
+    document.dispatchEvent(createClickEvent());
     expect(callback).toHaveBeenCalledTimes(1);
   });
 });

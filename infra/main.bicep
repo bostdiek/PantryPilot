@@ -31,6 +31,14 @@ param upstashRedisRestToken string = ''
 @description('Use Microsoft quickstart placeholder image for initial deployment (before CI/CD pushes real image)')
 param useQuickstartImage bool = false
 
+@description('Brave Search API key for web search integration (optional)')
+@secure()
+param braveSearchApiKey string = ''
+
+@description('Gemini API key for AI model access (optional - leave empty to disable)')
+@secure()
+param geminiApiKey string = ''
+
 // Environment-specific settings
 var environmentSettings = {
   dev: {
@@ -106,6 +114,8 @@ module keyVault 'modules/keyvault.bicep' = {
       dbConnectionString: 'postgresql://${dbAdminUsername}:${dbAdminPassword}@${postgresql.outputs.fqdn}:5432/pantrypilot?sslmode=require'
       upstashRedisRestUrl: upstashRedisRestUrl
       upstashRedisRestToken: upstashRedisRestToken
+      braveSearchApiKey: braveSearchApiKey
+      geminiApiKey: geminiApiKey
     }
   }
 }
@@ -240,6 +250,9 @@ module containerApps 'modules/containerapps.bicep' = {
     corsOrigins: corsOrigins
     emailSenderAddress: emailSenderAddress
     frontendUrl: frontendUrl
+    braveSearchApiKey: braveSearchApiKey
+    geminiApiKey: geminiApiKey
+    enableObservability: true
     tags: commonTags
   }
   dependsOn: [acsConnectionStringSecret] // Ensure ACS secret is in Key Vault before Container App tries to reference it

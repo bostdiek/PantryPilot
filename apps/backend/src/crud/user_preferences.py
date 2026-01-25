@@ -3,8 +3,10 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.exceptions import GeocodingFailedError
 from models.user_preferences import UserPreferences
 from schemas.user_preferences import UserPreferencesCreate, UserPreferencesUpdate
+from services.geocoding import GeocodingService
 
 
 class UserPreferencesCRUD:
@@ -37,13 +39,42 @@ class UserPreferencesCRUD:
         db_preferences: UserPreferences,
         preferences_update: UserPreferencesUpdate,
     ) -> UserPreferences:
-        """Update existing user preferences."""
+        """Update existing user preferences.
+
+        If location fields change, triggers geocoding to update lat/lon/timezone.
+        """
         update_data = preferences_update.model_dump(exclude_unset=True)
+
+        # Check if location fields are being updated
+        location_fields = {"city", "state_or_region", "postal_code", "country"}
+        location_changed = bool(location_fields & update_data.keys())
+
+        # Apply updates
         for field, value in update_data.items():
             setattr(db_preferences, field, value)
 
-        await db.commit()
-        await db.refresh(db_preferences)
+        # Trigger geocoding if location changed
+        if location_changed:
+            geocoding_service = GeocodingService(db)
+            geocoding_success = await geocoding_service.update_geocoded_fields(
+                db_preferences
+            )
+
+            # Inform user if geocoding failed (data inconsistency)
+            if not geocoding_success:
+                # Ensure the session is clean for the caller.
+                await db.rollback()
+
+                raise GeocodingFailedError(
+                    "Location fields updated but geocoding failed. "
+                    "Please verify your city, state, and postal code are correct. "
+                    "Weather features may not work until location is geocoded "
+                    "successfully."
+                )
+        else:
+            await db.commit()
+            await db.refresh(db_preferences)
+
         return db_preferences
 
     async def get_or_create(

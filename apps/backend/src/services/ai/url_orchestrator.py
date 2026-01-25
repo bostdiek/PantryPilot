@@ -182,6 +182,8 @@ class UrlOrchestrator(AIExtractionService):
                 extraction_result,
                 prompt_override,
             )
+            # Commit the draft so it's available for immediate retrieval
+            await db.commit()
             yield (
                 SSEEvent.terminal_success(
                     draft_id=getattr(draft_obj, "id", None), success=False
@@ -216,6 +218,8 @@ class UrlOrchestrator(AIExtractionService):
             generated_recipe,
             prompt_override,
         )
+        # Commit the draft so it's available for immediate retrieval
+        await db.commit()
         yield (
             SSEEvent.terminal_success(
                 draft_id=getattr(draft_obj, "id", None), success=True

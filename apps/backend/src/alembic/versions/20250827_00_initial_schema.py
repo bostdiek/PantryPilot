@@ -24,6 +24,12 @@ def upgrade() -> None:
     bind = op.get_bind()
     insp = sa.inspect(bind)
 
+    # Create required extensions (idempotent - IF NOT EXISTS)
+    # These are allowed by Azure's azure.extensions config
+    op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
+    op.execute('CREATE EXTENSION IF NOT EXISTS "pg_trgm"')
+    # Note: vector extension is created in migration 20260120_14
+
     if not insp.has_table("users"):
         op.create_table(
             "users",

@@ -14,3 +14,9 @@ class UserNotFoundError(DomainError):
     """Exception raised when a user is not found in the database."""
 
     pass
+
+
+class GeocodingFailedError(DomainError):
+    """Exception raised when a user's location cannot be geocoded."""
+
+    pass

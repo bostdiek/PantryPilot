@@ -54,6 +54,17 @@ param emailSenderAddress string = ''
 @description('Frontend URL for email links (password reset, verification). Include https:// protocol.')
 param frontendUrl string = ''
 
+@description('Brave Search API key for web search integration (optional)')
+@secure()
+param braveSearchApiKey string = ''
+
+@description('Gemini API key for AI model access (optional - leave empty to disable)')
+@secure()
+param geminiApiKey string = ''
+
+@description('Enable observability (Application Insights + OpenTelemetry)')
+param enableObservability bool = true
+
 // Log Analytics Workspace for Container Apps
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-07-01' = {
   name: '${environmentName}-logs'
@@ -67,6 +78,23 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2025-07
     features: {
       enableLogAccessUsingOnlyResourcePermissions: true
     }
+  }
+}
+
+// Application Insights for backend observability
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: '${environmentName}-appinsights'
+  location: location
+  tags: tags
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalyticsWorkspace.id
+    Request_Source: 'rest'
+    RetentionInDays: 30
+    IngestionMode: 'LogAnalytics'
+    publicNetworkAccessForIngestion: 'Enabled'
+    publicNetworkAccessForQuery: 'Enabled'
   }
 }
 
@@ -150,16 +178,41 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               identity: 'system'
             }
             {
-              name: 'gemini-api-key'
-              keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
-              identity: 'system'
-            }
-            {
               name: 'acs-connection-string'
               keyVaultUrl: '${keyVaultUri}secrets/acsConnectionString'
               identity: 'system'
             }
           ],
+          // Optional Gemini API key for AI model access
+          empty(geminiApiKey)
+            ? []
+            : [
+                {
+                  name: 'gemini-api-key'
+                  keyVaultUrl: '${keyVaultUri}secrets/geminiApiKey'
+                  identity: 'system'
+                }
+              ],
+          // Optional Brave Search API key for web search
+          empty(braveSearchApiKey)
+            ? []
+            : [
+                {
+                  name: 'brave-search-api-key'
+                  keyVaultUrl: '${keyVaultUri}secrets/braveSearchApiKey'
+                  identity: 'system'
+                }
+              ],
+          // Optional Application Insights connection string for observability
+          // Note: Uses inline value since App Insights is created by this same module
+          enableObservability
+            ? [
+                {
+                  name: 'appinsights-connection-string'
+                  value: appInsights.properties.ConnectionString
+                }
+              ]
+            : [],
           empty(upstashRedisRestUrl) || empty(upstashRedisRestToken)
             ? []
             : [
@@ -193,10 +246,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               {
                 name: 'SECRET_KEY'
                 secretRef: 'secret-key' // pragma: allowlist secret
-              }
-              {
-                name: 'GEMINI_API_KEY'
-                secretRef: 'gemini-api-key' // pragma: allowlist secret
               }
               {
                 name: 'ENVIRONMENT'
@@ -262,7 +311,42 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                     name: 'UPSTASH_REDIS_REST_TOKEN'
                     secretRef: 'upstash-redis-token' // pragma: allowlist secret
                   }
+                ],
+            // Optional Gemini API key for AI model access
+            empty(geminiApiKey)
+              ? []
+              : [
+                  {
+                    name: 'GEMINI_API_KEY'
+                    secretRef: 'gemini-api-key' // pragma: allowlist secret
+                  }
+                ],
+            // Optional Brave Search API key for web search
+            empty(braveSearchApiKey)
+              ? []
+              : [
+                  {
+                    name: 'BRAVE_SEARCH_API_KEY'
+                    secretRef: 'brave-search-api-key' // pragma: allowlist secret
+                  }
+                ],
+            // Optional Application Insights for observability
+            enableObservability
+              ? [
+                  {
+                    name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+                    secretRef: 'appinsights-connection-string' // pragma: allowlist secret
+                  }
+                  {
+                    name: 'ENABLE_OBSERVABILITY'
+                    value: 'true'
+                  }
+                  {
+                    name: 'OTEL_SERVICE_NAME'
+                    value: 'pantrypilot-backend'
+                  }
                 ]
+              : []
           )
           probes: [
             {
@@ -325,3 +409,9 @@ output environmentName string = containerAppsEnvironment.name
 
 @description('The resource ID of the Container Apps environment')
 output environmentId string = containerAppsEnvironment.id
+
+@description('The Application Insights connection string for observability')
+output appInsightsConnectionString string = enableObservability ? appInsights.properties.ConnectionString : ''
+
+@description('The Application Insights instrumentation key (legacy, use connection string instead)')
+output appInsightsInstrumentationKey string = enableObservability ? appInsights.properties.InstrumentationKey : ''

@@ -18,7 +18,7 @@ dependencies = [
     "types-python-jose>=3.5.0.20250531",
     "httpx>=0.28.1",
     "beautifulsoup4>=4.14.0",
-    "pydantic-ai>=1.0.10",
+    "pydantic-ai>=1.42.0",
     "google-generativeai>=0.8.5",
     "openai>=1.109.1",
     "pillow>=11.3.0",
@@ -26,6 +26,11 @@ dependencies = [
     "itsdangerous>=2.2.0",
     "upstash-ratelimit>=1.1.0",
     "upstash-redis>=1.5.0",
+    "timezonefinder>=6.0.0",
+    "markdownify>=1.2.2",
+    "pgvector>=0.4.2",
+    "numpy>=2.4.1",
+    "google-genai>=1.57.0",
 ]
 
 [dependency-groups]
@@ -40,6 +45,7 @@ dev = [
     "mypy>=1.14.2",
     "python-json-logger>=2.0.4",
     "detect-secrets>=1.5.0",
+    "pydantic-ai-slim[web]>=1.42.0",
 ]
 
 [tool.ruff]
@@ -93,5 +99,5 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 
 [[tool.mypy.overrides]]
-module = ["upstash_ratelimit", "upstash_redis"]
+module = ["upstash_ratelimit", "upstash_redis", "timezonefinder"]
 ignore_missing_imports = true

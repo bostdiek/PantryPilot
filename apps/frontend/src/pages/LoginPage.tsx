@@ -2,6 +2,7 @@ import { useState, type FC, type FormEvent } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { login } from '../api/endpoints/auth';
 import { userProfileApi } from '../api/endpoints/userProfile';
+import logoSvg from '../assets/logo/smartmealplanner-logo.svg';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -110,6 +111,17 @@ const LoginPage: FC = () => {
   return (
     <Container size="sm">
       <div className="flex min-h-screen flex-col items-center justify-center">
+        {/* Logo at the top */}
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <img src={logoSvg} alt="Smart Meal Planner" className="h-20 w-20" />
+          <h1 className="text-2xl font-bold text-gray-800">
+            Smart Meal Planner
+          </h1>
+          <p className="text-center text-sm text-gray-600">
+            Meet Nibble — your chat assistant for meal planning and groceries.
+          </p>
+        </div>
+
         <Card variant="default" className="w-full max-w-md p-6">
           <h1 className="mb-6 text-center text-2xl font-bold">
             Login to Smart Meal Planner
@@ -123,6 +135,7 @@ const LoginPage: FC = () => {
               value={formData.username}
               onChange={handleInputChange('username')}
               placeholder="Enter your username"
+              autoComplete="username"
               required
               disabled={isLoading}
             />
@@ -134,6 +147,7 @@ const LoginPage: FC = () => {
               value={formData.password}
               onChange={handleInputChange('password')}
               placeholder="Enter your password"
+              autoComplete="current-password"
               required
               disabled={isLoading}
             />
