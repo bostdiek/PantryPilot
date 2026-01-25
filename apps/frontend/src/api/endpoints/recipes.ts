@@ -114,7 +114,7 @@ export async function getAllRecipes(params?: {
   difficulty?: RecipeDifficulty;
   max_total_time?: number;
   category?: RecipeCategory;
-  limit?: number; // default 50 for near-full list UX
+  limit?: number; // default 500 for full list UX (users rarely exceed 500 recipes)
   offset?: number;
 }): Promise<Recipe[]> {
   const p = params || {};
@@ -124,7 +124,7 @@ export async function getAllRecipes(params?: {
   if (p.max_total_time != null)
     search.set('max_total_time', String(p.max_total_time));
   if (p.category) search.set('category', p.category);
-  search.set('limit', String(p.limit ?? 50));
+  search.set('limit', String(p.limit ?? 500));
   search.set('offset', String(p.offset ?? 0));
 
   const resp = await apiClient.request<RecipeSearchResponse>(
