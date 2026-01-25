@@ -294,6 +294,25 @@ const MealPlanPage: FC = () => {
     }
   }
 
+  // Week navigation handler (shared between desktop buttons and mobile navigation)
+  function handleWeekChange(direction: 'prev' | 'next' | 'today') {
+    const start =
+      currentWeek?.weekStartDate ?? fmtYmd(startOfSundayWeek(today));
+
+    if (direction === 'prev') {
+      void loadWeek(addDays(start, -7));
+    } else if (direction === 'next') {
+      void loadWeek(addDays(start, 7));
+    } else if (direction === 'today') {
+      const todayStart = fmtYmd(startOfSundayWeek(today));
+      if (currentWeek?.weekStartDate !== todayStart) {
+        void loadWeek(todayStart);
+      }
+      // Scroll to today after render
+      setTimeout(() => scrollToDay(toYyyyMmDd(today)), 0);
+    }
+  }
+
   // Mobile day selection functions
   function handleMobileAddRecipe(recipe: Recipe) {
     setSelectedRecipeForDay(recipe);
@@ -724,12 +743,7 @@ const MealPlanPage: FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                const start =
-                  currentWeek?.weekStartDate ??
-                  fmtYmd(startOfSundayWeek(today));
-                void loadWeek(addDays(start, -7));
-              }}
+              onClick={() => handleWeekChange('prev')}
               aria-label="Previous week"
             >
               Prev Week
@@ -737,12 +751,7 @@ const MealPlanPage: FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                const start =
-                  currentWeek?.weekStartDate ??
-                  fmtYmd(startOfSundayWeek(today));
-                void loadWeek(addDays(start, 7));
-              }}
+              onClick={() => handleWeekChange('next')}
               aria-label="Next week"
             >
               Next Week
@@ -750,14 +759,7 @@ const MealPlanPage: FC = () => {
             <Button
               variant="outline"
               size="sm"
-              onClick={async () => {
-                const todayStart = fmtYmd(startOfSundayWeek(today));
-                if (currentWeek?.weekStartDate !== todayStart) {
-                  await loadWeek(todayStart);
-                }
-                // center after (re)render
-                setTimeout(() => scrollToDay(toYyyyMmDd(today)), 0);
-              }}
+              onClick={() => handleWeekChange('today')}
               aria-label="Jump to today"
             >
               Today
@@ -770,6 +772,8 @@ const MealPlanPage: FC = () => {
           currentWeek={currentWeek}
           recipes={recipes}
           todayDate={toYyyyMmDd(today)}
+          currentWeekStart={currentWeek?.weekStartDate}
+          onWeekChange={handleWeekChange}
           onMarkCooked={handleMarkCooked}
           onRecipeClick={handleRecipeClick}
           onRemoveEntry={handleRemoveFromDay}
