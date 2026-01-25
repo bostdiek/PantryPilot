@@ -144,8 +144,8 @@ export function ChatMessage({
         <div
           className={
             isUser
-              ? 'bg-primary-600 max-w-[80%] rounded-lg p-3 text-white'
-              : 'max-w-[80%] rounded-lg bg-gray-100 p-3 text-gray-900'
+              ? 'bg-primary-600 max-w-[75%] rounded-lg p-3 text-white md:max-w-[80%]'
+              : 'max-w-[75%] rounded-lg bg-gray-100 p-3 text-gray-900 md:max-w-[80%]'
           }
         >
           {renderContent()}

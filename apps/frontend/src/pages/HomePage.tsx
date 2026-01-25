@@ -49,6 +49,9 @@ const HomePage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold">Hi, {displayName}!</h1>
           <p className="text-gray-600">Ready to plan some meals?</p>
+          <p className="text-sm text-gray-500">
+            Ask Nibble for recipe ideas, meal plans, and a grocery list.
+          </p>
         </div>
         <Link to="/user" className="ml-auto">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-200 text-lg font-bold text-gray-700">

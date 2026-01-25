@@ -83,14 +83,11 @@ describe('Navigation', () => {
       screen.getByRole('link', { name: /^assistant$/i })
     ).toBeInTheDocument();
     expect(
-      screen.getByRole('link', { name: /add recipe/i })
-    ).toBeInTheDocument();
-    expect(
       screen.getByRole('link', { name: /meal plan/i })
     ).toBeInTheDocument();
 
     // User menu button should be present
-    const userMenuButton = screen.getByRole('button', { name: /tester/i });
+    const userMenuButton = screen.getByRole('button', { name: /user menu/i });
     expect(userMenuButton).toBeInTheDocument();
 
     // Logout not visible before opening menu
@@ -128,5 +125,107 @@ describe('Navigation', () => {
     expect(
       screen.queryByRole('button', { name: /logout/i })
     ).not.toBeInTheDocument();
+  });
+
+  test('renders mobile hamburger toggle button for authenticated users', () => {
+    vi.mocked(useAuthStore).mockReturnValue({
+      hasHydrated: true,
+      logout: vi.fn(),
+      token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
+    } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
+    vi.mocked(useIsAuthenticated).mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    // Mobile hamburger button should be present for authenticated users
+    const toggleButton = screen.getByRole('button', {
+      name: /toggle mobile menu/i,
+    });
+    expect(toggleButton).toBeInTheDocument();
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('expands and collapses mobile menu when toggle button is clicked', () => {
+    vi.mocked(useAuthStore).mockReturnValue({
+      hasHydrated: true,
+      logout: vi.fn(),
+      token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
+    } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
+    vi.mocked(useIsAuthenticated).mockReturnValue(true);
+
+    const { container } = render(
+      <MemoryRouter>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    const toggleButton = screen.getByRole('button', {
+      name: /toggle mobile menu/i,
+    });
+
+    // Initially, aria-expanded should be false
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+
+    // Count initial links - should be desktop links only
+    const initialHomeLinks = screen.getAllByRole('link', { name: /^home$/i });
+    const initialLinkCount = initialHomeLinks.length;
+
+    // Click to expand mobile menu
+    fireEvent.click(toggleButton);
+
+    // Mobile menu should now be expanded
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+
+    // Should now have additional links from mobile menu
+    const expandedHomeLinks = screen.getAllByRole('link', { name: /^home$/i });
+    expect(expandedHomeLinks.length).toBeGreaterThan(initialLinkCount);
+
+    // Click to collapse mobile menu
+    fireEvent.click(toggleButton);
+
+    // Mobile menu should be collapsed
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('closes mobile menu when a mobile nav link is clicked', () => {
+    vi.mocked(useAuthStore).mockReturnValue({
+      hasHydrated: true,
+      logout: vi.fn(),
+      token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
+    } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
+    vi.mocked(useIsAuthenticated).mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    const toggleButton = screen.getByRole('button', {
+      name: /toggle mobile menu/i,
+    });
+
+    // Open mobile menu
+    fireEvent.click(toggleButton);
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+
+    // Click on a mobile nav link (get all links and find one in the mobile menu)
+    const allRecipeLinks = screen.getAllByRole('link', { name: /^recipes$/i });
+    // The last link should be the mobile one since mobile menu is rendered last
+    const mobileRecipeLink = allRecipeLinks[allRecipeLinks.length - 1];
+    fireEvent.click(mobileRecipeLink);
+
+    // Mobile menu should be closed after clicking a link
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
   });
 });
