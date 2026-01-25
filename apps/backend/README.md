@@ -129,4 +129,103 @@ Registered in `main.py` (order matters):
 * Never log raw request bodies containing secrets; rely on structured logger sanitization.
 
 ---
+
+## Agent Playground (Dev Only)
+
+Use the PydanticAI Web UI to iterate on the chat assistant locally:
+
+1. `cd apps/backend`
+2. Ensure required model env vars are set (e.g. `GEMINI_API_KEY`).
+3. `PYTHONPATH=./src uv run --env-file ../../.env.dev python -m dev.pydanticai_ui`
+
+The UI starts on http://127.0.0.1:8021 and uses the shared chat agent tools.
+
+### Dev User Context
+
+The UI automatically creates or uses a `dev` user with the following context:
+
+- **Location**: Boston, MA (42.3601, -71.0589) for weather tool testing
+- **Timezone**: America/New_York
+
+### Prompt and Tool Iteration Workflow
+
+The PydanticAI Web UI provides a low-friction workflow for iterating on:
+
+1. **System Prompts**: Edit `CHAT_SYSTEM_PROMPT` in `services/chat_agent.py` and restart the UI
+2. **Tool Behavior**: Modify tool implementations in `services/weather.py` or `services/web_search.py`
+3. **Output Schema**: Adjust `AssistantMessage` in `schemas/chat_content.py` for response structure
+
+**Workflow:**
+```bash
+# 1. Make changes to prompts/tools
+# 2. Restart the dev UI (Ctrl+C and re-run)
+PYTHONPATH=./src uv run --env-file ../../.env.dev python -m dev.pydanticai_ui
+
+# 3. Test in browser at http://127.0.0.1:8021
+# 4. Iterate until behavior is correct
+# 5. Run tests to verify no regressions
+uv run pytest tests/ -k chat -v
+```
+
+**Note:** The dev UI does NOT require the full Docker stack. It connects directly to a local PostgreSQL database (ensure `POSTGRES_*` env vars are set).
+
+### Testing Tools via API
+
+To test the chat tools via the REST API instead:
+
+```bash
+# 1. Login as dev user
+#    By default in local dev, the `dev` user is created with password `dev_password_123`
+#    (see dev/pydanticai_ui.py). If you override this in .env.dev or a seed script,
+#    update the password value below accordingly.
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "username=dev&password=dev_password_123"
+
+# 2. Use the returned token to call the chat streaming endpoint
+curl -X POST "http://localhost:8000/api/v1/chat/conversations/{uuid}/messages/stream" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "What is the weather like today?"}'
+```
+
+The chat agent has access to these internal tools:
+- `get_daily_weather`: Returns 7-day forecast based on user's location preferences
+- `web_search`: Searches the web using Brave Search API for recipes and information
+
+---
+
+## Observability (Production)
+
+The backend supports Azure Monitor Application Insights via OpenTelemetry for production observability.
+
+### Configuration
+
+```bash
+# Enable observability in production
+ENABLE_OBSERVABILITY=true
+APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...;IngestionEndpoint=...
+
+# Custom service name (optional)
+OTEL_SERVICE_NAME=pantrypilot-backend
+```
+
+### What Gets Traced
+
+- HTTP requests (FastAPI auto-instrumentation)
+- Database queries (SQLAlchemy auto-instrumentation)
+- External API calls (httpx auto-instrumentation)
+- Custom chat/tool execution spans
+
+### PII Safety
+
+**NEVER** log or add to spans:
+- User message content
+- Recipe content or personal preferences
+- API keys, tokens, or credentials
+- Location data beyond city-level
+
+See `core/observability.py` and `docs/SECURITY_IMPLEMENTATION.md` for full guidance.
+
+---
 For questions or improvements, open an issue or submit a PR with a proposed change plus tests.

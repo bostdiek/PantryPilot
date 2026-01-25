@@ -43,6 +43,9 @@ vi.mock('../stores/useAuthStore', () => ({
 
 vi.mock('../api/endpoints/aiDrafts', () => ({
   getDraftById: vi.fn().mockResolvedValue({ payload: { title: 'AI' } }),
+  getDraftByIdOwner: vi
+    .fn()
+    .mockResolvedValue({ payload: { title: 'AI Owner' } }),
 }));
 
 import {
@@ -52,6 +55,16 @@ import {
   recipeDetailLoader,
   recipesLoader,
 } from '../routerConfig';
+
+/**
+ * Helper function to assert that a result is a redirect to the clean /recipes/new URL
+ */
+function expectRedirectToCleanUrl(result: any) {
+  expect(result).toHaveProperty('status');
+  expect(result.status).toBe(302);
+  const location = result.headers.get('location');
+  expect(location).toBe('/recipes/new');
+}
 
 describe('routerConfig loaders', () => {
   beforeEach(() => {
@@ -111,8 +124,65 @@ describe('routerConfig loaders', () => {
 
     const result = await newRecipeLoader({ request: req } as any);
     expect(getDraftById).toHaveBeenCalledWith('d1', 't1');
-    // result is null on success
-    expect(result).toBeNull();
+    // result should be a redirect to clean URL
+    expectRedirectToCleanUrl(result);
+  });
+
+  it('newRecipeLoader falls back to owner endpoint when getDraftById returns 401', async () => {
+    authToken = 'auth';
+    const { getDraftById, getDraftByIdOwner } =
+      await import('../api/endpoints/aiDrafts');
+    const { ApiErrorImpl } = await import('../types/api');
+
+    // Mock getDraftById to throw 401 error
+    vi.mocked(getDraftById).mockRejectedValue(
+      new ApiErrorImpl('Invalid or expired draft token', 401, 'unauthorized')
+    );
+
+    const req = new Request(
+      'http://localhost/recipes/new?ai=1&draftId=d1&token=t1'
+    );
+
+    const result = await newRecipeLoader({ request: req } as any);
+
+    // Should attempt token-based fetch first
+    expect(getDraftById).toHaveBeenCalledWith('d1', 't1');
+
+    // Should fall back to owner endpoint
+    expect(getDraftByIdOwner).toHaveBeenCalledWith('d1');
+
+    // Should redirect to clean URL
+    expectRedirectToCleanUrl(result);
+  });
+
+  it('newRecipeLoader redirects to clean URL when owner fallback fails', async () => {
+    authToken = 'auth';
+    const { getDraftById, getDraftByIdOwner } =
+      await import('../api/endpoints/aiDrafts');
+    const { ApiErrorImpl } = await import('../types/api');
+
+    // Mock getDraftById to throw 401 error
+    vi.mocked(getDraftById).mockRejectedValue(
+      new ApiErrorImpl('Invalid or expired draft token', 401, 'unauthorized')
+    );
+
+    // Mock getDraftByIdOwner to also fail
+    vi.mocked(getDraftByIdOwner).mockRejectedValue(
+      new ApiErrorImpl('Draft not found', 404, 'not_found')
+    );
+
+    const req = new Request(
+      'http://localhost/recipes/new?ai=1&draftId=d1&token=t1'
+    );
+
+    const result = await newRecipeLoader({ request: req } as any);
+
+    // Should attempt both methods
+    expect(getDraftById).toHaveBeenCalledWith('d1', 't1');
+    expect(getDraftByIdOwner).toHaveBeenCalledWith('d1');
+
+    // Should redirect to clean URL
+    expectRedirectToCleanUrl(result);
   });
 
   it('recipeDetailLoader calls fetchRecipeById when id param provided', async () => {

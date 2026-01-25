@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { memoryApi } from '../api/endpoints/memory';
 import { userProfileApi } from '../api/endpoints/userProfile';
 import {
   Button,
@@ -12,6 +13,7 @@ import {
 import { logger } from '../lib/logger';
 import { useAuthStore, useDisplayName } from '../stores/useAuthStore';
 import { useUserPreferencesStore } from '../stores/useUserPreferencesStore';
+import type { MemoryDocument } from '../types/Memory';
 import {
   commonAllergies,
   commonCuisines,
@@ -41,6 +43,13 @@ function UserProfilePage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Memory state
+  const [memory, setMemory] = useState<MemoryDocument | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryEditing, setMemoryEditing] = useState(false);
+  const [memoryContent, setMemoryContent] = useState('');
+  const [memorySaving, setMemorySaving] = useState(false);
 
   // Load user profile and preferences from backend on mount
   useEffect(() => {
@@ -89,6 +98,24 @@ function UserProfilePage() {
   useEffect(() => {
     setPreferencesData(preferences);
   }, [preferences]);
+
+  // Load memory document on mount
+  useEffect(() => {
+    const loadMemory = async () => {
+      try {
+        setMemoryLoading(true);
+        const doc = await memoryApi.getMemory();
+        setMemory(doc);
+        setMemoryContent(doc.content);
+      } catch (error) {
+        logger.error('Failed to load memory:', error);
+        // Don't show error - memory is optional
+      } finally {
+        setMemoryLoading(false);
+      }
+    };
+    loadMemory();
+  }, []);
 
   // Form validation
   const validateForm = useCallback(() => {
@@ -214,6 +241,21 @@ function UserProfilePage() {
     setErrors({});
     setIsEditing(false);
   }, [user, preferences]);
+
+  // Handle memory save
+  const handleSaveMemory = useCallback(async () => {
+    try {
+      setMemorySaving(true);
+      const updated = await memoryApi.updateMemory({ content: memoryContent });
+      setMemory(updated);
+      setMemoryEditing(false);
+    } catch (error) {
+      logger.error('Failed to save memory:', error);
+      // Could add toast notification here
+    } finally {
+      setMemorySaving(false);
+    }
+  }, [memoryContent]);
 
   if (!user) {
     return (
@@ -499,6 +541,67 @@ function UserProfilePage() {
             </div>
           </Card>
 
+          {/* Location Settings */}
+          <Card variant="default" className="p-6">
+            <h2 className="mb-4 text-xl font-semibold">Location Settings</h2>
+            <p className="mb-4 text-sm text-gray-600">
+              Set your location to enable weather-based meal planning features
+            </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Input
+                label="City"
+                type="text"
+                value={preferencesData.city || ''}
+                onChange={(value) =>
+                  handlePreferenceChange('city')(value || undefined)
+                }
+                disabled={!isEditing}
+                placeholder="Enter your city"
+                helperText="Your city for weather and meal planning"
+              />
+
+              <Input
+                label="State/Region"
+                type="text"
+                value={preferencesData.stateOrRegion || ''}
+                onChange={(value) =>
+                  handlePreferenceChange('stateOrRegion')(value || undefined)
+                }
+                disabled={!isEditing}
+                placeholder="e.g., CA, Ontario"
+                helperText="State, province, or region"
+              />
+
+              <Input
+                label="Postal Code"
+                type="text"
+                value={preferencesData.postalCode || ''}
+                onChange={(value) =>
+                  handlePreferenceChange('postalCode')(value || undefined)
+                }
+                disabled={!isEditing}
+                placeholder="Enter your postal/ZIP code"
+                helperText="ZIP or postal code"
+              />
+
+              <Input
+                label="Country"
+                type="text"
+                value={preferencesData.country ?? ''}
+                onChange={(value) => {
+                  const normalized = value?.trim();
+                  handlePreferenceChange('country')(
+                    normalized ? normalized.toUpperCase() : ''
+                  );
+                }}
+                disabled={!isEditing}
+                placeholder="US"
+                helperText="2-letter country code (e.g., US, CA, GB)"
+                maxLength={2}
+              />
+            </div>
+          </Card>
+
           {/* Preferred Cuisines */}
           <Card variant="default" className="p-6">
             <h2 className="mb-4 text-xl font-semibold">Preferred Cuisines</h2>
@@ -528,6 +631,84 @@ function UserProfilePage() {
                 </label>
               ))}
             </div>
+          </Card>
+
+          {/* What Nibble Remembers */}
+          <Card variant="default" className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold">
+                  🧠 What Nibble Remembers
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Personal notes Nibble has learned about you from conversations
+                </p>
+              </div>
+              {!memoryEditing && !memoryLoading && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setMemoryEditing(true)}
+                >
+                  Edit
+                </Button>
+              )}
+            </div>
+
+            {memoryLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <LoadingSpinner />
+              </div>
+            ) : memoryEditing ? (
+              <div className="space-y-4">
+                <textarea
+                  value={memoryContent}
+                  onChange={(e) => setMemoryContent(e.target.value)}
+                  rows={12}
+                  className="w-full rounded-lg border border-gray-300 p-3 font-mono text-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Nibble hasn't learned anything about you yet. Start chatting to build your memory!"
+                />
+                <div className="flex gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={handleSaveMemory}
+                    disabled={memorySaving}
+                  >
+                    {memorySaving ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setMemoryEditing(false);
+                      setMemoryContent(memory?.content || '');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : memory?.content ? (
+              <div className="space-y-4">
+                <pre className="rounded-lg bg-gray-50 p-4 text-sm whitespace-pre-wrap">
+                  {memory.content}
+                </pre>
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                  <span>
+                    Last updated:{' '}
+                    {new Date(memory.updated_at).toLocaleDateString()}
+                  </span>
+                  <span>•</span>
+                  <span>
+                    By:{' '}
+                    {memory.updated_by === 'assistant' ? 'Nibble 🤖' : 'You'}
+                  </span>
+                  <span>•</span>
+                  <span>Version {memory.version}</span>
+                </div>
+              </div>
+            ) : (
+              <EmptyState message="Nibble hasn't learned anything about you yet. Start chatting and share your preferences - Nibble will remember them for future conversations! 🍽️" />
+            )}
           </Card>
         </div>
       )}

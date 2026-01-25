@@ -89,6 +89,13 @@ class _FakeResult:
     def one_or_none(self):  # pragma: no cover - trivial
         return None
 
+    def all(self):  # pragma: no cover - trivial
+        return []
+
+    def mappings(self):
+        """Return self for method chaining with mappings().all()"""
+        return self
+
 
 class _FakeSession:
     """Minimal fake async session used in lightweight tests.
@@ -96,7 +103,11 @@ class _FakeSession:
     Only the small surface area required by current tests is implemented.
     """
 
-    def add(self, _obj):  # pragma: no cover - no-op
+    def add(self, obj):  # pragma: no cover - set UUID for models
+        # If the object has an 'id' attribute that is None, generate a UUID
+        # This simulates what the database would do for UUID primary keys
+        if hasattr(obj, "id") and obj.id is None:
+            obj.id = uuid.uuid4()
         return None
 
     async def flush(self):  # pragma: no cover - no-op
@@ -109,6 +120,14 @@ class _FakeSession:
         return None
 
     async def rollback(self):  # pragma: no cover - no-op
+        return None
+
+    async def refresh(
+        self, obj, _attribute_names=None
+    ):  # pragma: no cover - ensure id set
+        # Ensure UUID is set on refresh (simulates DB auto-generation)
+        if hasattr(obj, "id") and obj.id is None:
+            obj.id = uuid.uuid4()
         return None
 
     async def close(self):  # pragma: no cover - no-op

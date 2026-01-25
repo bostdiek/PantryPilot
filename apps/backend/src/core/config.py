@@ -9,7 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(".env"), env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=(".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",  # Allow extra env vars not defined in Settings
+    )
 
     # App
     APP_NAME: str = "PantryPilot"
@@ -32,6 +36,9 @@ class Settings(BaseSettings):
     # GEMINI_API_KEY is optional; prefer storing secrets in .env.dev/.env.prod
     GEMINI_API_KEY: str | None = None
 
+    # External tool providers
+    BRAVE_SEARCH_API_KEY: str | None = None
+
     # Azure Communication Services for email
     AZURE_COMMUNICATION_CONNECTION_STRING: str | None = None
     EMAIL_SENDER_ADDRESS: str = "DoNotReply@notify.pantrypilot.com"
@@ -52,6 +59,14 @@ class Settings(BaseSettings):
     # AI endpoints benefit from moderate limits (cost protection).
     RATE_LIMIT_REQUESTS: int = 10
     RATE_LIMIT_WINDOW_SECONDS: int = 60
+
+    # Observability / Telemetry
+    # Enable Azure Monitor / Application Insights integration via OpenTelemetry.
+    # Set ENABLE_OBSERVABILITY=true and provide APPLICATIONINSIGHTS_CONNECTION_STRING.
+    # For local development, Logfire can be used as optional dev tooling.
+    ENABLE_OBSERVABILITY: bool = False
+    APPLICATIONINSIGHTS_CONNECTION_STRING: str | None = None
+    OTEL_SERVICE_NAME: str = "pantrypilot-backend"
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

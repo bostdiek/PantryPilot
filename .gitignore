@@ -198,6 +198,9 @@ cython_debug/
 # Abstra is an AI-powered process automation framework.
 # Ignore directories containing user credentials, local state, and settings.
 # Learn more at https://abstra.io/docs
+
+# Copilot task tracking artifacts (never commit)
+.copilot-tracking/
 .abstra/
 
 # Visual Studio Code
@@ -224,3 +227,7 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Bicep build output (ARM templates)
+*.bicep.json
+infra/**/*.json

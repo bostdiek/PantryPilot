@@ -224,4 +224,109 @@ describe('ApiClient Authentication Handling', () => {
     // Verify logout was called for token_expired canonical type
     expect(mockLogout).toHaveBeenCalledWith('expired');
   });
+
+  describe('Draft token endpoints skip logout on 401', () => {
+    it('does NOT call logout on 401 for draft token endpoint with token param', async () => {
+      // Setup mock response for 401 on a draft token endpoint
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ detail: 'Draft token expired or invalid' })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request to a draft endpoint with token param and expect it to throw
+      await expect(
+        apiClient.request('/api/v1/ai/drafts/123?token=abc123')
+      ).rejects.toThrow();
+
+      // Verify logout was NOT called - draft token 401 should not trigger logout
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call logout on 401 for draft token endpoint with additional query params', async () => {
+      // Setup mock response for 401 on a draft token endpoint with multiple params
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ detail: 'Draft token expired or invalid' })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request with multiple query params including token
+      await expect(
+        apiClient.request('/api/v1/ai/drafts/456?foo=bar&token=xyz789&baz=qux')
+      ).rejects.toThrow();
+
+      // Verify logout was NOT called
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+
+    it('DOES call logout on 401 for draft endpoint without token param', async () => {
+      // Setup mock response for 401 on a draft endpoint accessed via session auth (no token param)
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ detail: 'Could not validate credentials' })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request to draft endpoint without token param
+      await expect(
+        apiClient.request('/api/v1/ai/drafts/123')
+      ).rejects.toThrow();
+
+      // Verify logout WAS called - session auth 401 should trigger logout
+      expect(mockLogout).toHaveBeenCalledWith('expired');
+    });
+
+    it('DOES call logout on 401 for non-draft endpoints', async () => {
+      // Setup mock response for 401 on a regular endpoint
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ detail: 'Could not validate credentials' })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request to a regular endpoint
+      await expect(apiClient.request('/api/v1/recipes')).rejects.toThrow();
+
+      // Verify logout WAS called for regular endpoints
+      expect(mockLogout).toHaveBeenCalledWith('expired');
+    });
+
+    it('does NOT match draft token endpoint for other query params containing "token" substring', async () => {
+      // Ensure we only match the exact 'token' param, not 'refresh_token', 'not_token', etc.
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ detail: 'Could not validate credentials' })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request with a param containing 'token' in its name but not 'token' exactly
+      await expect(
+        apiClient.request('/api/v1/ai/drafts/123?refresh_token=abc123')
+      ).rejects.toThrow();
+
+      // Verify logout WAS called - refresh_token should not be treated as draft token
+      expect(mockLogout).toHaveBeenCalledWith('expired');
+    });
+  });
 });

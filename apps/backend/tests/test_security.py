@@ -298,9 +298,9 @@ class TestPasswordResetToken:
 class TestTokenConstants:
     """Tests to verify token expiration constants."""
 
-    def test_email_verification_expiration_is_24_hours(self):
-        """Email verification token should expire in 24 hours."""
-        assert EMAIL_VERIFICATION_EXPIRATION == 86400  # 24 * 60 * 60
+    def test_email_verification_expiration_is_1_hour(self):
+        """Email verification token should expire in 1 hour."""
+        assert EMAIL_VERIFICATION_EXPIRATION == 3600  # 60 * 60
 
     def test_password_reset_expiration_is_1_hour(self):
         """Password reset token should expire in 1 hour."""

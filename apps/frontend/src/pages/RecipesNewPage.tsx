@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, type FC, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { createMealEntry } from '../api/endpoints/mealPlans';
+import { getRecipeById } from '../api/endpoints/recipes';
 import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
 import { AddByUrlModal } from '../components/recipes/AddByUrlModal';
+import {
+  DuplicateRecipeModal,
+  type SimilarRecipeMatch,
+} from '../components/recipes/DuplicateRecipeModal';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -16,14 +22,20 @@ import { useToast } from '../components/ui/useToast';
 import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { logger } from '../lib/logger';
+import { useChatStore } from '../stores/useChatStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Ingredient } from '../types/Ingredients';
+import type { Recipe } from '../types/Recipe';
 import {
   RECIPE_CATEGORIES,
   RECIPE_DIFFICULTIES,
   type RecipeCategory,
   type RecipeDifficulty,
 } from '../types/Recipe';
+import {
+  markMealProposalAddedToPlan,
+  markMealProposalSavedToBook,
+} from '../utils/mealProposalStatus';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
 
@@ -66,9 +78,17 @@ const difficultyOptions: SelectOption[] = RECIPE_DIFFICULTIES.map((diff) => ({
 
 const RecipesNewPage: FC = () => {
   const navigate = useNavigate();
-  const { success } = useToast();
-  const { addRecipe, formSuggestion, isAISuggestion, clearFormSuggestion } =
-    useRecipeStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { success, info } = useToast();
+  const {
+    addRecipe,
+    formSuggestion,
+    isAISuggestion,
+    clearFormSuggestion,
+    duplicateInfo,
+    forceCreateRecipe,
+    clearDuplicateState,
+  } = useRecipeStore();
   const [showAISuggestion, setShowAISuggestion] = useState(true);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -87,6 +107,7 @@ const RecipesNewPage: FC = () => {
     undefined
   );
   const [userNotes, setUserNotes] = useState('');
+  const [linkSource, setLinkSource] = useState<string | undefined>(undefined);
   const [ingredients, setIngredients] = useState<Ingredient[]>([
     {
       name: '',
@@ -101,6 +122,45 @@ const RecipesNewPage: FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isAddByUrlModalOpen, setIsAddByUrlModalOpen] = useState(false);
   const [isAddByPhotoModalOpen, setIsAddByPhotoModalOpen] = useState(false);
+  const [prefillUrlForModal, setPrefillUrlForModal] = useState<
+    string | undefined
+  >(undefined);
+
+  // Check for URL parameter to auto-open AddByUrl modal
+  // Also check for title param to prefill the form
+  useEffect(() => {
+    const urlParam = searchParams.get('url');
+    const titleParam = searchParams.get('title');
+
+    if (urlParam) {
+      logger.debug('Auto-opening AddByUrl modal with URL:', urlParam);
+      setPrefillUrlForModal(urlParam);
+      setIsAddByUrlModalOpen(true);
+      // Clear the URL parameter from the address bar (keep mealPlan params)
+      setSearchParams((prev) => {
+        prev.delete('url');
+        prev.delete('title');
+        return prev;
+      });
+    } else if (titleParam) {
+      // No URL but we have a title - prefill the form directly
+      logger.debug('Prefilling title from URL param:', titleParam);
+      setTitle(titleParam);
+      // Clear the title param from the address bar (keep mealPlan params)
+      setSearchParams((prev) => {
+        prev.delete('title');
+        return prev;
+      });
+    }
+  }, [searchParams, setSearchParams]);
+
+  // Duplicate modal state
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [isCreatingAnyway, setIsCreatingAnyway] = useState(false);
+  const [existingRecipe, setExistingRecipe] = useState<Recipe | null>(null);
+  const [similarRecipes, setSimilarRecipes] = useState<SimilarRecipeMatch[]>(
+    []
+  );
 
   // Shared paste handling hook
   const {
@@ -195,6 +255,7 @@ const RecipesNewPage: FC = () => {
       setEthnicity(formSuggestion.ethnicity || '');
       setOvenTemperatureF(formSuggestion.oven_temperature_f);
       setUserNotes(formSuggestion.user_notes || '');
+      setLinkSource(formSuggestion.link_source);
 
       // Prefill ingredients
       if (formSuggestion.ingredients && formSuggestion.ingredients.length > 0) {
@@ -219,6 +280,84 @@ const RecipesNewPage: FC = () => {
       }
     };
   }, [formSuggestion, clearFormSuggestion]);
+
+  // Handle duplicate detection - open modal and fetch full recipe details
+  useEffect(() => {
+    if (duplicateInfo) {
+      const fetchDuplicateDetails = async () => {
+        try {
+          // If there's an exact match, fetch the full recipe
+          if (duplicateInfo.existing_recipe_id) {
+            const recipe = await getRecipeById(
+              duplicateInfo.existing_recipe_id
+            );
+            setExistingRecipe(recipe);
+            setSimilarRecipes([]);
+          }
+          // If there are similar recipes, fetch their details
+          else if (
+            duplicateInfo.similar_recipes &&
+            duplicateInfo.similar_recipes.length > 0
+          ) {
+            const similarMatches: SimilarRecipeMatch[] = await Promise.all(
+              duplicateInfo.similar_recipes.map(async (match) => {
+                const recipe = await getRecipeById(match.id);
+                return { recipe, similarity: match.similarity };
+              })
+            );
+            setSimilarRecipes(similarMatches);
+            setExistingRecipe(null);
+          }
+          setIsDuplicateModalOpen(true);
+        } catch (err) {
+          logger.error('Failed to fetch duplicate recipe details:', err);
+          // If we can't fetch details, show the modal anyway with basic info
+          setIsDuplicateModalOpen(true);
+        }
+      };
+
+      fetchDuplicateDetails();
+    }
+  }, [duplicateInfo]);
+
+  // Duplicate modal handlers
+  const handleViewExisting = (recipeId: string) => {
+    clearDuplicateState();
+    setIsDuplicateModalOpen(false);
+    navigate(`/recipes/${recipeId}`);
+  };
+
+  const handleCreateAnyway = async () => {
+    setIsCreatingAnyway(true);
+    try {
+      const result = await forceCreateRecipe();
+      if (result) {
+        success('Recipe created successfully!');
+        clearDuplicateState();
+        setIsDuplicateModalOpen(false);
+        navigate('/recipes');
+      } else {
+        setError('Failed to create recipe. Please try again.');
+        setIsDuplicateModalOpen(false);
+      }
+    } catch (err) {
+      logger.error('Failed to force create recipe:', err);
+      setError(
+        sanitizeErrorMessage(err, 'Failed to create recipe. Please try again.')
+      );
+      setIsDuplicateModalOpen(false);
+    } finally {
+      setIsCreatingAnyway(false);
+    }
+  };
+
+  const handleDuplicateModalClose = () => {
+    if (!isCreatingAnyway) {
+      clearDuplicateState();
+      setIsDuplicateModalOpen(false);
+      info('Recipe creation cancelled.');
+    }
+  };
 
   // Check if there are unsaved changes
   const hasUnsavedChanges =
@@ -277,6 +416,7 @@ const RecipesNewPage: FC = () => {
           ethnicity: ethnicity || undefined,
           oven_temperature_f: ovenTemperatureF,
           user_notes: userNotes || undefined,
+          link_source: linkSource,
           instructions: filteredInstructions,
           ingredients: filteredIngredients.map((ing) => ({
             name: ing.name,
@@ -322,6 +462,7 @@ const RecipesNewPage: FC = () => {
         ethnicity: ethnicity || undefined,
         oven_temperature_f: ovenTemperatureF,
         user_notes: userNotes || undefined,
+        link_source: linkSource,
         instructions: filteredInstructions,
         ingredients: filteredIngredients.map((ing) => ({
           name: ing.name,
@@ -342,9 +483,72 @@ const RecipesNewPage: FC = () => {
       const result = await addRecipe(recipeData);
 
       if (result) {
-        // Show success toast and navigate back to recipes list
-        success('Recipe created successfully!');
-        navigate('/recipes');
+        const createdRecipeId =
+          result && typeof result === 'object' && 'id' in result
+            ? ((result as { id?: string | null }).id ?? undefined)
+            : undefined;
+
+        const proposalKey = searchParams.get('proposalKey');
+        const chatConversationId =
+          searchParams.get('chatConversationId') ?? undefined;
+        const returnToAssistant =
+          searchParams.get('returnToAssistant') === '1' ? true : false;
+        if (proposalKey) {
+          markMealProposalSavedToBook(proposalKey);
+        }
+
+        if (proposalKey) {
+          useChatStore
+            .getState()
+            .appendLocalAssistantMessage(
+              'Recipe saved to your recipe book. If you selected a meal plan day, I’ll add it next.',
+              chatConversationId
+            );
+        }
+
+        // Check if we should add this recipe to a meal plan
+        const mealPlanDate = searchParams.get('mealPlanDate');
+        const mealPlanDayLabel = searchParams.get('mealPlanDayLabel');
+
+        let nextPath: string = '/recipes';
+
+        if (mealPlanDate && createdRecipeId) {
+          try {
+            await createMealEntry({
+              plannedForDate: mealPlanDate,
+              mealType: 'dinner',
+              recipeId: createdRecipeId,
+            });
+            if (proposalKey) {
+              markMealProposalAddedToPlan(proposalKey);
+              useChatStore
+                .getState()
+                .appendLocalAssistantMessage(
+                  `Added to your meal plan for ${mealPlanDayLabel || mealPlanDate}. What should we plan next?`,
+                  chatConversationId
+                );
+            }
+            success(
+              `Recipe created and added to meal plan for ${mealPlanDayLabel || mealPlanDate}!`
+            );
+
+            if (returnToAssistant && chatConversationId) {
+              info('Returning you to chat…');
+              nextPath = `/assistant?conversationId=${encodeURIComponent(chatConversationId)}`;
+            }
+          } catch (mealPlanErr) {
+            logger.error('Failed to add recipe to meal plan:', mealPlanErr);
+            // Still show success for recipe creation, but warn about meal plan
+            success(
+              'Recipe created! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
+            );
+          }
+        } else {
+          // Show success toast for just recipe creation
+          success('Recipe created successfully!');
+        }
+
+        navigate(nextPath);
       } else {
         setError('Failed to create recipe. Please try again.');
       }
@@ -364,7 +568,7 @@ const RecipesNewPage: FC = () => {
       {isAISuggestion && showAISuggestion && (
         <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-start">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <svg
                 className="h-5 w-5 text-blue-400"
                 fill="currentColor"
@@ -386,7 +590,7 @@ const RecipesNewPage: FC = () => {
                 needed before saving.
               </p>
             </div>
-            <div className="ml-4 flex-shrink-0 self-start">
+            <div className="ml-4 shrink-0 self-start">
               <button
                 type="button"
                 aria-label="Close AI suggestion"
@@ -598,7 +802,7 @@ const RecipesNewPage: FC = () => {
                     variant="ghost"
                     size="sm"
                     iconOnly
-                    className="min-h-[44px] min-w-[44px] flex-shrink-0 p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
+                    className="min-h-11 min-w-11 shrink-0 p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                     onClick={() => {
                       const list = [...ingredients];
                       list.splice(idx, 1);
@@ -726,7 +930,7 @@ const RecipesNewPage: FC = () => {
                       variant="ghost"
                       size="sm"
                       iconOnly
-                      className="min-h-[44px] min-w-[44px] p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
+                      className="min-h-11 min-w-11 p-2 text-red-500 hover:bg-red-50 hover:text-red-700"
                       onClick={() => {
                         const list = [...instructions];
                         list.splice(idx, 1);
@@ -788,13 +992,31 @@ const RecipesNewPage: FC = () => {
         {/* Add by URL Modal */}
         <AddByUrlModal
           isOpen={isAddByUrlModalOpen}
-          onClose={() => setIsAddByUrlModalOpen(false)}
+          onClose={() => {
+            setIsAddByUrlModalOpen(false);
+            setPrefillUrlForModal(undefined);
+          }}
+          prefillUrl={prefillUrlForModal}
         />
 
         {/* Add by Photo Modal */}
         <AddByPhotoModal
           isOpen={isAddByPhotoModalOpen}
           onClose={() => setIsAddByPhotoModalOpen(false)}
+        />
+
+        {/* Duplicate Recipe Modal */}
+        <DuplicateRecipeModal
+          isOpen={isDuplicateModalOpen}
+          onClose={handleDuplicateModalClose}
+          duplicateType={
+            duplicateInfo?.existing_recipe_id ? 'exact' : 'similar'
+          }
+          existingRecipe={existingRecipe ?? undefined}
+          similarRecipes={similarRecipes}
+          onViewExisting={handleViewExisting}
+          onCreateAnyway={handleCreateAnyway}
+          isCreatingAnyway={isCreatingAnyway}
         />
       </Card>
     </Container>

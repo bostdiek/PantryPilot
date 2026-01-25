@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { createBrowserRouter, redirect } from 'react-router-dom';
-import { getDraftById } from './api/endpoints/aiDrafts';
+import { getDraftById, getDraftByIdOwner } from './api/endpoints/aiDrafts';
 import HydrateFallback from './components/HydrateFallback';
 import ProtectedRoute from './components/ProtectedRoute';
 import Root from './components/Root';
@@ -9,6 +9,7 @@ import { logger } from './lib/logger';
 import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
+import { ApiErrorImpl } from './types/api';
 // Lazy loaded pages for code-splitting (use top-level `lazy` import)
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -19,6 +20,7 @@ const RecipesDetail = lazy(() => import('./pages/RecipesDetail'));
 const RecipesEditPage = lazy(() => import('./pages/RecipesEditPage'));
 const NewRecipePage = lazy(() => import('./pages/RecipesNewPage'));
 const RecipesPage = lazy(() => import('./pages/RecipesPage'));
+const AssistantPage = lazy(() => import('./pages/AssistantPage'));
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'));
 const ComponentShowcase = lazy(() => import('./pages/dev/ComponentShowcase'));
 const VerifyEmailPage = lazy(() => import('./pages/VerifyEmailPage'));
@@ -65,6 +67,18 @@ const recipesLoader = async () => {
   return null;
 };
 
+/**
+ * Removes AI draft query parameters from a URL and returns a redirect response.
+ * Used to clean up the URL after processing AI draft deep links.
+ */
+const redirectToCleanUrl = (url: URL): Response => {
+  const cleanUrl = new URL(url);
+  cleanUrl.searchParams.delete('ai');
+  cleanUrl.searchParams.delete('draftId');
+  cleanUrl.searchParams.delete('token');
+  return redirect(cleanUrl.pathname + cleanUrl.search);
+};
+
 const newRecipeLoader = async ({ request }: { request: Request }) => {
   const url = new URL(request.url);
   const ai = url.searchParams.get('ai');
@@ -100,10 +114,38 @@ const newRecipeLoader = async ({ request }: { request: Request }) => {
       setFormFromSuggestion(draftResponse.payload);
 
       logger.debug('New recipe loader: Form prefilled from AI suggestion');
+
+      // Redirect to clean URL to remove token from address bar
+      return redirectToCleanUrl(url);
     } catch (error) {
-      logger.error('New recipe loader: Failed to load draft', error);
-      // Don't throw - let the component handle the error state
-      // The component can check for the error and show a friendly message
+      logger.error('New recipe loader: Failed to load draft with token', error);
+
+      // If the token is expired or invalid (401 status), try to fetch using owner auth as fallback
+      // This allows users to still access their own drafts even if the token expired
+      if (error instanceof ApiErrorImpl && error.status === 401) {
+        logger.warn('Draft token expired, attempting to fetch as owner...');
+
+        try {
+          // Try to fetch using the owner-only endpoint (uses Bearer token)
+          const draftResponse = await getDraftByIdOwner(draftId);
+          logger.debug('Draft fetched successfully as owner');
+
+          // Set the form from the suggestion
+          const { setFormFromSuggestion } = useRecipeStore.getState();
+          setFormFromSuggestion(draftResponse.payload);
+
+          logger.debug(
+            'New recipe loader: Form prefilled from AI suggestion (owner fallback)'
+          );
+
+          // Redirect to clean URL to remove token from address bar
+          return redirectToCleanUrl(url);
+        } catch (ownerError) {
+          logger.error('Failed to fetch draft as owner', ownerError);
+          // Redirect to clean new recipe page since we can't load the draft
+          return redirectToCleanUrl(url);
+        }
+      }
     }
   }
 
@@ -288,6 +330,14 @@ export const router = createBrowserRouter([
             element: (
               <Suspense fallback={<LoadingSpinner />}>
                 <GroceryListPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'assistant',
+            element: (
+              <Suspense fallback={<LoadingSpinner />}>
+                <AssistantPage />
               </Suspense>
             ),
           },

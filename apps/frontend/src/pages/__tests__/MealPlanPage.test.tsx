@@ -226,8 +226,8 @@ describe('MealPlanPage', () => {
 
     render(<MealPlanPage />);
 
-    const prevBtn = screen.getByRole('button', { name: /Previous week/i });
-    await user.click(prevBtn);
+    const prevBtns = screen.getAllByRole('button', { name: /Previous week/i });
+    await user.click(prevBtns[0]); // Click the first one (desktop or mobile)
 
     // Given weekStartDate is 2025-01-12 in beforeEach, previous week is 2025-01-05
     expect(loadSpy).toHaveBeenCalledWith('2025-01-05');

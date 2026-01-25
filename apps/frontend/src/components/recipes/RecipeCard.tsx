@@ -11,6 +11,9 @@ interface RecipeCardProps {
   className?: string;
   onPreview?: (recipe: Recipe) => void; // New optional preview callback
   enablePreview?: boolean; // Flag to enable preview functionality
+  addToPlanDate?: string | null;
+  addToPlanDayLabel?: string | null;
+  onAddToPlan?: (recipe: Recipe) => void;
 }
 
 /**
@@ -23,6 +26,9 @@ export function RecipeCard({
   className = '',
   onPreview,
   enablePreview = false,
+  addToPlanDate,
+  addToPlanDayLabel,
+  onAddToPlan,
 }: RecipeCardProps) {
   const isMobile = useIsMobile();
   const isTablet = useIsTablet();
@@ -39,6 +45,12 @@ export function RecipeCard({
     e.preventDefault(); // Prevent navigation
     e.stopPropagation(); // Prevent event bubbling
     onPreview?.(recipe);
+  };
+
+  const handleAddToPlanClick = (e: React.MouseEvent) => {
+    e.preventDefault(); // Prevent navigation
+    e.stopPropagation(); // Prevent event bubbling
+    onAddToPlan?.(recipe);
   };
 
   // Format difficulty for display
@@ -61,8 +73,19 @@ export function RecipeCard({
 
   return (
     <div className={`group relative ${className}`}>
+      {/* Add to Plan button - shown when in add-to-plan mode */}
+      {addToPlanDate && onAddToPlan && (
+        <button
+          onClick={handleAddToPlanClick}
+          className="absolute top-4 left-4 z-10 min-h-[44px] rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-blue-700"
+          aria-label={`Add ${recipe.title} to ${addToPlanDayLabel || addToPlanDate}`}
+        >
+          + Add to Plan
+        </button>
+      )}
+
       {/* Preview button - positioned absolutely to avoid nested interactive elements */}
-      {enablePreview && onPreview && (
+      {enablePreview && onPreview && !addToPlanDate && (
         <Button
           ref={previewButtonRef}
           variant="secondary"

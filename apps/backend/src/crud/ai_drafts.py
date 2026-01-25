@@ -54,7 +54,9 @@ async def create_draft(
     )
 
     db.add(draft)
-    await db.commit()
+    # Use flush to register the draft in the session without committing
+    # The caller is responsible for committing the transaction
+    await db.flush()
     await db.refresh(draft)
 
     return draft

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import UUID, DateTime, Integer, String, func
+from sqlalchemy import UUID, CheckConstraint, DateTime, Integer, Numeric, String, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,6 +19,16 @@ class UserPreferences(Base):
     """User preferences for PantryPilot application."""
 
     __tablename__ = "user_preferences"
+    __table_args__ = (
+        CheckConstraint(
+            "latitude IS NULL OR (latitude >= -90 AND latitude <= 90)",
+            name="ck_user_preferences_latitude_valid",
+        ),
+        CheckConstraint(
+            "longitude IS NULL OR (longitude >= -180 AND longitude <= 180)",
+            name="ck_user_preferences_longitude_valid",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4
@@ -51,6 +61,52 @@ class UserPreferences(Base):
     meal_planning_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
     preferred_cuisines: Mapped[list[str]] = mapped_column(
         ARRAY(String), nullable=False, default=list
+    )
+
+    # Location fields (for weather tool and meal planning context)
+    # User-facing fields
+    city: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="User's city (for weather and meal planning)",
+    )
+    state_or_region: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        comment="State/region/province (e.g., 'CA', 'Ontario')",
+    )
+    postal_code: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="Postal/ZIP code",
+    )
+    country: Mapped[str | None] = mapped_column(
+        String(2),
+        nullable=True,
+        server_default="'US'",
+        comment="ISO 3166-1 alpha-2 country code (default US)",
+    )
+
+    # Internal geocoded fields (for weather API calls)
+    latitude: Mapped[float | None] = mapped_column(
+        Numeric(precision=9, scale=6),
+        nullable=True,
+        comment="Geocoded latitude (-90 to 90)",
+    )
+    longitude: Mapped[float | None] = mapped_column(
+        Numeric(precision=9, scale=6),
+        nullable=True,
+        comment="Geocoded longitude (-180 to 180)",
+    )
+    timezone: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+        comment="IANA timezone identifier (e.g., 'America/New_York')",
+    )
+    geocoded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Last geocoding timestamp",
     )
 
     # Timestamps

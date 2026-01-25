@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class UserPreferencesBase(BaseModel):
@@ -35,7 +35,36 @@ class UserPreferencesBase(BaseModel):
         default_factory=list, description="List of preferred cuisines"
     )
 
+    # Location fields (for weather tool)
+    city: str | None = Field(
+        default=None,
+        max_length=100,
+        description="User's city (for weather and meal planning)",
+    )
+    state_or_region: str | None = Field(
+        default=None,
+        max_length=100,
+        description="State/region/province (e.g., 'CA', 'Ontario')",
+    )
+    postal_code: str | None = Field(
+        default=None,
+        max_length=20,
+        description="Postal/ZIP code",
+    )
+    country: str | None = Field(
+        default="US",
+        min_length=2,
+        max_length=2,
+        description="ISO 3166-1 alpha-2 country code (default US)",
+    )
+
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("country")
+    @classmethod
+    def uppercase_country(cls, v: str | None) -> str | None:
+        """Convert country code to uppercase."""
+        return v.upper() if v else v
 
 
 class UserPreferencesCreate(UserPreferencesBase):
@@ -75,6 +104,35 @@ class UserPreferencesUpdate(BaseModel):
     preferred_cuisines: list[str] | None = Field(
         default=None, description="List of preferred cuisines"
     )
+
+    # Location fields (for weather tool)
+    city: str | None = Field(
+        default=None,
+        max_length=100,
+        description="User's city (for weather and meal planning)",
+    )
+    state_or_region: str | None = Field(
+        default=None,
+        max_length=100,
+        description="State/region/province (e.g., 'CA', 'Ontario')",
+    )
+    postal_code: str | None = Field(
+        default=None,
+        max_length=20,
+        description="Postal/ZIP code",
+    )
+    country: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=2,
+        description="ISO 3166-1 alpha-2 country code",
+    )
+
+    @field_validator("country")
+    @classmethod
+    def uppercase_country(cls, v: str | None) -> str | None:
+        """Convert country code to uppercase."""
+        return v.upper() if v else v
 
 
 class UserPreferencesResponse(UserPreferencesBase):

@@ -59,6 +59,13 @@ async def grocery_client() -> AsyncIterator[tuple[AsyncClient, AsyncSession]]:
                 user_notes TEXT,
                 ai_summary TEXT,
                 link_source TEXT,
+                -- Keep in sync with models.recipes_names.Recipe fields
+                -- used by ORM queries.
+                -- SQLite stores these as TEXT/JSON-ish blobs;
+                -- tests only require presence.
+                embedding TEXT,
+                search_context TEXT,
+                search_context_generated_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
