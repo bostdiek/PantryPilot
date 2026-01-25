@@ -1,13 +1,6 @@
-import {
-  Dialog,
-  DialogPanel,
-  DialogTitle,
-  Transition,
-  TransitionChild,
-} from '@headlessui/react';
-import { Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from './ui/Button';
+import { Dialog } from './ui/Dialog';
 
 export interface AddMealDialogProps {
   /**
@@ -76,76 +69,45 @@ export function AddMealDialog({
   };
 
   return (
-    <Transition appear show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
-        {/* Backdrop */}
-        <TransitionChild
-          as={Fragment}
-          enter="ease-out duration-200"
-          enterFrom="opacity-0"
-          enterTo="opacity-100"
-          leave="ease-in duration-150"
-          leaveFrom="opacity-100"
-          leaveTo="opacity-0"
+    <Dialog
+      isOpen={isOpen}
+      onClose={onClose}
+      title={`Add to ${dayOfWeek}`}
+      size="sm"
+    >
+      <div className="space-y-3">
+        <Button
+          fullWidth
+          variant="primary"
+          onClick={handleRecipe}
+          className="min-h-[44px]"
         >
-          <div className="fixed inset-0 bg-black/25" aria-hidden="true" />
-        </TransitionChild>
+          🍽️ Add Recipe
+        </Button>
+        <Button
+          fullWidth
+          variant="outline"
+          onClick={handleLeftover}
+          className="min-h-[44px]"
+        >
+          ♻️ Leftovers
+        </Button>
+        <Button
+          fullWidth
+          variant="outline"
+          onClick={handleEatingOut}
+          className="min-h-[44px]"
+        >
+          🍔 Eating Out
+        </Button>
 
-        {/* Dialog content */}
-        <div className="fixed inset-0 overflow-y-auto">
-          <div className="flex min-h-full items-center justify-center p-4">
-            <TransitionChild
-              as={Fragment}
-              enter="ease-out duration-200"
-              enterFrom="opacity-0 scale-95"
-              enterTo="opacity-100 scale-100"
-              leave="ease-in duration-150"
-              leaveFrom="opacity-100 scale-100"
-              leaveTo="opacity-0 scale-95"
-            >
-              <DialogPanel className="w-full max-w-sm transform rounded-2xl bg-white p-6 shadow-xl transition-all">
-                <DialogTitle className="mb-4 text-center text-lg font-semibold">
-                  Add to {dayOfWeek}
-                </DialogTitle>
-
-                <div className="space-y-3">
-                  <Button
-                    fullWidth
-                    variant="primary"
-                    onClick={handleRecipe}
-                    className="min-h-[44px]"
-                  >
-                    🍽️ Add Recipe
-                  </Button>
-                  <Button
-                    fullWidth
-                    variant="outline"
-                    onClick={handleLeftover}
-                    className="min-h-[44px]"
-                  >
-                    ♻️ Leftovers
-                  </Button>
-                  <Button
-                    fullWidth
-                    variant="outline"
-                    onClick={handleEatingOut}
-                    className="min-h-[44px]"
-                  >
-                    🍔 Eating Out
-                  </Button>
-                </div>
-
-                <button
-                  onClick={onClose}
-                  className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700"
-                >
-                  Cancel
-                </button>
-              </DialogPanel>
-            </TransitionChild>
-          </div>
-        </div>
-      </Dialog>
-    </Transition>
+        <button
+          onClick={onClose}
+          className="mt-4 w-full text-center text-sm text-gray-500 hover:text-gray-700"
+        >
+          Cancel
+        </button>
+      </div>
+    </Dialog>
   );
 }

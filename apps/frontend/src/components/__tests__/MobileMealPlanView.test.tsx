@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import type { WeeklyMealPlan } from '../../types/MealPlan';
 import type { Recipe } from '../../types/Recipe';
@@ -102,11 +103,13 @@ describe('MobileMealPlanView', () => {
 
   it('renders loading state when currentWeek is null', () => {
     render(
-      <MobileMealPlanView
-        currentWeek={null}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={null}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     expect(screen.getByText('Loading meal plan...')).toBeInTheDocument();
@@ -114,11 +117,13 @@ describe('MobileMealPlanView', () => {
 
   it('renders today section prominently', () => {
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     // Today section should be visible
@@ -128,11 +133,13 @@ describe('MobileMealPlanView', () => {
 
   it('renders upcoming days in collapsible sections', () => {
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     // Next Few Days section should be visible
@@ -149,11 +156,13 @@ describe('MobileMealPlanView', () => {
 
   it('shows meal count badges for each day', () => {
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     // Check that badges show correct meal counts
@@ -165,11 +174,13 @@ describe('MobileMealPlanView', () => {
     const user = userEvent.setup();
 
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     // Tuesday's meals should not be visible initially
@@ -189,12 +200,14 @@ describe('MobileMealPlanView', () => {
     const onMarkCooked = vi.fn();
 
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-        onMarkCooked={onMarkCooked}
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+          onMarkCooked={onMarkCooked}
+        />
+      </MemoryRouter>
     );
 
     // Today's meal should have mark cooked button
@@ -211,12 +224,14 @@ describe('MobileMealPlanView', () => {
     const onRemoveEntry = vi.fn();
 
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-        onRemoveEntry={onRemoveEntry}
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+          onRemoveEntry={onRemoveEntry}
+        />
+      </MemoryRouter>
     );
 
     // Verify the handler is properly defined and passed through
@@ -243,12 +258,14 @@ describe('MobileMealPlanView', () => {
     const onRecipeClick = vi.fn();
 
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-        onRecipeClick={onRecipeClick}
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+          onRecipeClick={onRecipeClick}
+        />
+      </MemoryRouter>
     );
 
     // Click on today's recipe
@@ -260,11 +277,13 @@ describe('MobileMealPlanView', () => {
 
   it('shows empty state when day has no meals', () => {
     render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-14" // Sunday has no meals
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-14" // Sunday has no meals
+        />
+      </MemoryRouter>
     );
 
     expect(
@@ -274,11 +293,13 @@ describe('MobileMealPlanView', () => {
 
   it('is hidden on desktop with md:hidden class', () => {
     const { container } = render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     const mobileView = container.firstChild as HTMLElement;
@@ -287,11 +308,13 @@ describe('MobileMealPlanView', () => {
 
   it('applies gradient styling to today card', () => {
     const { container } = render(
-      <MobileMealPlanView
-        currentWeek={mockWeeklyPlan}
-        recipes={mockRecipes}
-        todayDate="2024-01-15"
-      />
+      <MemoryRouter>
+        <MobileMealPlanView
+          currentWeek={mockWeeklyPlan}
+          recipes={mockRecipes}
+          todayDate="2024-01-15"
+        />
+      </MemoryRouter>
     );
 
     const todayCard = container.querySelector('.bg-gradient-to-r');

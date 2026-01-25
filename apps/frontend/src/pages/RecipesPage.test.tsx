@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import RecipesPage from './RecipesPage';
 
 // Mock SVG import
@@ -106,5 +106,35 @@ describe('RecipesPage', () => {
     expect(
       screen.getByRole('button', { name: /add your first recipe/i })
     ).toBeInTheDocument();
+  });
+
+  test('renders add-to-plan mode when opened from MealPlanPage', () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/recipes?addToDate=2025-01-13&dayLabel=Monday']}
+      >
+        <RecipesPage />
+      </MemoryRouter>
+    );
+
+    // Should show the add-to-plan banner
+    expect(screen.getByText(/adding to/i)).toBeInTheDocument();
+    expect(screen.getByText('Monday')).toBeInTheDocument();
+  });
+
+  test('shows return to meal plan link in add-to-plan mode', () => {
+    render(
+      <MemoryRouter
+        initialEntries={['/recipes?addToDate=2025-01-13&dayLabel=Monday']}
+      >
+        <RecipesPage />
+      </MemoryRouter>
+    );
+
+    const returnLink = screen.getByRole('link', {
+      name: /cancel/i,
+    });
+    expect(returnLink).toBeInTheDocument();
+    expect(returnLink).toHaveAttribute('href', '/meal-plan');
   });
 });
