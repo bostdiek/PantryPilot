@@ -1,9 +1,11 @@
 import type { FC } from 'react';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import type { MealEntry, WeeklyMealPlan } from '../types/MealPlan';
 import type { Recipe } from '../types/Recipe';
+import { AddMealDialog } from './AddMealDialog';
 import { MobileMealCard } from './MobileMealCard';
 import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Disclosure } from './ui/Disclosure';
 import ChevronDownIcon from './ui/icons/chevron-down.svg?react';
@@ -60,6 +62,16 @@ export interface MobileMealPlanViewProps {
    * Callback when an entry should be removed
    */
   onRemoveEntry?: (entryId: string) => void;
+
+  /**
+   * Callback when a leftover should be added to a date
+   */
+  onAddLeftover?: (date: string) => void;
+
+  /**
+   * Callback when an eating out entry should be added to a date
+   */
+  onAddEatingOut?: (date: string) => void;
 }
 
 interface DayData {
@@ -89,7 +101,26 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
   onMarkCooked,
   onRecipeClick,
   onRemoveEntry,
+  onAddLeftover,
+  onAddEatingOut,
 }) => {
+  // AddMealDialog state
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addDialogTarget, setAddDialogTarget] = useState<{
+    date: string;
+    dayOfWeek: string;
+  } | null>(null);
+
+  const handleOpenAddDialog = (date: string, dayOfWeek: string) => {
+    setAddDialogTarget({ date, dayOfWeek });
+    setAddDialogOpen(true);
+  };
+
+  const handleCloseAddDialog = () => {
+    setAddDialogOpen(false);
+    setAddDialogTarget(null);
+  };
+
   // Organize days into today and upcoming
   const { todayData, upcomingDays } = useMemo(() => {
     if (!currentWeek) {
@@ -233,7 +264,20 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
       {todayData && (
         <Card className="border-primary-200 from-primary-50 to-primary-100 bg-gradient-to-r">
           <div className="p-4">
-            <h2 className="text-primary-900 mb-2 text-xl font-bold">Today</h2>
+            <div className="mb-2 flex items-center justify-between">
+              <h2 className="text-primary-900 text-xl font-bold">Today</h2>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() =>
+                  handleOpenAddDialog(todayData.date, todayData.dayOfWeek)
+                }
+                className="min-h-[44px] min-w-[44px]"
+                aria-label={`Add meal to ${todayData.dayOfWeek}`}
+              >
+                + Add
+              </Button>
+            </div>
             <p className="text-primary-700 mb-4 text-sm">
               {formatDate(todayData.date)}
             </p>
@@ -269,7 +313,19 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
               panelClassName="px-4 pb-4"
               iconSvg={ChevronDownIcon}
             >
-              <div className="mt-2 space-y-2">{renderDayMeals(day)}</div>
+              <div className="mt-2 space-y-2">
+                {renderDayMeals(day)}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  onClick={() => handleOpenAddDialog(day.date, day.dayOfWeek)}
+                  className="mt-3 min-h-[44px]"
+                  aria-label={`Add meal to ${day.dayOfWeek}`}
+                >
+                  + Add to {day.dayOfWeek}
+                </Button>
+              </div>
             </Disclosure>
           ))}
         </div>
@@ -281,6 +337,24 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
           Past days are hidden on mobile. Use desktop view to see the full week.
         </div>
       )}
+
+      {/* AddMealDialog */}
+      <AddMealDialog
+        isOpen={addDialogOpen}
+        onClose={handleCloseAddDialog}
+        targetDate={addDialogTarget?.date ?? ''}
+        dayOfWeek={addDialogTarget?.dayOfWeek ?? ''}
+        onAddLeftover={() => {
+          if (addDialogTarget && onAddLeftover) {
+            onAddLeftover(addDialogTarget.date);
+          }
+        }}
+        onAddEatingOut={() => {
+          if (addDialogTarget && onAddEatingOut) {
+            onAddEatingOut(addDialogTarget.date);
+          }
+        }}
+      />
     </div>
   );
 };
