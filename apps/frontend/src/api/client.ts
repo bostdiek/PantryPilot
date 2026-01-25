@@ -54,10 +54,30 @@ class ApiClient {
       : `/${endpoint}`;
     const url = `${this.baseUrl}${normalizedEndpoint}`;
 
-    // Auth endpoints should not trigger logout on 401 (those are credential errors, not session expiry)
+    // Determine if this endpoint should skip logout on 401
+    // Auth endpoints: 401 means wrong credentials, not session expiry
+    // Draft endpoints with token param: 401 means expired draft token, not session expiry
     const isAuthEndpoint = normalizedEndpoint.startsWith('/api/v1/auth/');
+    const isDraftTokenEndpoint = (() => {
+      if (!normalizedEndpoint.startsWith('/api/v1/ai/drafts/')) {
+        return false;
+      }
+      const queryIndex = normalizedEndpoint.indexOf('?');
+      if (queryIndex === -1) {
+        return false;
+      }
+      const query = normalizedEndpoint.slice(queryIndex + 1);
+      const params = new URLSearchParams(query);
+      return params.has('token');
+    })();
+    const shouldSkipLogoutOn401 = isAuthEndpoint || isDraftTokenEndpoint;
 
-    logger.debug(`API Request: ${options?.method || 'GET'} ${url}`);
+    // Avoid logging bearer-like draft tokens in query parameters
+    const safeUrlForLogging = isDraftTokenEndpoint ? url.split('?')[0] : url;
+
+    logger.debug(
+      `API Request: ${options?.method || 'GET'} ${safeUrlForLogging}`
+    );
 
     try {
       const headers = {
@@ -106,8 +126,8 @@ class ApiClient {
         }
 
         // Check if this error should trigger logout before throwing
-        // Skip logout for auth endpoints - 401 there means wrong credentials, not session expiry
-        if (!isAuthEndpoint && shouldLogoutOnError(body, resp.status)) {
+        // Skip logout for endpoints where 401 means something other than session expiry
+        if (!shouldSkipLogoutOn401 && shouldLogoutOnError(body, resp.status)) {
           // Log logout event with correlation ID for debugging
           const correlationId = (body as any)?.error?.correlation_id;
           if (correlationId) {
@@ -148,9 +168,9 @@ class ApiClient {
               ? rawMessageStr
               : `Request failed (${resp.status})`;
 
-          // Skip logout for auth endpoints - 401 there means wrong credentials, not session expiry
+          // Skip logout for endpoints where 401 means something other than session expiry
           if (
-            !isAuthEndpoint &&
+            !shouldSkipLogoutOn401 &&
             shouldLogoutOnError(apiResponse, resp.status)
           ) {
             // Log logout event with correlation ID for debugging
