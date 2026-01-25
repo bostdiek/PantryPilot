@@ -51,7 +51,8 @@ async def test_update_user_memory_success(mock_ctx, mock_memory_doc):
             assert result["status"] == "ok"
             assert result["version"] == 2
             assert "Memory updated successfully" in result["message"]
-            mock_session.commit.assert_called_once()
+            # Service handles commit internally - no explicit commit in tool
+            mock_service.update_memory_content.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -75,3 +76,17 @@ async def test_update_user_memory_error_handling(mock_ctx):
 
             assert result["status"] == "error"
             assert "Failed to update memory" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_update_user_memory_exceeds_max_length(mock_ctx):
+    """Test error when memory content exceeds maximum length."""
+    # Create content that exceeds 50,000 characters
+    long_content = "x" * 50_001
+
+    result = await tool_update_user_memory(mock_ctx, memory_content=long_content)
+
+    assert result["status"] == "error"
+    assert "exceeds maximum length" in result["message"]
+    assert "50,000" in result["message"]
+    assert "50,001" in result["message"]

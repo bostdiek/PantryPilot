@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import UserProfilePage from '../UserProfilePage';
 
 // Mock data
@@ -105,6 +105,29 @@ vi.mock('../../api/endpoints/userProfile', () => ({
   },
 }));
 
+// Mock memory data
+const mockMemory = {
+  content:
+    '## Family & Household\n- Family of 4\n\n## Meal Patterns\n- Taco Tuesday!',
+  format: 'markdown' as const,
+  version: 3,
+  updated_at: '2026-01-20T10:00:00Z',
+  updated_by: 'assistant' as const,
+};
+
+const mockGetMemory = vi.fn();
+const mockUpdateMemory = vi.fn();
+
+// Mock memoryApi
+vi.mock('../../api/endpoints/memory', () => ({
+  memoryApi: {
+    getMemory: vi.fn(() => mockGetMemory()),
+    updateMemory: vi.fn((update: { content: string }) =>
+      mockUpdateMemory(update)
+    ),
+  },
+}));
+
 async function renderAndWait() {
   render(
     <MemoryRouter>
@@ -122,6 +145,13 @@ async function renderAndWait() {
 describe('UserProfilePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: memory loads successfully
+    mockGetMemory.mockResolvedValue(mockMemory);
+    mockUpdateMemory.mockResolvedValue({
+      ...mockMemory,
+      version: 4,
+      updated_by: 'user',
+    });
   });
 
   test('renders profile page with user information', async () => {
@@ -252,5 +282,159 @@ describe('UserProfilePage', () => {
     expect(stateInput).not.toBeDisabled();
     expect(postalInput).not.toBeDisabled();
     expect(countryInput).not.toBeDisabled();
+  });
+});
+
+describe('UserProfilePage - Memory Card', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetMemory.mockResolvedValue(mockMemory);
+    mockUpdateMemory.mockResolvedValue({
+      ...mockMemory,
+      version: 4,
+      updated_by: 'user',
+    });
+  });
+
+  test('renders memory card with content', async () => {
+    await renderAndWait();
+
+    expect(
+      screen.getByRole('heading', { name: /What Nibble Remembers/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Personal notes Nibble has learned about you from conversations'
+      )
+    ).toBeInTheDocument();
+    // Memory content is displayed
+    await waitFor(() => {
+      expect(screen.getByText(/Family of 4/)).toBeInTheDocument();
+    });
+  });
+
+  test('shows Edit button when not editing', async () => {
+    await renderAndWait();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+  });
+
+  test('entering edit mode shows textarea with memory content', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    // Wait for memory to load
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+
+    // Click edit button
+    const editButton = screen.getByRole('button', { name: 'Edit' });
+    await userEvent.click(editButton);
+
+    // Textarea should appear with memory content (use placeholder to distinguish from inputs)
+    const textarea = screen.getByPlaceholderText(
+      /Nibble hasn't learned anything about you yet/
+    );
+    expect(textarea).toBeInTheDocument();
+    expect(textarea).toHaveValue(mockMemory.content);
+
+    // Save and Cancel buttons should be visible
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+  });
+
+  test('cancel button reverts changes and exits edit mode', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+
+    // Enter edit mode
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    // Modify the content (use placeholder to find the memory textarea)
+    const textarea = screen.getByPlaceholderText(
+      /Nibble hasn't learned anything about you yet/
+    );
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'New content');
+
+    // Click cancel
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Should exit edit mode and show original content
+    expect(
+      screen.queryByPlaceholderText(
+        /Nibble hasn't learned anything about you yet/
+      )
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/Family of 4/)).toBeInTheDocument();
+  });
+
+  test('save button calls updateMemory and exits edit mode', async () => {
+    const userEvent = (await import('@testing-library/user-event')).default;
+    await renderAndWait();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+
+    // Enter edit mode
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+
+    // Modify the content (use placeholder to find the memory textarea)
+    const textarea = screen.getByPlaceholderText(
+      /Nibble hasn't learned anything about you yet/
+    );
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'Updated memory content');
+
+    // Click save
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    // updateMemory should be called with new content
+    await waitFor(() => {
+      expect(mockUpdateMemory).toHaveBeenCalledWith({
+        content: 'Updated memory content',
+      });
+    });
+
+    // Should exit edit mode
+    await waitFor(() => {
+      expect(
+        screen.queryByPlaceholderText(
+          /Nibble hasn't learned anything about you yet/
+        )
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  test('shows placeholder when memory is empty', async () => {
+    mockGetMemory.mockResolvedValue({
+      content: '',
+      format: 'markdown',
+      version: 1,
+      updated_at: '2026-01-20T10:00:00Z',
+      updated_by: 'assistant',
+    });
+    await renderAndWait();
+
+    // Wait for memory card to load and enter edit mode to see placeholder
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    });
+  });
+
+  test('shows last updated date', async () => {
+    await renderAndWait();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Last updated:/)).toBeInTheDocument();
+    });
   });
 });

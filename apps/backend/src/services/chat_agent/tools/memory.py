@@ -73,6 +73,18 @@ async def tool_update_user_memory(
     """
     user = ctx.deps.user
 
+    # Validate memory content length (matches API schema max_length=50000)
+    MAX_MEMORY_LENGTH = 50_000
+    if len(memory_content) > MAX_MEMORY_LENGTH:
+        return {
+            "status": "error",
+            "message": (
+                f"Memory content exceeds maximum length of "
+                f"{MAX_MEMORY_LENGTH:,} characters. "
+                f"Current length: {len(memory_content):,} characters."
+            ),
+        }
+
     try:
         # Use separate database session for write operation
         async with AsyncSessionLocal() as write_db:
@@ -82,7 +94,6 @@ async def tool_update_user_memory(
                 new_content=memory_content,
                 metadata={"source": "agent_tool", "conversation_initiated": True},
             )
-            await write_db.commit()
 
         logger.info(
             f"Updated memory for user {user.id} "
