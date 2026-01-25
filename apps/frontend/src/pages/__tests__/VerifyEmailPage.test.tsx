@@ -91,13 +91,12 @@ describe('VerifyEmailPage', () => {
     );
 
     expect(intervalCallback).not.toBeNull();
-    await act(async () => {
-      intervalCallback?.();
-      intervalCallback?.();
-      intervalCallback?.();
-      intervalCallback?.();
-      intervalCallback?.();
-    });
+    // Execute each interval tick separately to ensure state updates flush
+    await act(async () => intervalCallback?.());
+    await act(async () => intervalCallback?.());
+    await act(async () => intervalCallback?.());
+    await act(async () => intervalCallback?.());
+    await act(async () => intervalCallback?.());
 
     await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
