@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FC } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { createMealEntry } from '../api/endpoints/mealPlans';
 import { Grid } from '../components/layout/Grid';
 import { RecipeQuickPreview } from '../components/RecipeQuickPreview';
 import { AddByPhotoModal } from '../components/recipes/AddByPhotoModal';
@@ -14,6 +15,7 @@ import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Icon } from '../components/ui/Icon';
 import ChefHatIcon from '../components/ui/icons/chef-hat.svg?react';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { useToast } from '../components/ui/useToast';
 import { useRecipeFilters } from '../hooks/useRecipeFilters';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe } from '../types/Recipe';
@@ -30,6 +32,14 @@ const RecipesPage: FC = () => {
   } = useRecipeStore();
 
   const { filters } = useRecipeFilters();
+  const navigate = useNavigate();
+  const { success, error: showError } = useToast();
+  const [searchParams] = useSearchParams();
+
+  // Add-to-plan mode detection
+  const addToDate = searchParams.get('addToDate');
+  const dayLabel = searchParams.get('dayLabel');
+  const isAddToPlanMode = !!addToDate;
 
   // Recipe preview state
   const [previewRecipe, setPreviewRecipe] = useState<Recipe | null>(null);
@@ -50,6 +60,24 @@ const RecipesPage: FC = () => {
   // Handle recipe preview
   const handleRecipePreview = (recipe: Recipe) => {
     setPreviewRecipe(recipe);
+  };
+
+  // Handle adding recipe to meal plan
+  const handleAddToPlan = async (recipe: Recipe) => {
+    if (!addToDate) return;
+
+    try {
+      await createMealEntry({
+        plannedForDate: addToDate,
+        recipeId: recipe.id,
+      });
+
+      success(`Added "${recipe.title}" to ${dayLabel || addToDate}!`);
+      navigate('/meal-plan');
+    } catch (error) {
+      console.error('Failed to add recipe to meal plan:', error);
+      showError('Failed to add recipe. Please try again.');
+    }
   };
 
   const handleClosePreview = () => {
@@ -112,6 +140,20 @@ const RecipesPage: FC = () => {
       {/* Search and Filters */}
       <RecipeSearchFilters className="mb-6" />
 
+      {/* Add-to-Plan Mode Banner */}
+      {isAddToPlanMode && (
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <p className="text-blue-700">
+            📅 Adding to <strong>{dayLabel || addToDate}</strong>. Select a
+            recipe below or{' '}
+            <Link to="/meal-plan" className="underline hover:text-blue-900">
+              cancel
+            </Link>
+            .
+          </p>
+        </div>
+      )}
+
       {/* Content */}
       {isLoading ? (
         <Card variant="elevated" className="flex flex-col items-center py-16">
@@ -140,6 +182,9 @@ const RecipesPage: FC = () => {
                 recipe={recipe}
                 enablePreview={true}
                 onPreview={handleRecipePreview}
+                addToPlanDate={addToDate}
+                addToPlanDayLabel={dayLabel}
+                onAddToPlan={handleAddToPlan}
               />
             ))}
           </Grid>
