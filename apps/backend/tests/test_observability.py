@@ -188,10 +188,10 @@ class TestNoOpTracer:
     """Tests for _NoOpTracer class."""
 
     def test_start_as_current_span_returns_noop_span(self) -> None:
-        """Test that start_as_current_span returns a NoOpSpan."""
+        """Test that start_as_current_span yields a NoOpSpan as context manager."""
         tracer = _NoOpTracer()
-        span = tracer.start_as_current_span("test_span")
-        assert isinstance(span, _NoOpSpan)
+        with tracer.start_as_current_span("test_span") as span:
+            assert isinstance(span, _NoOpSpan)
 
     def test_start_span_returns_noop_span(self) -> None:
         """Test that start_span returns a NoOpSpan."""
@@ -202,8 +202,10 @@ class TestNoOpTracer:
     def test_start_as_current_span_with_kwargs(self) -> None:
         """Test that start_as_current_span accepts kwargs."""
         tracer = _NoOpTracer()
-        span = tracer.start_as_current_span("test_span", attributes={"key": "value"})
-        assert isinstance(span, _NoOpSpan)
+        with tracer.start_as_current_span(
+            "test_span", attributes={"key": "value"}
+        ) as span:
+            assert isinstance(span, _NoOpSpan)
 
 
 class TestNoOpSpan:

@@ -458,9 +458,11 @@ export async function extractRecipeFromImageStream(
       );
 
       // If unauthorized, log the user out (consistent with apiClient) and surface error
+      // Only trigger 'expired' if the user was actually logged in
       if (uploadResponse.status === 401) {
         try {
-          useAuthStore.getState().logout('expired');
+          const wasLoggedIn = useAuthStore.getState().token !== null;
+          useAuthStore.getState().logout(wasLoggedIn ? 'expired' : undefined);
         } catch {
           /* ignore logout errors */
         }
@@ -639,7 +641,9 @@ export async function extractRecipeFromImage(
     );
     if (response.status === 401) {
       try {
-        useAuthStore.getState().logout('expired');
+        // Only trigger 'expired' if the user was actually logged in
+        const wasLoggedIn = useAuthStore.getState().token !== null;
+        useAuthStore.getState().logout(wasLoggedIn ? 'expired' : undefined);
       } catch {
         /* ignore logout errors */
       }

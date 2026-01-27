@@ -184,9 +184,13 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           (err: ApiErrorImpl) => {
             logger.error('Stream extraction error:', err);
             // If unauthorized, force logout and redirect to login to re-authenticate
+            // Only show 'expired' message if the user was actually logged in
             if (err?.status === 401) {
               try {
-                useAuthStore.getState().logout('expired');
+                const wasLoggedIn = useAuthStore.getState().token !== null;
+                useAuthStore
+                  .getState()
+                  .logout(wasLoggedIn ? 'expired' : undefined);
               } catch {
                 /* ignore */
               }
@@ -237,9 +241,11 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       logger.error('POST extraction error:', err);
       if (err instanceof ApiErrorImpl) {
         // If unauthorized, logout and redirect to login
+        // Only show 'expired' message if the user was actually logged in
         if (err.status === 401) {
           try {
-            useAuthStore.getState().logout('expired');
+            const wasLoggedIn = useAuthStore.getState().token !== null;
+            useAuthStore.getState().logout(wasLoggedIn ? 'expired' : undefined);
           } catch {
             /* ignore */
           }
