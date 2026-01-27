@@ -447,7 +447,11 @@ async def get_ai_draft(
             )
 
         except HTTPException as http_exc:
-            span.set_attribute("status", "error")
+            # Map 404 to "not_found" status, others to "error"
+            if http_exc.status_code == status.HTTP_404_NOT_FOUND:
+                span.set_attribute("status", "not_found")
+            else:
+                span.set_attribute("status", "error")
             span.set_attribute("error_status_code", http_exc.status_code)
             raise
         except Exception as exc:
@@ -478,7 +482,6 @@ async def get_my_draft(
         try:
             draft = await get_draft_by_id(db, draft_id, current_user.id)
             if not draft:
-                span.set_attribute("status", "not_found")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found"
                 )
@@ -497,7 +500,11 @@ async def get_my_draft(
                 message="Draft retrieved successfully",
             )
         except HTTPException as http_exc:
-            span.set_attribute("status", "error")
+            # Map 404 to "not_found" status, others to "error"
+            if http_exc.status_code == status.HTTP_404_NOT_FOUND:
+                span.set_attribute("status", "not_found")
+            else:
+                span.set_attribute("status", "error")
             span.set_attribute("error_status_code", http_exc.status_code)
             raise
         except Exception as exc:  # pragma: no cover - unexpected

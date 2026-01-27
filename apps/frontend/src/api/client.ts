@@ -71,12 +71,7 @@ class ApiClient {
       const params = new URLSearchParams(query);
       return params.has('token');
     })();
-    // Owner draft endpoint pattern: /api/v1/ai/drafts/{uuid}/me
-    const isOwnerDraftEndpoint = /^\/api\/v1\/ai\/drafts\/[^/]+\/me/.test(
-      normalizedEndpoint
-    );
-    const shouldSkipLogoutOn401 =
-      isAuthEndpoint || isDraftTokenEndpoint || isOwnerDraftEndpoint;
+    const shouldSkipLogoutOn401 = isAuthEndpoint || isDraftTokenEndpoint;
 
     // Avoid logging bearer-like draft tokens in query parameters
     const safeUrlForLogging = isDraftTokenEndpoint ? url.split('?')[0] : url;
