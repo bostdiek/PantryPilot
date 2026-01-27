@@ -8,6 +8,7 @@ from argon2.exceptions import HashingError, VerifyMismatchError
 from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from jose import JWTError, jwt
+from jose.exceptions import JWSSignatureError
 
 from core.config import Settings, get_settings
 from schemas.auth import TokenData
@@ -155,7 +156,30 @@ def decode_draft_token(token: str) -> dict[str, Any]:
             algorithms=[s.ALGORITHM],
             options={"verify_aud": False},
         )
+    except jwt.ExpiredSignatureError as err:
+        _logger.warning(
+            "Draft token validation failed: expired signature",
+            extra={"error_type": "expired"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired draft token",
+        ) from err
+    except JWSSignatureError as err:
+        _logger.warning(
+            "Draft token validation failed: invalid signature",
+            extra={"error_type": "invalid_signature"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired draft token",
+        ) from err
     except JWTError as err:
+        _logger.warning(
+            "Draft token validation failed: %s",
+            type(err).__name__,
+            extra={"error_type": "jwt_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired draft token",
@@ -167,6 +191,14 @@ def decode_draft_token(token: str) -> dict[str, Any]:
     token_type = payload.get("type")
 
     if not draft_id or not user_id or token_type != "draft":
+        _logger.warning(
+            "Draft token validation failed: malformed claims "
+            "(draft_id=%s, user_id=%s, type=%s)",
+            bool(draft_id),
+            bool(user_id),
+            token_type,
+            extra={"error_type": "malformed"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Malformed draft token",

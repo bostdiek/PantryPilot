@@ -24,6 +24,7 @@ from pydantic_ai.messages import (
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.observability import get_tracer
 from core.ratelimit import check_rate_limit
 from crud.user_preferences import UserPreferencesCRUD
 from dependencies.auth import get_current_user
@@ -50,6 +51,9 @@ from services.memory_update import MemoryUpdateService
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 logger = logging.getLogger(__name__)
+
+# Initialize tracer for custom spans
+_tracer = get_tracer(__name__)
 
 # Maximum content length for SSE events before truncation
 # Balances between useful preview and staying well under MAX_SSE_EVENT_BYTES
@@ -347,6 +351,7 @@ class _ToolCallStart:
     tool_name: str
     arguments: dict[str, object]
     started_at: datetime
+    call_order: int = 0
 
 
 # Maximum messages to include in history for multi-turn context
@@ -588,6 +593,7 @@ async def _handle_agent_stream_event(
     user_id: UUID,
     db: AsyncSession,
     tool_calls_by_id: dict[str, _ToolCallStart],
+    tool_call_order: list[int],
 ) -> tuple[list[str], object | None, list[dict[str, Any]]]:
     """Handle a single agent stream event and return SSE events to emit.
 
@@ -599,10 +605,13 @@ async def _handle_agent_stream_event(
     if isinstance(event, FunctionToolCallEvent):
         tool_name = _extract_tool_name(event.part)
         arguments = _extract_tool_arguments(event.part)
+        current_order = tool_call_order[0]
+        tool_call_order[0] += 1
         tool_calls_by_id[event.tool_call_id] = _ToolCallStart(
             tool_name=tool_name,
             arguments=arguments,
             started_at=datetime.now(UTC),
+            call_order=current_order,
         )
         return (
             [
@@ -626,7 +635,19 @@ async def _handle_agent_stream_event(
         tool_name = tool_start.tool_name if tool_start else "unknown"
         arguments = tool_start.arguments if tool_start else {}
         started_at = tool_start.started_at if tool_start else datetime.now(UTC)
+        call_order = tool_start.call_order if tool_start else -1
         finished_at = datetime.now(UTC)
+        duration_ms = (finished_at - started_at).total_seconds() * 1000
+
+        # Create tracing span for tool call
+        with _tracer.start_as_current_span(f"tool_call:{tool_name}") as span:
+            span.set_attribute("tool_name", tool_name)
+            span.set_attribute("tool_call_id", event.tool_call_id)
+            span.set_attribute("call_order", call_order)
+            span.set_attribute("duration_ms", duration_ms)
+            span.set_attribute("conversation_id", str(conversation_id))
+            span.set_attribute("message_id", str(message_id))
+            span.set_attribute("status", "success")
 
         result_content = getattr(event.result, "content", None)
         if isinstance(result_content, dict):
@@ -891,6 +912,8 @@ async def stream_chat_message(  # noqa: C901
         ).to_sse()
         try:
             tool_calls_by_id: dict[str, _ToolCallStart] = {}
+            # Counter for tool call ordering (use list for mutability in nested scope)
+            tool_call_order: list[int] = [0]
             raw_output: object | None = None
             # Track blocks emitted from tool results (e.g., recipe cards)
             tool_emitted_blocks: list[dict[str, Any]] = []
@@ -933,6 +956,7 @@ async def stream_chat_message(  # noqa: C901
                     user_id=current_user.id,
                     db=db,
                     tool_calls_by_id=tool_calls_by_id,
+                    tool_call_order=tool_call_order,
                 )
                 for sse_line in sse_events:
                     yield sse_line

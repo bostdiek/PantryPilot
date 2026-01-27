@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.observability import get_tracer
 from core.ratelimit import check_rate_limit
 from crud.ai_drafts import get_draft_by_id
 from dependencies.auth import get_current_user
@@ -40,6 +41,9 @@ from services.images.normalize import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+# Initialize tracer for custom spans
+_tracer = get_tracer(__name__)
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 public_router = APIRouter(prefix="/ai", tags=["ai"])
@@ -355,91 +359,104 @@ async def get_ai_draft(
     This endpoint validates the signed token and returns the draft payload
     if the token is valid and not expired.
     """
-    try:
-        from core.security import decode_draft_token
+    with _tracer.start_as_current_span("get_ai_draft") as span:
+        span.set_attribute("draft_id", str(draft_id))
+        span.set_attribute("auth_method", "token")
+        try:
+            from core.security import decode_draft_token
 
-        token_payload = decode_draft_token(token)
+            logger.info(
+                "Validating draft token for draft_id=%s",
+                draft_id,
+                extra={"draft_id": str(draft_id)},
+            )
+            token_payload = decode_draft_token(token)
+            span.set_attribute("token_validated", True)
 
-        token_draft_raw = token_payload.get("draft_id")
-        if not token_draft_raw:
+            token_draft_raw = token_payload.get("draft_id")
+            if not token_draft_raw:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token does not contain a draft ID",
+                )
+
+            token_draft_uuid = _ensure_uuid_or_401(
+                token_draft_raw, "Token contains invalid draft ID"
+            )
+            if token_draft_uuid != draft_id:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token does not match draft ID",
+                )
+
+            token_user_raw = token_payload.get("user_id")
+            if not token_user_raw:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token does not contain a user ID",
+                )
+
+            token_user_uuid = _ensure_uuid_or_401(
+                token_user_raw, "Token contains invalid user ID"
+            )
+
+            draft = await _get_draft_or_404(db, draft_id)
+            draft_user_raw = getattr(draft, "user_id", None)
+            draft_user_uuid = _ensure_uuid_or_401(
+                draft_user_raw, "Draft owner ID is invalid"
+            )
+
+            if token_user_uuid != draft_user_uuid:
+                logger.debug(
+                    "Draft owner mismatch: token=%s draft=%s",
+                    token_user_uuid,
+                    draft_user_uuid,
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Token does not match draft owner",
+                )
+
+            now_utc = datetime.now(UTC)
+            draft_expires = getattr(draft, "expires_at", None)
+            if draft_expires is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Draft has expired",
+                )
+
+            draft_expires = _ensure_aware_utc_or_404(draft_expires)
+            if now_utc >= draft_expires:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Draft has expired",
+                )
+
+            response_data = AIDraftFetchResponse(
+                payload=cast(dict[str, Any], draft.payload),
+                type="recipe_suggestion",
+                created_at=draft.created_at,
+                expires_at=draft.expires_at,
+            )
+
+            span.set_attribute("status", "success")
+            return ApiResponse(
+                success=True,
+                data=response_data,
+                message="Draft retrieved successfully",
+            )
+
+        except HTTPException as http_exc:
+            span.set_attribute("status", "error")
+            span.set_attribute("error_status_code", http_exc.status_code)
+            raise
+        except Exception as exc:
+            span.set_attribute("status", "error")
+            logger.error("Error fetching draft %s: %s", draft_id, exc)
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token does not contain a draft ID",
-            )
-
-        token_draft_uuid = _ensure_uuid_or_401(
-            token_draft_raw, "Token contains invalid draft ID"
-        )
-        if token_draft_uuid != draft_id:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token does not match draft ID",
-            )
-
-        token_user_raw = token_payload.get("user_id")
-        if not token_user_raw:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token does not contain a user ID",
-            )
-
-        token_user_uuid = _ensure_uuid_or_401(
-            token_user_raw, "Token contains invalid user ID"
-        )
-
-        draft = await _get_draft_or_404(db, draft_id)
-        draft_user_raw = getattr(draft, "user_id", None)
-        draft_user_uuid = _ensure_uuid_or_401(
-            draft_user_raw, "Draft owner ID is invalid"
-        )
-
-        if token_user_uuid != draft_user_uuid:
-            logger.debug(
-                "Draft owner mismatch: token=%s draft=%s",
-                token_user_uuid,
-                draft_user_uuid,
-            )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token does not match draft owner",
-            )
-
-        now_utc = datetime.now(UTC)
-        draft_expires = getattr(draft, "expires_at", None)
-        if draft_expires is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Draft has expired",
-            )
-
-        draft_expires = _ensure_aware_utc_or_404(draft_expires)
-        if now_utc >= draft_expires:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Draft has expired",
-            )
-
-        response_data = AIDraftFetchResponse(
-            payload=cast(dict[str, Any], draft.payload),
-            type="recipe_suggestion",
-            created_at=draft.created_at,
-            expires_at=draft.expires_at,
-        )
-
-        return ApiResponse(
-            success=True,
-            data=response_data,
-            message="Draft retrieved successfully",
-        )
-
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("Error fetching draft %s: %s", draft_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve draft",
-        ) from exc
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve draft",
+            ) from exc
 
 
 # Owner-only draft fetch: allow the authenticated owner to retrieve their draft
@@ -454,30 +471,39 @@ async def get_my_draft(
     This route is protected by the router-level dependency so it only
     returns drafts owned by the current authenticated user.
     """
-    try:
-        draft = await get_draft_by_id(db, draft_id, current_user.id)
-        if not draft:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found"
+    with _tracer.start_as_current_span("get_my_draft") as span:
+        span.set_attribute("draft_id", str(draft_id))
+        span.set_attribute("user_id", str(current_user.id))
+        span.set_attribute("auth_method", "bearer")
+        try:
+            draft = await get_draft_by_id(db, draft_id, current_user.id)
+            if not draft:
+                span.set_attribute("status", "not_found")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Draft not found"
+                )
+
+            response_data = AIDraftFetchResponse(
+                payload=cast(dict[str, object], draft.payload),
+                type="recipe_suggestion",
+                created_at=draft.created_at,
+                expires_at=draft.expires_at,
             )
 
-        response_data = AIDraftFetchResponse(
-            payload=cast(dict[str, object], draft.payload),
-            type="recipe_suggestion",
-            created_at=draft.created_at,
-            expires_at=draft.expires_at,
-        )
-
-        return ApiResponse(
-            success=True,
-            data=response_data,
-            message="Draft retrieved successfully",
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:  # pragma: no cover - unexpected
-        logger.error("Error retrieving draft for owner %s: %s", draft_id, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve draft",
-        ) from exc
+            span.set_attribute("status", "success")
+            return ApiResponse(
+                success=True,
+                data=response_data,
+                message="Draft retrieved successfully",
+            )
+        except HTTPException as http_exc:
+            span.set_attribute("status", "error")
+            span.set_attribute("error_status_code", http_exc.status_code)
+            raise
+        except Exception as exc:  # pragma: no cover - unexpected
+            span.set_attribute("status", "error")
+            logger.error("Error retrieving draft for owner %s: %s", draft_id, exc)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to retrieve draft",
+            ) from exc

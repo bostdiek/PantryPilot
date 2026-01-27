@@ -37,6 +37,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
 
     db = _FakeDb()
     tool_calls_by_id = {}
+    tool_call_order = [0]
 
     call_part = ToolCallPart(
         tool_name="get_daily_weather",
@@ -52,6 +53,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
         user_id=user_id,
         db=db,
         tool_calls_by_id=tool_calls_by_id,
+        tool_call_order=tool_call_order,
     )
 
     assert output_started is None
@@ -75,6 +77,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
         user_id=user_id,
         db=db,
         tool_calls_by_id=tool_calls_by_id,
+        tool_call_order=tool_call_order,
     )
 
     assert output_result is None

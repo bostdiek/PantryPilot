@@ -57,6 +57,7 @@ class ApiClient {
     // Determine if this endpoint should skip logout on 401
     // Auth endpoints: 401 means wrong credentials, not session expiry
     // Draft endpoints with token param: 401 means expired draft token, not session expiry
+    // Owner draft endpoints (/me): 401 means draft expired or ownership mismatch, not session expiry
     const isAuthEndpoint = normalizedEndpoint.startsWith('/api/v1/auth/');
     const isDraftTokenEndpoint = (() => {
       if (!normalizedEndpoint.startsWith('/api/v1/ai/drafts/')) {
@@ -70,7 +71,12 @@ class ApiClient {
       const params = new URLSearchParams(query);
       return params.has('token');
     })();
-    const shouldSkipLogoutOn401 = isAuthEndpoint || isDraftTokenEndpoint;
+    // Owner draft endpoint pattern: /api/v1/ai/drafts/{uuid}/me
+    const isOwnerDraftEndpoint = /^\/api\/v1\/ai\/drafts\/[^/]+\/me/.test(
+      normalizedEndpoint
+    );
+    const shouldSkipLogoutOn401 =
+      isAuthEndpoint || isDraftTokenEndpoint || isOwnerDraftEndpoint;
 
     // Avoid logging bearer-like draft tokens in query parameters
     const safeUrlForLogging = isDraftTokenEndpoint ? url.split('?')[0] : url;
@@ -103,6 +109,11 @@ class ApiClient {
         throw new Error(`Invalid JSON response from API: ${responseText}`);
       }
 
+      // Check if user was logged in before processing any errors
+      // This is used to determine if a 401 should trigger "session expired" message
+      // (only if the user actually had a session)
+      const wasLoggedIn = useAuthStore.getState().token !== null;
+
       if (!resp.ok) {
         // Always throw ApiErrorImpl for HTTP/API-level errors to ensure consistent error handling
         let rawMessage: string = '';
@@ -127,7 +138,13 @@ class ApiClient {
 
         // Check if this error should trigger logout before throwing
         // Skip logout for endpoints where 401 means something other than session expiry
-        if (!shouldSkipLogoutOn401 && shouldLogoutOnError(body, resp.status)) {
+        // Also skip if the user wasn't logged in - a 401 for an unauthenticated request
+        // is expected behavior, not a session expiration
+        if (
+          wasLoggedIn &&
+          !shouldSkipLogoutOn401 &&
+          shouldLogoutOnError(body, resp.status)
+        ) {
           // Log logout event with correlation ID for debugging
           const correlationId = (body as any)?.error?.correlation_id;
           if (correlationId) {
@@ -169,7 +186,10 @@ class ApiClient {
               : `Request failed (${resp.status})`;
 
           // Skip logout for endpoints where 401 means something other than session expiry
+          // Also skip if the user wasn't logged in - a 401 for an unauthenticated request
+          // is expected behavior, not a session expiration
           if (
+            wasLoggedIn &&
             !shouldSkipLogoutOn401 &&
             shouldLogoutOnError(apiResponse, resp.status)
           ) {
