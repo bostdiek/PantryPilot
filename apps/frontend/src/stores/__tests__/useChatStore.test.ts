@@ -133,6 +133,79 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().conversations[0]?.id).toBe('conv-1');
   });
 
+  test('loadMessages extracts content from user message content_blocks', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    const conversationId = 'conv-1';
+
+    // Mock API response with user and assistant messages
+    mocks.fetchMessages.mockResolvedValue({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content_blocks: [
+            {
+              type: 'text',
+              text: 'Hello, how are you?',
+            },
+          ],
+          created_at: '2026-01-17T10:00:00Z',
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content_blocks: [
+            {
+              type: 'text',
+              text: 'I am doing well, thank you!',
+            },
+          ],
+          created_at: '2026-01-17T10:01:00Z',
+        },
+        {
+          id: 'msg-3',
+          role: 'user',
+          content_blocks: [
+            {
+              type: 'text',
+              text: 'Can you help me with recipes?',
+            },
+          ],
+          created_at: '2026-01-17T10:02:00Z',
+        },
+      ],
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadMessages(conversationId);
+    });
+
+    const messages =
+      useChatStore.getState().messagesByConversationId[conversationId];
+
+    expect(useChatStore.getState().isLoading).toBe(false);
+    expect(messages).toHaveLength(3);
+
+    // Verify user messages have content extracted from content_blocks
+    expect(messages?.[0]?.role).toBe('user');
+    expect(messages?.[0]?.content).toBe('Hello, how are you?');
+    expect(messages?.[0]?.blocks).toBeDefined();
+
+    // Verify assistant messages have blocks but no content field
+    expect(messages?.[1]?.role).toBe('assistant');
+    expect(messages?.[1]?.content).toBeUndefined();
+    expect(messages?.[1]?.blocks).toHaveLength(1);
+    expect(messages?.[1]?.blocks?.[0]?.type).toBe('text');
+
+    // Verify second user message
+    expect(messages?.[2]?.role).toBe('user');
+    expect(messages?.[2]?.content).toBe('Can you help me with recipes?');
+    expect(messages?.[2]?.blocks).toBeDefined();
+  });
+
   test('sendMessage creates a conversation if none exists and sends to API', async () => {
     const { result } = renderHook(() => useChatStore());
     const mocks = await getMocks();
