@@ -154,13 +154,28 @@ export const useChatStore = create<ChatState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await fetchMessages(conversationId);
-          const messages: Message[] = response.messages.map((m) => ({
-            id: m.id,
-            conversationId,
-            role: m.role as ChatRole,
-            blocks: m.content_blocks as ChatContentBlock[],
-            createdAt: m.created_at,
-          }));
+          const messages: Message[] = response.messages.map((m) => {
+            const blocks = m.content_blocks as ChatContentBlock[];
+
+            // Extract plain text content for user messages (stored as content_blocks with type: "text")
+            let content: string | undefined;
+            if (
+              m.role === 'user' &&
+              blocks.length > 0 &&
+              blocks[0].type === 'text'
+            ) {
+              content = blocks[0].text;
+            }
+
+            return {
+              id: m.id,
+              conversationId,
+              role: m.role as ChatRole,
+              content,
+              blocks,
+              createdAt: m.created_at,
+            };
+          });
           set((state) => ({
             messagesByConversationId: {
               ...state.messagesByConversationId,
