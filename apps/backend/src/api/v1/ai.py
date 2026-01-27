@@ -227,6 +227,12 @@ async def extract_recipe_from_image(
         )
         draft, token, success = outcome.draft, outcome.token, outcome.success
 
+        # Commit the draft so it's visible to the streaming endpoint which uses
+        # a separate database session. Without this commit, the draft created
+        # via flush() is only visible within this transaction and cannot be
+        # retrieved by the subsequent GET request to /extract-recipe-image-stream.
+        await db.commit()
+
         # Build response (same as extract_recipe_from_url)
         signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
         expires = getattr(draft, "expires_at", None)
