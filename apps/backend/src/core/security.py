@@ -8,7 +8,7 @@ from argon2.exceptions import HashingError, VerifyMismatchError
 from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from jose import JWTError, jwt
-from jose.exceptions import JWSSignatureError
+from jose.exceptions import ExpiredSignatureError, JWSSignatureError
 
 from core.config import Settings, get_settings
 from schemas.auth import TokenData
@@ -156,7 +156,7 @@ def decode_draft_token(token: str) -> dict[str, Any]:
             algorithms=[s.ALGORITHM],
             options={"verify_aud": False},
         )
-    except jwt.ExpiredSignatureError as err:
+    except ExpiredSignatureError as err:
         _logger.warning(
             "Draft token validation failed: expired signature",
             extra={"error_type": "expired"},
