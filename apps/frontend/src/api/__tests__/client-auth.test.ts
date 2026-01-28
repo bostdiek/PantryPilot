@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiClient } from '../client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { apiClient } from '../client';
 
 // Mock the auth store
 vi.mock('../../stores/useAuthStore', () => ({
