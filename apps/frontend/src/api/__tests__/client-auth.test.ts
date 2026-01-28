@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { apiClient } from '../client';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { apiClient } from '../client';
 
 // Mock the auth store
 vi.mock('../../stores/useAuthStore', () => ({
@@ -327,6 +327,96 @@ describe('ApiClient Authentication Handling', () => {
 
       // Verify logout WAS called - refresh_token should not be treated as draft token
       expect(mockLogout).toHaveBeenCalledWith('expired');
+    });
+  });
+
+  describe('Unauthenticated user handling (no token)', () => {
+    beforeEach(() => {
+      // Override the default mock to simulate unauthenticated user
+      mockGetState.mockReturnValue({
+        token: null, // No token - user is not logged in
+        user: null,
+        hasHydrated: true,
+        login: vi.fn(),
+        logout: mockLogout,
+        setToken: vi.fn(),
+        setUser: vi.fn(),
+        getDisplayName: vi.fn(() => 'Guest'),
+      });
+    });
+
+    it('does NOT call logout on 401 when user was never logged in', async () => {
+      // Setup mock response for 401
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({ detail: 'Could not validate credentials' })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request and expect it to throw
+      await expect(
+        apiClient.request('/api/v1/mealplans/weekly')
+      ).rejects.toThrow();
+
+      // Verify logout was NOT called - user was never logged in, so no "session expired"
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call logout on 401 with canonical unauthorized error when user was never logged in', async () => {
+      // Setup mock response for 401 with canonical error structure
+      const mockResponse = {
+        ok: false,
+        status: 401,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              success: false,
+              message: 'Authentication required',
+              error: {
+                type: 'unauthorized',
+                correlation_id: 'test-789',
+              },
+            })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request and expect it to throw
+      await expect(apiClient.request('/api/v1/recipes')).rejects.toThrow();
+
+      // Verify logout was NOT called - no session to expire
+      expect(mockLogout).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call logout on wrapped API 401 when user was never logged in', async () => {
+      // Setup mock response for wrapped API failure with 401
+      const mockResponse = {
+        ok: true, // HTTP OK but API indicates auth failure
+        status: 200,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              success: false,
+              data: null,
+              message: 'Authentication failed',
+              error: {
+                type: 'unauthorized',
+                correlation_id: 'test-999',
+              },
+            })
+          ),
+      };
+      fetchMock.mockResolvedValue(mockResponse);
+
+      // Make the request and expect it to throw
+      await expect(apiClient.request('/test')).rejects.toThrow();
+
+      // Verify logout was NOT called - user was never logged in
+      expect(mockLogout).not.toHaveBeenCalled();
     });
   });
 });

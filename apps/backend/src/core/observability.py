@@ -37,8 +37,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
@@ -148,7 +150,7 @@ def configure_observability() -> bool:
         return False
 
 
-def get_tracer(name: str) -> object | _NoOpTracer:
+def get_tracer(name: str) -> Any:
     """Get an OpenTelemetry tracer for custom instrumentation.
 
     Use this to create custom spans for operations that aren't automatically
@@ -190,9 +192,10 @@ def get_tracer(name: str) -> object | _NoOpTracer:
 class _NoOpTracer:
     """A no-op tracer for when OpenTelemetry is not available."""
 
-    def start_as_current_span(self, name: str, **kwargs: object) -> _NoOpSpan:
+    @contextmanager
+    def start_as_current_span(self, name: str, **kwargs: object) -> Iterator[_NoOpSpan]:
         """Return a no-op context manager."""
-        return _NoOpSpan()
+        yield _NoOpSpan()
 
     def start_span(self, name: str, **kwargs: object) -> _NoOpSpan:
         """Return a no-op span."""
