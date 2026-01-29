@@ -41,6 +41,17 @@ export default function AssistantPage() {
     void loadConversations();
   }, [loadConversations]);
 
+  // Poll conversations every 30 seconds to pick up title updates
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const intervalId = setInterval(() => {
+      void loadConversations();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(intervalId);
+  }, [hasHydrated, loadConversations]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!hasHydrated) return;
