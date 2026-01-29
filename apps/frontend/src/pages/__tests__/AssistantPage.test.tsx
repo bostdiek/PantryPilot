@@ -223,19 +223,19 @@ describe('AssistantPage', () => {
     renderAssistant();
 
     // Wait for initial load and then clear the spy
-    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
+    await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
     loadSpy.mockClear();
 
-    // Advance 30 seconds - should trigger polling
+    // Advance 60 seconds - test mode uses production interval (60s)
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(60000);
     });
 
     expect(loadSpy).toHaveBeenCalledTimes(1);
 
-    // Advance another 30 seconds - should trigger again
+    // Advance another 60 seconds - should trigger again
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(60000);
     });
 
     expect(loadSpy).toHaveBeenCalledTimes(2);
@@ -276,7 +276,7 @@ describe('AssistantPage', () => {
     const { unmount } = renderAssistant();
 
     // Wait for initial load
-    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
+    await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
 
     // Unmount the component
     unmount();
