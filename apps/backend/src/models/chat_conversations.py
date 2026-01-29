@@ -37,6 +37,11 @@ class ChatConversation(Base):
         nullable=True,
         comment="Optional user-visible conversation title",
     )
+    title_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the title was last AI-generated (NULL = needs title)",
+    )
 
     summary: Mapped[str | None] = mapped_column(
         Text,

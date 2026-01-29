@@ -48,11 +48,17 @@ def _get_title_agent() -> Agent[None, GeneratedTitle]:
     return _title_agent
 
 
-async def generate_conversation_title(messages: list[dict[str, str]]) -> str:
+async def generate_conversation_title(
+    messages: list[dict[str, str]],
+    current_title: str | None = None,
+    created_at: str | None = None,
+) -> str:
     """Generate a title from the first 3 exchanges (6 messages).
 
     Args:
         messages: List of message dicts with 'role' and 'content' keys
+        current_title: The current conversation title (often timestamp-based)
+        created_at: ISO timestamp when conversation was created
 
     Returns:
         Generated title string (3-5 words with food emoji)
@@ -67,12 +73,19 @@ async def generate_conversation_title(messages: list[dict[str, str]]) -> str:
             f"{m['role']}: {m['content'][:200]}" for m in messages[:6]
         )
 
+        # Include current title context if available
+        context = f"Generate a title for:\n{formatted}"
+        if current_title and created_at:
+            context = (
+                f"Current title: '{current_title}' (created {created_at})\n\n{context}"
+            )
+
         logger.info(
             f"Generating title for conversation with {len(messages[:6])} messages"
         )
 
         agent = _get_title_agent()
-        result = await agent.run(f"Generate a title for:\n{formatted}")
+        result = await agent.run(context)
 
         logger.info(f"Generated title: {result.output.title}")
         return result.output.title

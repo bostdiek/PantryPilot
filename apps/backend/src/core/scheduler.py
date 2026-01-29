@@ -9,6 +9,7 @@ Manages scheduled jobs for:
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
 from apscheduler.triggers.cron import CronTrigger  # type: ignore
@@ -31,18 +32,20 @@ scheduler: AsyncIOScheduler | None = None
 async def run_title_generation() -> None:
     """Scheduled job: generate AI titles for conversations with 2+ exchanges.
 
-    Only processes conversations with timestamp-based titles (Chat started ...)
-    that have at least 4 messages (2 exchanges).
+    Only processes conversations where title_updated_at is NULL
+    (meaning title has never been AI-generated) and have at least 4 messages.
     """
     logger.info("Starting scheduled title generation job")
     try:
         async with AsyncSessionLocal() as db:
-            # Find conversations needing titles
+            # Find conversations needing titles (never AI-generated)
             query = select(ChatConversation).where(
-                ChatConversation.title.like("Chat started %")
+                ChatConversation.title_updated_at.is_(None)
             )
             result = await db.execute(query)
             conversations = result.scalars().all()
+
+            logger.info(f"Found {len(conversations)} conversations needing titles")
 
             generated_count = 0
             for conversation in conversations:
@@ -55,14 +58,33 @@ async def run_title_generation() -> None:
 
                 if len(messages) >= 4:  # At least 2 exchanges (4 messages)
                     # Fetch messages for title generation
-                    message_dicts = [
-                        {"role": msg.role, "content": msg.content or ""}
-                        for msg in messages[:6]  # First 3 exchanges
-                    ]
+                    # Extract text from content_blocks
+                    message_dicts = []
+                    for msg in messages[:6]:  # First 3 exchanges
+                        # Extract text from content_blocks
+                        text_parts = []
+                        for block in msg.content_blocks:
+                            if block.get("type") == "text":
+                                text_parts.append(block.get("text", ""))
+
+                        message_dicts.append(
+                            {
+                                "role": msg.role,
+                                "content": " ".join(text_parts) if text_parts else "",
+                            }
+                        )
 
                     try:
-                        title = await generate_conversation_title(message_dicts)
+                        # Pass current title and timestamp for context
+                        title = await generate_conversation_title(
+                            message_dicts,
+                            current_title=conversation.title,
+                            created_at=conversation.created_at.isoformat()
+                            if conversation.created_at
+                            else None,
+                        )
                         conversation.title = title
+                        conversation.title_updated_at = datetime.now(UTC)
                         generated_count += 1
                         conv_id = conversation.id
                         logger.info(
