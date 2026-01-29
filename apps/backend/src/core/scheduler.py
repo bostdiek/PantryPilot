@@ -11,10 +11,15 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore
-from apscheduler.triggers.cron import CronTrigger  # type: ignore
-from apscheduler.triggers.interval import IntervalTrigger  # type: ignore
-from sqlalchemy import select
+from apscheduler.schedulers.asyncio import (  # type: ignore[import-untyped]
+    AsyncIOScheduler,
+)
+from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped]
+from apscheduler.triggers.interval import (  # type: ignore[import-untyped]
+    IntervalTrigger,
+)
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.ai_drafts import cleanup_expired_drafts
 from dependencies.db import AsyncSessionLocal
@@ -29,6 +34,70 @@ logger = logging.getLogger(__name__)
 scheduler: AsyncIOScheduler | None = None
 
 
+async def _process_conversation_for_title(
+    db: AsyncSession, conversation: ChatConversation
+) -> str | None:
+    """Process a single conversation to generate its title.
+
+    Returns the generated title or None if generation failed.
+    """
+    # Fetch first 6 messages for title generation (3 exchanges)
+    messages_query = (
+        select(ChatMessage)
+        .where(ChatMessage.conversation_id == conversation.id)
+        .order_by(ChatMessage.created_at)
+        .limit(6)
+    )
+    messages_result = await db.execute(messages_query)
+    messages = messages_result.scalars().all()
+
+    # Extract text from content_blocks with validation
+    message_dicts = []
+    for msg in messages:
+        text_parts = []
+
+        # Validate content_blocks exists and is iterable
+        content_blocks = msg.content_blocks
+        if not content_blocks or not isinstance(content_blocks, list):
+            logger.warning(f"Message {msg.id} has invalid content_blocks, skipping")
+            continue
+
+        # Extract text with validation
+        for block in content_blocks:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and "text" in block
+            ):
+                text_parts.append(str(block["text"]))
+
+        # Only include message if it has content
+        if text_parts:
+            message_dicts.append(
+                {
+                    "role": msg.role,
+                    "content": " ".join(text_parts),
+                }
+            )
+
+    # Skip if not enough valid messages
+    if len(message_dicts) < 2:
+        logger.warning(
+            f"Conversation {conversation.id} has insufficient valid messages"
+        )
+        return None
+
+    # Generate title
+    title = await generate_conversation_title(
+        message_dicts,
+        current_title=conversation.title,
+        created_at=conversation.created_at.isoformat()
+        if conversation.created_at
+        else None,
+    )
+    return title
+
+
 async def run_title_generation() -> None:
     """Scheduled job: generate AI titles for conversations with 2+ exchanges.
 
@@ -38,65 +107,59 @@ async def run_title_generation() -> None:
     logger.info("Starting scheduled title generation job")
     try:
         async with AsyncSessionLocal() as db:
-            # Find conversations needing titles (never AI-generated)
-            query = select(ChatConversation).where(
-                ChatConversation.title_updated_at.is_(None)
+            # Optimized query: JOIN conversations with message count to avoid N+1
+            # Find conversations needing titles with message count >= 4
+            query = (
+                select(ChatConversation, func.count(ChatMessage.id))
+                .join(
+                    ChatMessage,
+                    ChatConversation.id == ChatMessage.conversation_id,
+                    isouter=False,
+                )
+                .where(ChatConversation.title_updated_at.is_(None))
+                .group_by(ChatConversation.id)
+                .having(func.count(ChatMessage.id) >= 4)
             )
             result = await db.execute(query)
-            conversations = result.scalars().all()
+            conversations_with_count = result.all()
 
-            logger.info(f"Found {len(conversations)} conversations needing titles")
+            logger.info(
+                f"Found {len(conversations_with_count)} conversations needing titles"
+            )
 
             generated_count = 0
-            for conversation in conversations:
-                # Get message count for this conversation
-                count_query = select(ChatMessage).where(
-                    ChatMessage.conversation_id == conversation.id
-                )
-                count_result = await db.execute(count_query)
-                messages = count_result.scalars().all()
+            batch_size = 50  # Process in batches to manage memory
 
-                if len(messages) >= 4:  # At least 2 exchanges (4 messages)
-                    # Fetch messages for title generation
-                    # Extract text from content_blocks
-                    message_dicts = []
-                    for msg in messages[:6]:  # First 3 exchanges
-                        # Extract text from content_blocks
-                        text_parts = []
-                        for block in msg.content_blocks:
-                            if block.get("type") == "text":
-                                text_parts.append(block.get("text", ""))
+            for idx, (conversation, _msg_count) in enumerate(
+                conversations_with_count, start=1
+            ):
+                try:
+                    # Generate title using helper function
+                    title = await _process_conversation_for_title(db, conversation)
 
-                        message_dicts.append(
-                            {
-                                "role": msg.role,
-                                "content": " ".join(text_parts) if text_parts else "",
-                            }
-                        )
-
-                    try:
-                        # Pass current title and timestamp for context
-                        title = await generate_conversation_title(
-                            message_dicts,
-                            current_title=conversation.title,
-                            created_at=conversation.created_at.isoformat()
-                            if conversation.created_at
-                            else None,
-                        )
-                        conversation.title = title
-                        conversation.title_updated_at = datetime.now(UTC)
-                        generated_count += 1
-                        conv_id = conversation.id
-                        logger.info(
-                            f"Generated title for conversation {conv_id}: {title}"
-                        )
-                    except Exception as e:
-                        conv_id = conversation.id
-                        logger.error(
-                            f"Failed to generate title for conversation {conv_id}: {e}"
-                        )
+                    if title is None:
                         continue
 
+                    # Update conversation with generated title
+                    conversation.title = title
+                    conversation.title_updated_at = datetime.now(UTC)
+                    generated_count += 1
+                    conv_id = conversation.id
+                    logger.info(f"Generated title for conversation {conv_id}: {title}")
+
+                    # Batch commit every batch_size conversations
+                    if idx % batch_size == 0:
+                        await db.commit()
+                        logger.info(f"Batch committed: {generated_count} titles so far")
+
+                except Exception as e:
+                    conv_id = conversation.id
+                    logger.error(
+                        f"Failed to generate title for conversation {conv_id}: {e}"
+                    )
+                    continue
+
+            # Final commit for remaining conversations
             if generated_count > 0:
                 await db.commit()
                 logger.info(

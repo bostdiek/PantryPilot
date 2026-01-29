@@ -223,8 +223,7 @@ describe('AssistantPage', () => {
     renderAssistant();
 
     // Wait for initial load and then clear the spy
-    await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
-    const initialCallCount = loadSpy.mock.calls.length;
+    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
     loadSpy.mockClear();
 
     // Advance 30 seconds - should trigger polling
@@ -277,7 +276,7 @@ describe('AssistantPage', () => {
     const { unmount } = renderAssistant();
 
     // Wait for initial load
-    await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
+    await waitFor(() => expect(loadSpy).toHaveBeenCalled());
 
     // Unmount the component
     unmount();
