@@ -31,6 +31,7 @@ dependencies = [
     "pgvector>=0.4.2",
     "numpy>=2.4.1",
     "google-genai>=1.57.0",
+    "apscheduler>=3.11.2",
 ]
 
 [dependency-groups]
