@@ -214,4 +214,85 @@ describe('AssistantPage', () => {
 
     await waitFor(() => expect(switchSpy).toHaveBeenCalledWith('c2'));
   });
+
+  test('polls conversation list every 30 seconds when hydrated', async () => {
+    vi.useFakeTimers();
+    const loadSpy = vi.spyOn(useChatStore.getState(), 'loadConversations');
+    loadSpy.mockResolvedValue(undefined);
+
+    renderAssistant();
+
+    // Wait for initial load and then clear the spy
+    await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
+    const initialCallCount = loadSpy.mock.calls.length;
+    loadSpy.mockClear();
+
+    // Advance 30 seconds - should trigger polling
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+
+    // Advance another 30 seconds - should trigger again
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+
+    expect(loadSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  test('does not poll conversations when not hydrated', async () => {
+    vi.useFakeTimers();
+    const loadSpy = vi.spyOn(useChatStore.getState(), 'loadConversations');
+    loadSpy.mockResolvedValue(undefined);
+
+    act(() => {
+      useChatStore.setState({ hasHydrated: false });
+    });
+
+    renderAssistant();
+
+    // Clear any initial calls
+    loadSpy.mockClear();
+
+    // Wait and verify no polling happens
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000); // 60 seconds
+    });
+
+    // Should not have been called since hasHydrated is false
+    expect(loadSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
+  test('clears polling interval on unmount', async () => {
+    vi.useFakeTimers();
+    const loadSpy = vi.spyOn(useChatStore.getState(), 'loadConversations');
+    loadSpy.mockResolvedValue(undefined);
+
+    const { unmount } = renderAssistant();
+
+    // Wait for initial load
+    await vi.waitFor(() => expect(loadSpy).toHaveBeenCalled());
+
+    // Unmount the component
+    unmount();
+
+    // Clear spy to reset call count
+    loadSpy.mockClear();
+
+    // Advance time - polling should not happen after unmount
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+
+    // Should not have been called after unmount
+    expect(loadSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
 });
