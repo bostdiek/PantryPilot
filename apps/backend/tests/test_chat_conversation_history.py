@@ -10,6 +10,13 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
+from pydantic_ai.messages import (
+    ModelRequest,
+    ModelResponse,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
 
 from api.v1.chat import (
     _convert_db_messages_to_pydantic_ai,
@@ -35,12 +42,41 @@ class _MockChatMessage:
         id: UUID | None = None,
         role: str = "user",
         content_blocks: list[dict[str, Any]] | None = None,
+        tool_calls: list[Any] | None = None,
         created_at: datetime | None = None,
     ) -> None:
         self.id = id or uuid4()
         self.role = role
         self.content_blocks = content_blocks or []
+        self.tool_calls = tool_calls or []
         self.created_at = created_at or datetime.now(UTC)
+
+
+class _MockChatToolCall:
+    """Mock ChatToolCall for testing tool reconstruction."""
+
+    def __init__(
+        self,
+        *,
+        id: UUID | None = None,
+        tool_name: str,
+        arguments: dict[str, Any] | None = None,
+        result: dict[str, Any] | None = None,
+        status: str = "success",
+        error: str | None = None,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+        call_metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.id = id or uuid4()
+        self.tool_name = tool_name
+        self.arguments = arguments or {}
+        self.result = result
+        self.status = status
+        self.error = error
+        self.started_at = started_at or datetime.now(UTC)
+        self.finished_at = finished_at
+        self.call_metadata = call_metadata or {}
 
 
 class _MockConversation:
@@ -257,6 +293,47 @@ class TestConvertDbMessagesToPydanticAi:
         ]
         result = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
         assert len(result) == 1
+
+    def test_reconstruct_tool_calls_and_returns(self) -> None:
+        started_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+        finished_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=UTC)
+        tool_call = _MockChatToolCall(
+            tool_name="get_daily_weather",
+            arguments={"city": "Paris"},
+            result={"temperature": 72, "conditions": "sunny"},
+            status="success",
+            started_at=started_at,
+            finished_at=finished_at,
+            call_metadata={"tool_call_id": "call_123"},
+        )
+        messages = [
+            _MockChatMessage(
+                role="assistant",
+                content_blocks=[{"type": "text", "text": "Let me check."}],
+                tool_calls=[tool_call],
+                created_at=started_at,
+            )
+        ]
+
+        history = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
+        assert len(history) == 2
+        assert isinstance(history[0], ModelResponse)
+        assert isinstance(history[1], ModelRequest)
+
+        response_parts = history[0].parts
+        assert len(response_parts) == 2
+        assert isinstance(response_parts[0], TextPart)
+        assert isinstance(response_parts[1], ToolCallPart)
+        assert response_parts[1].tool_name == "get_daily_weather"
+        assert response_parts[1].args == {"city": "Paris"}
+        assert response_parts[1].tool_call_id == "call_123"
+
+        request_parts = history[1].parts
+        assert len(request_parts) == 1
+        assert isinstance(request_parts[0], ToolReturnPart)
+        assert request_parts[0].tool_name == "get_daily_weather"
+        assert request_parts[0].content == {"temperature": 72, "conditions": "sunny"}
+        assert request_parts[0].tool_call_id == "call_123"
 
 
 class TestGenerateConversationTitle:

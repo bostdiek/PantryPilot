@@ -19,10 +19,13 @@ from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
     TextPart,
+    ToolCallPart,
+    ToolReturnPart,
     UserPromptPart,
 )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from core.observability import get_tracer
 from core.ratelimit import check_rate_limit
@@ -383,11 +386,10 @@ def _convert_db_messages_to_pydantic_ai(
     result: list[ModelMessage] = []
 
     for msg in messages:
-        text_content = _extract_text_from_blocks(msg.content_blocks)
-        if not text_content:
-            continue
-
         if msg.role == "user":
+            text_content = _extract_text_from_blocks(msg.content_blocks)
+            if not text_content:
+                continue
             result.append(
                 ModelRequest(
                     parts=[
@@ -398,15 +400,57 @@ def _convert_db_messages_to_pydantic_ai(
                     ],
                 )
             )
-        elif msg.role == "assistant":
+            continue
+
+        if msg.role != "assistant":
+            continue
+
+        parts: list[TextPart | ToolCallPart] = []
+        text_content = _extract_text_from_blocks(msg.content_blocks)
+        if text_content:
+            parts.append(TextPart(content=text_content))
+
+        tool_calls: list[ChatToolCall] = sorted(
+            getattr(msg, "tool_calls", []),
+            key=lambda tool_call: tool_call.started_at,
+        )
+        for tool_call in tool_calls:
+            tool_call_id = tool_call.call_metadata.get(
+                "tool_call_id",
+                str(tool_call.id),
+            )
+            parts.append(
+                ToolCallPart(
+                    tool_name=tool_call.tool_name,
+                    args=tool_call.arguments,
+                    tool_call_id=tool_call_id,
+                )
+            )
+
+        if parts:
             result.append(
                 ModelResponse(
-                    parts=[TextPart(content=text_content)],
+                    parts=parts,
                     model_name="historical",
                     timestamp=msg.created_at,
                 )
             )
-        # Skip system and tool roles for now
+
+        if tool_calls:
+            return_parts = [
+                ToolReturnPart(
+                    tool_name=tool_call.tool_name,
+                    content=tool_call.result or {},
+                    tool_call_id=tool_call.call_metadata.get(
+                        "tool_call_id", str(tool_call.id)
+                    ),
+                    timestamp=tool_call.finished_at or tool_call.started_at,
+                )
+                for tool_call in tool_calls
+                if tool_call.status == "success"
+            ]
+            if return_parts:
+                result.append(ModelRequest(parts=return_parts))
 
     return result
 
@@ -421,6 +465,7 @@ async def _load_conversation_history(
     """Load previous messages from a conversation for multi-turn context."""
     query = (
         select(ChatMessage)
+        .options(selectinload(ChatMessage.tool_calls))
         .where(
             ChatMessage.conversation_id == conversation_id,
             ChatMessage.user_id == user_id,
