@@ -297,7 +297,9 @@ class TestConvertDbMessagesToPydanticAi:
     def test_reconstruct_tool_calls_and_returns(self) -> None:
         started_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
         finished_at = datetime(2026, 1, 1, 12, 0, 5, tzinfo=UTC)
-        tool_call = _MockChatToolCall(
+
+        tool_call_success = _MockChatToolCall(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
             tool_name="get_daily_weather",
             arguments={"city": "Paris"},
             result={"temperature": 72, "conditions": "sunny"},
@@ -306,11 +308,23 @@ class TestConvertDbMessagesToPydanticAi:
             finished_at=finished_at,
             call_metadata={"tool_call_id": "call_123"},
         )
+        tool_call_error = _MockChatToolCall(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
+            tool_name="get_something_else",
+            arguments={"q": "x"},
+            result=None,
+            status="error",
+            error="boom",
+            started_at=datetime(2026, 1, 1, 12, 0, 10, tzinfo=UTC),
+            finished_at=datetime(2026, 1, 1, 12, 0, 11, tzinfo=UTC),
+            call_metadata={},
+        )
+
         messages = [
             _MockChatMessage(
                 role="assistant",
                 content_blocks=[{"type": "text", "text": "Let me check."}],
-                tool_calls=[tool_call],
+                tool_calls=[tool_call_error, tool_call_success],
                 created_at=started_at,
             )
         ]
@@ -321,12 +335,20 @@ class TestConvertDbMessagesToPydanticAi:
         assert isinstance(history[1], ModelRequest)
 
         response_parts = history[0].parts
-        assert len(response_parts) == 2
+        assert len(response_parts) == 3
         assert isinstance(response_parts[0], TextPart)
         assert isinstance(response_parts[1], ToolCallPart)
+        assert isinstance(response_parts[2], ToolCallPart)
+
         assert response_parts[1].tool_name == "get_daily_weather"
         assert response_parts[1].args == {"city": "Paris"}
         assert response_parts[1].tool_call_id == "call_123"
+
+        assert response_parts[2].tool_name == "get_something_else"
+        assert response_parts[2].args == {"q": "x"}
+        assert response_parts[2].tool_call_id == str(
+            UUID("00000000-0000-0000-0000-000000000002")
+        )
 
         request_parts = history[1].parts
         assert len(request_parts) == 1

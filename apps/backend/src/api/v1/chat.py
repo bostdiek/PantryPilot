@@ -400,57 +400,53 @@ def _convert_db_messages_to_pydantic_ai(
                     ],
                 )
             )
-            continue
+        elif msg.role == "assistant":
+            parts: list[TextPart | ToolCallPart] = []
+            text_content = _extract_text_from_blocks(msg.content_blocks)
+            if text_content:
+                parts.append(TextPart(content=text_content))
 
-        if msg.role != "assistant":
-            continue
-
-        parts: list[TextPart | ToolCallPart] = []
-        text_content = _extract_text_from_blocks(msg.content_blocks)
-        if text_content:
-            parts.append(TextPart(content=text_content))
-
-        tool_calls: list[ChatToolCall] = sorted(
-            getattr(msg, "tool_calls", []),
-            key=lambda tool_call: tool_call.started_at,
-        )
-        for tool_call in tool_calls:
-            tool_call_id = tool_call.call_metadata.get(
-                "tool_call_id",
-                str(tool_call.id),
+            tool_calls: list[ChatToolCall] = sorted(
+                getattr(msg, "tool_calls", []),
+                key=lambda tool_call: tool_call.started_at,
             )
-            parts.append(
-                ToolCallPart(
-                    tool_name=tool_call.tool_name,
-                    args=tool_call.arguments,
-                    tool_call_id=tool_call_id,
+            for tool_call in tool_calls:
+                tool_call_id = tool_call.call_metadata.get(
+                    "tool_call_id",
+                    str(tool_call.id),
                 )
-            )
+                parts.append(
+                    ToolCallPart(
+                        tool_name=tool_call.tool_name,
+                        args=tool_call.arguments,
+                        tool_call_id=tool_call_id,
+                    )
+                )
 
-        if parts:
-            result.append(
-                ModelResponse(
-                    parts=parts,
-                    model_name="historical",
-                    timestamp=msg.created_at,
+            if parts:
+                result.append(
+                    ModelResponse(
+                        parts=parts,
+                        model_name="historical",
+                        timestamp=msg.created_at,
+                    )
                 )
-            )
 
-        if tool_calls:
-            return_parts = [
-                ToolReturnPart(
-                    tool_name=tool_call.tool_name,
-                    content=tool_call.result or {},
-                    tool_call_id=tool_call.call_metadata.get(
-                        "tool_call_id", str(tool_call.id)
-                    ),
-                    timestamp=tool_call.finished_at or tool_call.started_at,
-                )
-                for tool_call in tool_calls
-                if tool_call.status == "success"
-            ]
-            if return_parts:
-                result.append(ModelRequest(parts=return_parts))
+            if tool_calls:
+                return_parts = [
+                    ToolReturnPart(
+                        tool_name=tool_call.tool_name,
+                        content=tool_call.result or {},
+                        tool_call_id=tool_call.call_metadata.get(
+                            "tool_call_id", str(tool_call.id)
+                        ),
+                        timestamp=tool_call.finished_at or tool_call.started_at,
+                    )
+                    for tool_call in tool_calls
+                    if tool_call.status == "success"
+                ]
+                if return_parts:
+                    result.append(ModelRequest(parts=return_parts))
 
     return result
 
