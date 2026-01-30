@@ -357,6 +357,52 @@ class TestConvertDbMessagesToPydanticAi:
         assert request_parts[0].content == {"temperature": 72, "conditions": "sunny"}
         assert request_parts[0].tool_call_id == "call_123"
 
+    def test_tool_returns_fallbacks_and_empty_text(self) -> None:
+        started_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
+        tool_call_no_metadata = _MockChatToolCall(
+            id=UUID("00000000-0000-0000-0000-000000000003"),
+            tool_name="get_daily_weather",
+            arguments={"city": "Paris"},
+            result={"temperature": 72, "conditions": "sunny"},
+            status="success",
+            started_at=started_at,
+            finished_at=None,
+            call_metadata={},
+        )
+
+        messages = [
+            _MockChatMessage(
+                role="assistant",
+                content_blocks=[],
+                tool_calls=[tool_call_no_metadata],
+                created_at=started_at,
+            )
+        ]
+
+        history = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
+        assert len(history) == 2
+        assert isinstance(history[0], ModelResponse)
+        assert isinstance(history[1], ModelRequest)
+
+        response_parts = history[0].parts
+        assert len(response_parts) == 1
+        assert isinstance(response_parts[0], ToolCallPart)
+        assert response_parts[0].tool_name == "get_daily_weather"
+        assert response_parts[0].args == {"city": "Paris"}
+        assert response_parts[0].tool_call_id == str(
+            UUID("00000000-0000-0000-0000-000000000003")
+        )
+
+        request_parts = history[1].parts
+        assert len(request_parts) == 1
+        assert isinstance(request_parts[0], ToolReturnPart)
+        assert request_parts[0].tool_name == "get_daily_weather"
+        assert request_parts[0].content == {"temperature": 72, "conditions": "sunny"}
+        assert request_parts[0].tool_call_id == str(
+            UUID("00000000-0000-0000-0000-000000000003")
+        )
+        assert request_parts[0].timestamp == started_at
+
 
 class TestGenerateConversationTitle:
     """Tests for _generate_conversation_title helper."""
