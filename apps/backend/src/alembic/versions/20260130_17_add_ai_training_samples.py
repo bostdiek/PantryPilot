@@ -165,10 +165,16 @@ def upgrade() -> None:
         "ai_training_samples",
         ["user_feedback"],
     )
+    op.create_index(
+        "ix_training_samples_message_user",
+        "ai_training_samples",
+        ["message_id", "user_id"],
+    )
 
 
 def downgrade() -> None:
     """Drop ai_training_samples table."""
+    op.drop_index("ix_training_samples_message_user", table_name="ai_training_samples")
     op.drop_index("ix_training_samples_feedback", table_name="ai_training_samples")
     op.drop_index(
         "ix_training_samples_conversation_id", table_name="ai_training_samples"

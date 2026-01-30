@@ -106,6 +106,7 @@ async def update_training_sample_feedback(
 
     sample.user_feedback = feedback
     await db.flush()
+    await db.commit()
 
     logger.debug("Updated feedback for training sample %s: %s", sample_id, feedback)
 

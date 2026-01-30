@@ -63,7 +63,7 @@ class AITrainingSample(Base):
     tool_calls: Mapped[dict[str, Any] | None] = mapped_column(
         JSONB,
         nullable=True,
-        comment="List of tool calls in this turn for training format",
+        comment="Dictionary of tool calls by call_id for training format",
     )
 
     # LLM metadata
@@ -112,6 +112,7 @@ class AITrainingSample(Base):
         Index("ix_training_samples_created_at", "created_at"),
         Index("ix_training_samples_conversation_id", "conversation_id"),
         Index("ix_training_samples_feedback", "user_feedback"),
+        Index("ix_training_samples_message_user", "message_id", "user_id"),
     )
 
     # Relationships

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Export AI training samples to ChatML JSONL format for Unsloth.
 
-Usage:n    uv run python scripts/export_training_data.py --output training_data.jsonl
+Usage:
+    uv run python scripts/export_training_data.py --output training_data.jsonl
     uv run python scripts/export_training_data.py --output out.jsonl --feedback positive
     uv run python scripts/export_training_data.py --output last_week.jsonl --days 7
 """

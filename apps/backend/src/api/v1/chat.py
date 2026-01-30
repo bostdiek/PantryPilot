@@ -1098,6 +1098,7 @@ async def stream_chat_message(  # noqa: C901
             # Counter for tool call ordering (use list for mutability in nested scope)
             tool_call_order: list[int] = [0]
             raw_output: object | None = None
+            agent_result: object | None = None  # Avoid NameError if stream ends early
             # Track blocks emitted from tool results (e.g., recipe cards)
             tool_emitted_blocks: list[dict[str, Any]] = []
 
