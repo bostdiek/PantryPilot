@@ -163,6 +163,11 @@ export interface ChatSseErrorData {
 export type ChatRole = 'user' | 'assistant';
 
 /**
+ * User feedback on AI assistant responses for training data quality signals.
+ */
+export type UserFeedback = 'positive' | 'negative' | null;
+
+/**
  * Assistant message composed of canonical content blocks.
  */
 export interface AssistantMessage {
