@@ -159,7 +159,27 @@ describe('FeedbackButtons', () => {
     });
   });
 
-  it('handles API errors gracefully without breaking UI', async () => {
+  it('shows success indicator after successful submission', async () => {
+    mockSubmitFeedback.mockResolvedValueOnce({
+      status: 'ok',
+      message_id: mockMessageId,
+      feedback: 'positive',
+    });
+
+    render(<FeedbackButtons messageId={mockMessageId} />);
+
+    const thumbsUpButton = screen.getByRole('button', {
+      name: /rate response as good/i,
+    });
+    fireEvent.click(thumbsUpButton);
+
+    // Should show success checkmark
+    await waitFor(() => {
+      expect(screen.getByLabelText(/feedback submitted/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error indicator after API failure', async () => {
     mockSubmitFeedback.mockRejectedValueOnce(new Error('Network error'));
 
     render(<FeedbackButtons messageId={mockMessageId} />);
@@ -169,9 +189,9 @@ describe('FeedbackButtons', () => {
     });
     fireEvent.click(thumbsUpButton);
 
-    // After error, buttons should still be enabled (not submitted)
+    // Should show error X indicator
     await waitFor(() => {
-      expect(thumbsUpButton).not.toBeDisabled();
+      expect(screen.getByLabelText(/feedback failed/i)).toBeInTheDocument();
     });
   });
 

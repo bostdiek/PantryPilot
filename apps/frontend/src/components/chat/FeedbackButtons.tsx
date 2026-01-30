@@ -4,14 +4,17 @@
  * Allows users to rate assistant responses with 👍/👎 for training data quality signals.
  */
 
-import { ThumbsDown, ThumbsUp } from 'lucide-react';
-import { useState } from 'react';
+import { Check, ThumbsDown, ThumbsUp, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import {
   submitMessageFeedback,
   type FeedbackValue,
 } from '../../api/endpoints/feedback';
 import { logger } from '../../lib/logger';
+
+/** Brief flash duration for success/error indicator */
+const FEEDBACK_INDICATOR_MS = 1500;
 
 interface FeedbackButtonsProps {
   /** The message ID to submit feedback for */
@@ -39,6 +42,20 @@ export function FeedbackButtons({
     initialFeedback
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<
+    'idle' | 'success' | 'error'
+  >('idle');
+
+  // Clear status indicator after brief display
+  useEffect(() => {
+    if (submitStatus !== 'idle') {
+      const timer = setTimeout(
+        () => setSubmitStatus('idle'),
+        FEEDBACK_INDICATOR_MS
+      );
+      return () => clearTimeout(timer);
+    }
+  }, [submitStatus]);
 
   const handleFeedback = async (value: FeedbackValue) => {
     if (feedback !== null || isSubmitting) {
@@ -46,19 +63,42 @@ export function FeedbackButtons({
     }
 
     setIsSubmitting(true);
+    setSubmitStatus('idle');
     try {
       await submitMessageFeedback(messageId, value);
       setFeedback(value);
+      setSubmitStatus('success');
       onFeedbackSubmitted?.(messageId, value);
     } catch (error) {
       logger.error('Failed to submit feedback:', error);
-      // Silently fail - feedback is non-critical functionality
+      setSubmitStatus('error');
+      // Don't set feedback - allow retry
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const isDisabled = feedback !== null || isSubmitting;
+
+  // Show status indicator briefly after submission attempt
+  if (submitStatus === 'success') {
+    return (
+      <div
+        className="flex items-center gap-1 text-green-600"
+        aria-live="polite"
+      >
+        <Check size={14} aria-label="Feedback submitted" />
+      </div>
+    );
+  }
+
+  if (submitStatus === 'error') {
+    return (
+      <div className="flex items-center gap-1 text-red-500" aria-live="polite">
+        <X size={14} aria-label="Feedback failed" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-1">

@@ -59,6 +59,143 @@ from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 
 
+# -----------------------------------------------------------------------------
+# Training Data Capture Helpers
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class TrainingDataContext:
+    """Context needed for building training data from an agent run."""
+
+    agent_result: object
+    tool_calls_by_id: dict[str, _ToolCallStart]
+    raw_output: object
+
+
+def _process_model_request_for_training(
+    msg: ModelRequest,
+    seen_user_msgs: set[str],
+) -> list[dict[str, Any]]:
+    """Process ModelRequest parts into training message format."""
+    messages: list[dict[str, Any]] = []
+    for part in msg.parts:
+        if isinstance(part, SystemPromptPart):
+            # Skip - we add CHAT_SYSTEM_PROMPT manually
+            continue
+        elif isinstance(part, UserPromptPart):
+            # Deduplicate user messages (history + current)
+            content_str = (
+                part.content if isinstance(part.content, str) else str(part.content)
+            )
+            if content_str not in seen_user_msgs:
+                seen_user_msgs.add(content_str)
+                messages.append({"role": "user", "content": content_str})
+        elif isinstance(part, ToolReturnPart):
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": part.tool_call_id,
+                    "content": part.model_response_str(),
+                }
+            )
+    return messages
+
+
+def _process_model_response_for_training(msg: ModelResponse) -> dict[str, Any] | None:
+    """Process ModelResponse into a single training assistant message."""
+    text_parts: list[str] = []
+    tool_calls_list: list[dict[str, Any]] = []
+
+    for resp_part in msg.parts:
+        if isinstance(resp_part, TextPart) and resp_part.content:
+            text_parts.append(resp_part.content)
+        elif isinstance(resp_part, ToolCallPart):
+            tool_calls_list.append(
+                {
+                    "id": resp_part.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": resp_part.tool_name,
+                        "arguments": json.dumps(resp_part.args_as_dict()),
+                    },
+                }
+            )
+
+    if not text_parts and not tool_calls_list:
+        return None
+
+    assistant_msg: dict[str, Any] = {"role": "assistant"}
+    if text_parts:
+        assistant_msg["content"] = " ".join(text_parts)
+    if tool_calls_list:
+        assistant_msg["tool_calls"] = tool_calls_list
+    return assistant_msg
+
+
+def _build_training_prompt_data(
+    agent_result: object,
+) -> list[dict[str, Any]]:
+    """Build ChatML-format prompt data from agent result.
+
+    Extracts messages from PydanticAI's all_messages() and converts to
+    training-ready format with system prompt prepended.
+
+    Args:
+        agent_result: The result from agent.run() with all_messages() method
+
+    Returns:
+        List of message dicts in ChatML format
+    """
+    # NOTE: PydanticAI's `instructions` param is NOT in all_messages()
+    # so we manually prepend CHAT_SYSTEM_PROMPT for training data.
+    history_data: list[dict[str, Any]] = [
+        {"role": "system", "content": CHAT_SYSTEM_PROMPT}
+    ]
+
+    all_msgs = (
+        agent_result.all_messages() if hasattr(agent_result, "all_messages") else []
+    )
+
+    # Track seen user messages to avoid duplicates from history
+    seen_user_msgs: set[str] = set()
+
+    for msg in all_msgs:
+        if isinstance(msg, ModelRequest):
+            request_msgs = _process_model_request_for_training(msg, seen_user_msgs)
+            history_data.extend(request_msgs)
+        elif isinstance(msg, ModelResponse):
+            assistant_msg = _process_model_response_for_training(msg)
+            if assistant_msg:
+                history_data.append(assistant_msg)
+
+    return history_data
+
+
+def _serialize_raw_output_for_training(raw_output: object) -> str:
+    """Safely serialize raw LLM output for training data.
+
+    Handles various output types with fallback serialization on failure.
+
+    Args:
+        raw_output: The raw output from the agent
+
+    Returns:
+        JSON string representation of the output
+    """
+    try:
+        if hasattr(raw_output, "model_dump"):
+            return json.dumps(raw_output.model_dump())
+        elif isinstance(raw_output, dict):
+            return json.dumps(raw_output)
+        else:
+            return str(raw_output)
+    except (TypeError, ValueError) as exc:
+        logger.warning("Failed to serialize raw output for training: %s", exc)
+        # Fallback: convert to string representation
+        return str(raw_output)
+
+
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 logger = logging.getLogger(__name__)
@@ -1064,101 +1201,9 @@ async def stream_chat_message(  # noqa: C901
                         for call_id, tc in tool_calls_by_id.items()
                     }
 
-                # Build raw prompt from agent result's all_messages() which includes:
-                # - User messages (UserPromptPart)
-                # - Tool calls and returns (ToolCallPart, ToolReturnPart)
-                # - Assistant responses (TextPart)
-                # NOTE: PydanticAI's `instructions` param is NOT in all_messages()
-                # so we manually prepend CHAT_SYSTEM_PROMPT for training data.
-                # See: https://ai.pydantic.dev/agents/#instructions
-                history_data: list[dict[str, Any]] = [
-                    {"role": "system", "content": CHAT_SYSTEM_PROMPT}
-                ]
-                all_msgs = (
-                    agent_result.all_messages()
-                    if hasattr(agent_result, "all_messages")
-                    else []
-                )
-
-                # Track seen user messages to avoid duplicates from history
-                seen_user_msgs: set[str] = set()
-
-                for msg in all_msgs:
-                    if isinstance(msg, ModelRequest):
-                        for part in msg.parts:
-                            if isinstance(part, SystemPromptPart):
-                                # Skip - we add CHAT_SYSTEM_PROMPT manually
-                                pass
-                            elif isinstance(part, UserPromptPart):
-                                # Deduplicate user messages (history + current)
-                                # part.content can be str or complex type; only
-                                # deduplicate simple strings
-                                content_str = (
-                                    part.content
-                                    if isinstance(part.content, str)
-                                    else str(part.content)
-                                )
-                                if content_str not in seen_user_msgs:
-                                    seen_user_msgs.add(content_str)
-                                    history_data.append(
-                                        {"role": "user", "content": content_str}
-                                    )
-                            elif isinstance(part, ToolReturnPart):
-                                history_data.append(
-                                    {
-                                        "role": "tool",
-                                        "tool_call_id": part.tool_call_id,
-                                        "content": part.model_response_str(),
-                                    }
-                                )
-                    elif isinstance(msg, ModelResponse):
-                        # Group all parts from this response into one message
-                        # A ModelResponse can have: TextPart(s) and/or ToolCallPart(s)
-                        text_parts: list[str] = []
-                        tool_calls_list: list[dict[str, Any]] = []
-
-                        for resp_part in msg.parts:
-                            if isinstance(resp_part, TextPart):
-                                if resp_part.content:
-                                    text_parts.append(resp_part.content)
-                            elif isinstance(resp_part, ToolCallPart):
-                                tool_calls_list.append(
-                                    {
-                                        "id": resp_part.tool_call_id,
-                                        "type": "function",
-                                        "function": {
-                                            "name": resp_part.tool_name,
-                                            "arguments": json.dumps(
-                                                resp_part.args_as_dict()
-                                            ),
-                                        },
-                                    }
-                                )
-
-                        # Build a single assistant message for this response
-                        if text_parts or tool_calls_list:
-                            assistant_msg: dict[str, Any] = {"role": "assistant"}
-                            if text_parts:
-                                assistant_msg["content"] = " ".join(text_parts)
-                            if tool_calls_list:
-                                assistant_msg["tool_calls"] = tool_calls_list
-                            history_data.append(assistant_msg)
-
-                # Get final response text for display
-                final_response = ""
-                for block in message.blocks:
-                    if isinstance(block, TextBlock):
-                        final_response += block.text
-
-                # Capture raw LLM output for training assessment
-                # This preserves the full structured output including blocks
-                raw_output_for_training: str
-                if hasattr(raw_output, "model_dump"):
-                    raw_output_for_training = json.dumps(raw_output.model_dump())
-                elif isinstance(raw_output, dict):
-                    raw_output_for_training = json.dumps(raw_output)
-                else:
-                    raw_output_for_training = str(raw_output)
+                # Build training data using helper functions
+                history_data = _build_training_prompt_data(agent_result)
+                raw_output_for_training = _serialize_raw_output_for_training(raw_output)
 
                 await capture_training_sample(
                     db,
