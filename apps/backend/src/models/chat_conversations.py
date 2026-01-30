@@ -13,6 +13,7 @@ from .base import Base
 
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .ai_training_samples import AITrainingSample
     from .chat_messages import ChatMessage
     from .chat_pending_actions import ChatPendingAction
     from .chat_tool_calls import ChatToolCall
@@ -101,6 +102,11 @@ class ChatConversation(Base):
     )
     tool_calls: Mapped[list[ChatToolCall]] = relationship(
         "ChatToolCall",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+    )
+    training_samples: Mapped[list[AITrainingSample]] = relationship(
+        "AITrainingSample",
         back_populates="conversation",
         cascade="all, delete-orphan",
     )

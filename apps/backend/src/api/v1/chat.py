@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
+    SystemPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
@@ -47,7 +49,13 @@ from schemas.chat_streaming import (
     MessageSummary,
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
-from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
+from services.chat_agent import (
+    CHAT_SYSTEM_PROMPT,
+    ChatAgentDeps,
+    get_chat_agent,
+    normalize_agent_output,
+)
+from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 
 
@@ -764,10 +772,7 @@ async def _handle_agent_stream_event(
 
     if isinstance(event, AgentRunResultEvent):
         result = event.result
-        if hasattr(result, "output"):
-            return ([], result.output, [])
-        if hasattr(result, "data"):
-            return ([], result.data, [])
+        # Return the full result object so callers can access new_messages()
         return ([], result, [])
 
     return ([], None, [])
@@ -1004,7 +1009,15 @@ async def stream_chat_message(  # noqa: C901
                 if emitted_blocks:
                     tool_emitted_blocks.extend(emitted_blocks)
                 if result is not None:
-                    raw_output = result
+                    agent_result = result  # Full result object with new_messages()
+
+            # Extract output for normalization
+            if hasattr(agent_result, "output"):
+                raw_output = agent_result.output
+            elif hasattr(agent_result, "data"):
+                raw_output = agent_result.data
+            else:
+                raw_output = agent_result
 
             message = normalize_agent_output(raw_output)
             for block in message.blocks:
@@ -1037,6 +1050,128 @@ async def stream_chat_message(  # noqa: C901
             # Update conversation activity timestamp
             await _update_conversation_activity(db, conversation_id=conversation_id)
             await db.commit()
+
+            # Capture training sample (non-blocking, failures logged but ignored)
+            try:
+                # Build tool calls data from completed tool calls
+                tool_calls_data = None
+                if tool_calls_by_id:
+                    tool_calls_data = {
+                        call_id: {
+                            "tool_name": tc.tool_name,
+                            "arguments": tc.arguments,
+                        }
+                        for call_id, tc in tool_calls_by_id.items()
+                    }
+
+                # Build raw prompt from agent result's all_messages() which includes:
+                # - User messages (UserPromptPart)
+                # - Tool calls and returns (ToolCallPart, ToolReturnPart)
+                # - Assistant responses (TextPart)
+                # NOTE: PydanticAI's `instructions` param is NOT in all_messages()
+                # so we manually prepend CHAT_SYSTEM_PROMPT for training data.
+                # See: https://ai.pydantic.dev/agents/#instructions
+                history_data: list[dict[str, Any]] = [
+                    {"role": "system", "content": CHAT_SYSTEM_PROMPT}
+                ]
+                all_msgs = (
+                    agent_result.all_messages()
+                    if hasattr(agent_result, "all_messages")
+                    else []
+                )
+
+                # Track seen user messages to avoid duplicates from history
+                seen_user_msgs: set[str] = set()
+
+                for msg in all_msgs:
+                    if isinstance(msg, ModelRequest):
+                        for part in msg.parts:
+                            if isinstance(part, SystemPromptPart):
+                                # Skip - we add CHAT_SYSTEM_PROMPT manually
+                                pass
+                            elif isinstance(part, UserPromptPart):
+                                # Deduplicate user messages (history + current)
+                                # part.content can be str or complex type; only
+                                # deduplicate simple strings
+                                content_str = (
+                                    part.content
+                                    if isinstance(part.content, str)
+                                    else str(part.content)
+                                )
+                                if content_str not in seen_user_msgs:
+                                    seen_user_msgs.add(content_str)
+                                    history_data.append(
+                                        {"role": "user", "content": content_str}
+                                    )
+                            elif isinstance(part, ToolReturnPart):
+                                history_data.append(
+                                    {
+                                        "role": "tool",
+                                        "tool_call_id": part.tool_call_id,
+                                        "content": part.model_response_str(),
+                                    }
+                                )
+                    elif isinstance(msg, ModelResponse):
+                        # Group all parts from this response into one message
+                        # A ModelResponse can have: TextPart(s) and/or ToolCallPart(s)
+                        text_parts: list[str] = []
+                        tool_calls_list: list[dict[str, Any]] = []
+
+                        for resp_part in msg.parts:
+                            if isinstance(resp_part, TextPart):
+                                if resp_part.content:
+                                    text_parts.append(resp_part.content)
+                            elif isinstance(resp_part, ToolCallPart):
+                                tool_calls_list.append(
+                                    {
+                                        "id": resp_part.tool_call_id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": resp_part.tool_name,
+                                            "arguments": json.dumps(
+                                                resp_part.args_as_dict()
+                                            ),
+                                        },
+                                    }
+                                )
+
+                        # Build a single assistant message for this response
+                        if text_parts or tool_calls_list:
+                            assistant_msg: dict[str, Any] = {"role": "assistant"}
+                            if text_parts:
+                                assistant_msg["content"] = " ".join(text_parts)
+                            if tool_calls_list:
+                                assistant_msg["tool_calls"] = tool_calls_list
+                            history_data.append(assistant_msg)
+
+                # Get final response text for display
+                final_response = ""
+                for block in message.blocks:
+                    if isinstance(block, TextBlock):
+                        final_response += block.text
+
+                # Capture raw LLM output for training assessment
+                # This preserves the full structured output including blocks
+                raw_output_for_training: str
+                if hasattr(raw_output, "model_dump"):
+                    raw_output_for_training = json.dumps(raw_output.model_dump())
+                elif isinstance(raw_output, dict):
+                    raw_output_for_training = json.dumps(raw_output)
+                else:
+                    raw_output_for_training = str(raw_output)
+
+                await capture_training_sample(
+                    db,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    user_id=current_user.id,
+                    raw_prompt=json.dumps(history_data),
+                    raw_response=raw_output_for_training,
+                    tool_calls=tool_calls_data,
+                    model_name="gemini-2.5-flash",
+                )
+            except Exception as capture_exc:
+                logger.warning("Failed to capture training sample: %s", capture_exc)
 
             yield ChatSseEvent(
                 event="message.complete",
