@@ -26,6 +26,7 @@ param azureOpenAIDeployments = [
     name: 'gpt-4.1-mini'
     model: 'gpt-4.1-mini'
     version: '2025-04-14'
+    sku: 'GlobalStandard'
     capacity: 100
   }
   // Larger model for complex reasoning tasks
@@ -33,6 +34,7 @@ param azureOpenAIDeployments = [
     name: 'gpt-4.1'
     model: 'gpt-4.1'
     version: '2025-04-14'
+    sku: 'GlobalStandard'
     capacity: 50
   }
   // Multimodal model for image-based recipe extraction
@@ -40,6 +42,7 @@ param azureOpenAIDeployments = [
     name: 'gpt-5-mini'
     model: 'gpt-5-mini'
     version: '2025-08-07'
+    sku: 'GlobalStandard'
     capacity: 100
   }
   // Fast text model for context generation
@@ -47,6 +50,7 @@ param azureOpenAIDeployments = [
     name: 'gpt-5-nano'
     model: 'gpt-5-nano'
     version: '2025-08-07'
+    sku: 'GlobalStandard'
     capacity: 100
   }
   // Embedding model for semantic search (1536 dimensions)
@@ -54,6 +58,7 @@ param azureOpenAIDeployments = [
     name: 'text-embedding-3-small'
     model: 'text-embedding-3-small'
     version: '1'
+    sku: 'Standard'
     capacity: 50
   }
 ]
