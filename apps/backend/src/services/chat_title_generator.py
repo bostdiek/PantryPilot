@@ -1,9 +1,17 @@
 """Service for generating AI-powered chat titles using pydantic-ai."""
 
 import logging
+from typing import cast
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
+from pydantic_ai.models import Model
+from pydantic_ai.models.google import GoogleModel
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.providers.openai import OpenAIProvider
+
+from core.config import get_settings
 
 
 logger = logging.getLogger(__name__)
@@ -32,16 +40,52 @@ Examples:
 {"title": "Leftover Chicken Recipes"}
 """
 
-# Lazy-load the agent to avoid requiring GOOGLE_API_KEY at import time
+# Lazy-load the agent to avoid requiring API keys at import time
 _title_agent: Agent[None, GeneratedTitle] | None = None
+
+
+def _create_title_model() -> Model:
+    """Create the appropriate model based on configuration.
+
+    Uses centralized model factory pattern with LLM_PROVIDER setting.
+    Returns Azure OpenAI model if provider is azure_openai and credentials
+    are configured, otherwise returns Gemini model.
+    """
+    settings = get_settings()
+    use_azure = settings.LLM_PROVIDER == "azure_openai"
+
+    if use_azure:
+        if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
+            logger.warning(
+                "Azure OpenAI enabled but credentials missing, falling back to Gemini"
+            )
+        else:
+            logger.info("Using Azure OpenAI for title generation")
+            azure_provider = OpenAIProvider(
+                base_url=(
+                    f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/"
+                    f"{settings.TEXT_MODEL}"
+                ),
+                api_key=settings.AZURE_OPENAI_API_KEY,
+            )
+            return OpenAIModel(
+                settings.TEXT_MODEL,
+                provider=azure_provider,
+            )
+
+    # Default to Gemini
+    logger.info("Using Gemini for title generation")
+    gemini_provider = GoogleProvider(api_key=settings.GEMINI_API_KEY)
+    return cast(Model, GoogleModel(settings.TEXT_MODEL, provider=gemini_provider))
 
 
 def _get_title_agent() -> Agent[None, GeneratedTitle]:
     """Get or create the title generation agent (lazy initialization)."""
     global _title_agent
     if _title_agent is None:
+        model = _create_title_model()
         _title_agent = Agent(
-            "gemini-2.5-flash-lite",
+            model,
             output_type=GeneratedTitle,
             system_prompt=TITLE_SYSTEM_PROMPT,
         )

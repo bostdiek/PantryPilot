@@ -62,6 +62,16 @@ param braveSearchApiKey string = ''
 @secure()
 param geminiApiKey string = ''
 
+@description('Azure OpenAI endpoint URL (optional - set when using Azure OpenAI)')
+param azureOpenAIEndpoint string = ''
+
+@description('Azure OpenAI API key (optional - set when using Azure OpenAI)')
+@secure()
+param azureOpenAIApiKey string = ''
+
+@description('LLM provider to use: "gemini" or "azure_openai"')
+param llmProvider string = 'gemini'
+
 @description('Enable observability (Application Insights + OpenTelemetry)')
 param enableObservability bool = true
 
@@ -203,6 +213,16 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                   identity: 'system'
                 }
               ],
+          // Optional Azure OpenAI API key for AI model access
+          empty(azureOpenAIApiKey)
+            ? []
+            : [
+                {
+                  name: 'azure-openai-api-key'
+                  keyVaultUrl: '${keyVaultUri}secrets/azureOpenAIApiKey'
+                  identity: 'system'
+                }
+              ],
           // Optional Application Insights connection string for observability
           // Note: Uses inline value since App Insights is created by this same module
           enableObservability
@@ -328,6 +348,23 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                   {
                     name: 'BRAVE_SEARCH_API_KEY'
                     secretRef: 'brave-search-api-key' // pragma: allowlist secret
+                  }
+                ],
+            // Optional Azure OpenAI for AI features (replaces Gemini when configured)
+            empty(azureOpenAIEndpoint) || empty(azureOpenAIApiKey)
+              ? []
+              : [
+                  {
+                    name: 'LLM_PROVIDER'
+                    value: llmProvider
+                  }
+                  {
+                    name: 'AZURE_OPENAI_ENDPOINT'
+                    value: azureOpenAIEndpoint
+                  }
+                  {
+                    name: 'AZURE_OPENAI_API_KEY'
+                    secretRef: 'azure-openai-api-key' // pragma: allowlist secret
                   }
                 ],
             // Optional Application Insights for observability

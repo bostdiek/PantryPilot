@@ -39,6 +39,23 @@ param braveSearchApiKey string = ''
 @secure()
 param geminiApiKey string = ''
 
+@description('Deploy Azure OpenAI for chat agent (replaces Gemini)')
+param deployAzureOpenAI bool = false
+
+@description('Azure OpenAI API key (from deployed resource or Key Vault)')
+@secure()
+param azureOpenAIApiKey string = ''
+
+@description('Azure OpenAI model deployments to create')
+param azureOpenAIDeployments array = [
+  {
+    name: 'gpt-4o-mini'
+    model: 'gpt-4o-mini'
+    version: '2024-07-18'
+    capacity: 10
+  }
+]
+
 // Environment-specific settings
 var environmentSettings = {
   dev: {
@@ -81,6 +98,7 @@ var resourceNames = {
   staticWebApp: 'pantrypilot-frontend-${environmentName}-${uniqueSuffix}'
   emailService: 'pantrypilot-email-${environmentName}-${uniqueSuffix}'
   communicationService: 'pantrypilot-acs-${environmentName}-${uniqueSuffix}'
+  azureOpenAI: 'ppoai${environmentName}${uniqueSuffix}'
 }
 
 // Tags for resource organization
@@ -116,8 +134,11 @@ module keyVault 'modules/keyvault.bicep' = {
       upstashRedisRestToken: upstashRedisRestToken
       braveSearchApiKey: braveSearchApiKey
       geminiApiKey: geminiApiKey
+      // Use API key from created Azure OpenAI resource if deployed, otherwise use provided key
+      azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI.outputs.apiKey : azureOpenAIApiKey
     }
   }
+  dependsOn: deployAzureOpenAI ? [azureOpenAI] : []
 }
 
 // PostgreSQL Flexible Server module
@@ -130,6 +151,16 @@ module postgresql 'modules/postgresql.bicep' = {
     skuName: currentSettings.dbSku
     storageSizeGB: currentSettings.dbStorageSize
     tags: commonTags
+  }
+}
+
+// Azure OpenAI module for chat agent (optional - replaces Gemini)
+module azureOpenAI 'modules/openai.bicep' = if (deployAzureOpenAI) {
+  params: {
+    name: resourceNames.azureOpenAI
+    location: location
+    tags: commonTags
+    deployments: azureOpenAIDeployments
   }
 }
 
@@ -252,6 +283,10 @@ module containerApps 'modules/containerapps.bicep' = {
     frontendUrl: frontendUrl
     braveSearchApiKey: braveSearchApiKey
     geminiApiKey: geminiApiKey
+    // Azure OpenAI configuration (when deployed)
+    azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI.outputs.endpoint : ''
+    azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI.outputs.apiKey : ''
+    llmProvider: deployAzureOpenAI ? 'azure_openai' : 'gemini'
     enableObservability: true
     tags: commonTags
   }
@@ -310,3 +345,11 @@ output communicationServiceName string = communication.outputs.communicationServ
 @description('The name of the Email Service (for Azure portal reference).')
 output emailServiceName string = communication.outputs.emailServiceName
 output emailFromDomain string? = communication.outputs.?fromSenderDomain
+
+// Azure OpenAI outputs (only available when deployAzureOpenAI is true)
+@description('Azure OpenAI endpoint URL for chat agent')
+output azureOpenAIEndpoint string = azureOpenAI.?outputs.?endpoint ?? ''
+@description('Azure OpenAI resource name')
+output azureOpenAIName string = azureOpenAI.?outputs.?name ?? ''
+@description('Deployed Azure OpenAI model names')
+output azureOpenAIDeploymentNames array = azureOpenAI.?outputs.?deploymentNames ?? []

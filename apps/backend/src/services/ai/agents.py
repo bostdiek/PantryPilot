@@ -14,6 +14,7 @@ from schemas.recipes import (
     RecipeCreate,
     RecipeDifficulty,
 )
+from services.ai.model_factory import get_multimodal_model, get_text_model
 
 
 logger = logging.getLogger(__name__)
@@ -115,20 +116,22 @@ Return confidence_score (0.0-1.0). Extract text accurately from the image(s).
 
 
 def create_recipe_agent() -> Agent:
-    """Create a pydantic-ai agent for recipe extraction."""
-    # Use Gemini Flash for fast, cost-effective extraction
-    # Note: pydantic-ai will handle model configuration internally
-    # Register three output types:
-    # 1. RecipeExtractionResult (normal extraction result)
-    # 2. ExtractionNotFound (explicit failure: no recipe found)
-    # 3. NoFoodOrDrinkRecipe (explicit failure: page is not a food or drink recipe)
-    # This maps to Pydantic AI's tool-output pattern, allowing the model to
-    # choose a clear failure output when no recipe is found or when the page
-    # is not a food/drink recipe (e.g., documentation pages).
+    """Create a pydantic-ai agent for recipe extraction.
+
+    Uses model factory to get the appropriate text model based on configuration.
+    Register three output types:
+    1. RecipeExtractionResult (normal extraction result)
+    2. ExtractionNotFound (explicit failure: no recipe found)
+    3. NoFoodOrDrinkRecipe (explicit failure: page is not a food or drink recipe)
+    This maps to Pydantic AI's tool-output pattern, allowing the model to
+    choose a clear failure output when no recipe is found or when the page
+    is not a food/drink recipe (e.g., documentation pages).
+    """
     from schemas.ai import NoFoodOrDrinkRecipe
 
+    model = get_text_model()
     return Agent(
-        "gemini-2.5-flash-lite",
+        model,
         system_prompt=RECIPE_EXTRACTION_PROMPT,
         output_type=[RecipeExtractionResult, ExtractionNotFound, NoFoodOrDrinkRecipe],
     )
@@ -137,13 +140,15 @@ def create_recipe_agent() -> Agent:
 def create_image_recipe_agent() -> Agent:
     """Create a pydantic-ai agent for recipe extraction from images.
 
-    Uses multimodal capabilities of Gemini Flash to extract recipe data
-    from photo(s) of recipe cards, cookbook pages, or handwritten recipes.
+    Uses model factory to get the appropriate multimodal model for extracting
+    recipe data from photo(s) of recipe cards, cookbook pages, or handwritten
+    recipes.
     """
     from schemas.ai import NoFoodOrDrinkRecipe
 
+    model = get_multimodal_model()
     return Agent(
-        "gemini-2.5-flash-lite",
+        model,
         system_prompt=RECIPE_IMAGE_EXTRACTION_PROMPT,
         output_type=[RecipeExtractionResult, ExtractionNotFound, NoFoodOrDrinkRecipe],
     )

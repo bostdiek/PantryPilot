@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from functools import lru_cache
 from typing import Any
@@ -9,12 +10,12 @@ from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient, HTTPStatusError
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.models import Model
 from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from schemas.chat_content import AssistantMessage, TextBlock
+from services.ai.model_factory import get_chat_model
 from services.chat_agent.deps import ChatAgentDeps
 from services.chat_agent.tools import (
     tool_fetch_url_as_markdown,
@@ -26,6 +27,9 @@ from services.chat_agent.tools import (
     tool_update_user_memory,
     tool_web_search,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 MEAL_PLANNING_WORKFLOW = """
@@ -300,7 +304,7 @@ CHAT_SYSTEM_PROMPT = (
 def _create_resilient_http_client() -> AsyncClient:
     """Create an HTTP client with exponential backoff retries for transient errors.
 
-    Handles Gemini API overload (503), rate limits (429), and gateway errors.
+    Handles API overload (503), rate limits (429), and gateway errors.
     Uses exponential backoff with a fallback strategy that respects Retry-After headers.
     """
 
@@ -324,6 +328,15 @@ def _create_resilient_http_client() -> AsyncClient:
     return AsyncClient(transport=transport, timeout=120)
 
 
+def _create_model() -> Model:
+    """Create LLM model based on configuration using centralized model factory.
+
+    Uses resilient HTTP client with retry logic for transient errors.
+    """
+    http_client = _create_resilient_http_client()
+    return get_chat_model(http_client=http_client)
+
+
 @lru_cache
 def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     """Create and cache the chat assistant agent.
@@ -335,13 +348,11 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     because it is evaluated as a structured task-specific extractor rather
     than a general chat assistant.
 
-    Includes retry logic for transient Gemini API errors (503 overload, etc.)
+    Supports both Azure OpenAI and Google Gemini based on USE_AZURE_OPENAI setting.
+    Includes retry logic for transient API errors (503 overload, etc.)
     with exponential backoff up to 5 attempts.
     """
-    # Create HTTP client with retry logic for transient API errors
-    http_client = _create_resilient_http_client()
-    provider = GoogleProvider(http_client=http_client)
-    model = GoogleModel("gemini-2.5-flash", provider=provider)
+    model = _create_model()
 
     agent: Agent[ChatAgentDeps, AssistantMessage] = Agent(
         model,

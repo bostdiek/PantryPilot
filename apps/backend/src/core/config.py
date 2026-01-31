@@ -3,6 +3,7 @@
 import json
 import os
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,9 +33,25 @@ class Settings(BaseSettings):
     ]
     ALLOW_CREDENTIALS: bool = True
 
-    # AI / LLM provider configuration
-    # GEMINI_API_KEY is optional; prefer storing secrets in .env.dev/.env.prod
+    # AI / LLM Provider Configuration (model-agnostic)
+    # LLM_PROVIDER: "gemini" or "azure_openai" - selects which provider to use
+    LLM_PROVIDER: Literal["gemini", "azure_openai"] = "gemini"
+
+    # Model names - generic names that apply to either provider
+    # These are used by the model factory to select the appropriate model
+    CHAT_MODEL: str = "gemini-2.5-flash"  # General chat/completion model
+    MULTIMODAL_MODEL: str = "gemini-2.5-flash-lite"  # Image/vision tasks
+    EMBEDDING_MODEL: str = "gemini-embedding-001"  # Semantic embeddings
+    TEXT_MODEL: str = "gemini-2.5-flash-lite"  # Fast text tasks (context gen)
+
+    # Provider-specific API credentials
+    # Gemini configuration
     GEMINI_API_KEY: str | None = None
+
+    # Azure OpenAI Configuration
+    AZURE_OPENAI_ENDPOINT: str | None = None
+    AZURE_OPENAI_API_KEY: str | None = None
+    AZURE_OPENAI_API_VERSION: str = "2024-10-01-preview"
 
     # External tool providers
     BRAVE_SEARCH_API_KEY: str | None = None

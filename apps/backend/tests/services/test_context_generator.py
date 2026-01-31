@@ -201,7 +201,7 @@ class TestGenerateContext:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(
                 name="Pasta Primavera",
@@ -227,7 +227,7 @@ class TestGenerateContext:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(
                 name="Test Recipe",
@@ -253,7 +253,7 @@ class TestGenerateContext:
             side_effect=Exception("API rate limit exceeded")
         )
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(
                 name="Fallback Recipe",
@@ -278,7 +278,7 @@ class TestGenerateContext:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(name="Test")
 
@@ -298,7 +298,7 @@ class TestSingletonAndConvenienceFunction:
 
         module._context_generator = None
 
-        with patch("services.context_generator.genai.Client"):
+        with patch("google.genai.Client"):
             gen1 = get_context_generator()
             gen2 = get_context_generator()
 
@@ -317,7 +317,7 @@ class TestSingletonAndConvenienceFunction:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             # Reset singleton
             import services.context_generator as module
 

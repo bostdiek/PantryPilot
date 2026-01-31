@@ -14,3 +14,30 @@ param braveSearchApiKey = readEnvironmentVariable('BRAVE_SEARCH_API_KEY', '')
 
 // Gemini API key for AI model access (optional - leave empty to disable)
 param geminiApiKey = readEnvironmentVariable('GEMINI_API_KEY', '')
+
+// Azure OpenAI for AI features (replaces Gemini when enabled)
+param deployAzureOpenAI = false
+param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
+param azureOpenAIDeployments = [
+  // Chat/completion model for chat agent, recipe extraction, and title generation
+  {
+    name: 'gpt-4o-mini'
+    model: 'gpt-4o-mini'
+    version: '2024-07-18'
+    capacity: 20
+  }
+  // Multimodal model for image-based recipe extraction
+  {
+    name: 'gpt-4o'
+    model: 'gpt-4o'
+    version: '2024-08-06'
+    capacity: 10
+  }
+  // Embedding model for semantic search (768 dimensions)
+  {
+    name: 'text-embedding-3-small'
+    model: 'text-embedding-3-small'
+    version: '1'
+    capacity: 100
+  }
+]

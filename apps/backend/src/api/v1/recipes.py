@@ -210,10 +210,12 @@ async def create_recipe(
 
         # Generate embeddings for semantic search (non-blocking)
         try:
-            context, embedding = await generate_recipe_embedding(new_recipe)
+            context, embedding, model_name = await generate_recipe_embedding(new_recipe)
             new_recipe.search_context = context
             new_recipe.search_context_generated_at = datetime.now(UTC)
             new_recipe.embedding = embedding
+            new_recipe.embedding_model = model_name
+            new_recipe.embedding_generated_at = datetime.now(UTC)
         except Exception as e:
             logger.warning(
                 f"Failed to generate embedding for recipe {new_recipe.id}: {e}"
@@ -708,10 +710,12 @@ async def update_recipe(
             ]
         ):
             try:
-                context, embedding = await generate_recipe_embedding(recipe)
+                context, embedding, model_name = await generate_recipe_embedding(recipe)
                 recipe.search_context = context
                 recipe.search_context_generated_at = datetime.now(UTC)
                 recipe.embedding = embedding
+                recipe.embedding_model = model_name
+                recipe.embedding_generated_at = datetime.now(UTC)
             except Exception as e:
                 logger.warning(
                     f"Failed to regenerate embedding for recipe {recipe.id}: {e}"

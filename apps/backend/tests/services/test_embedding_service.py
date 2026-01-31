@@ -316,7 +316,7 @@ class TestGenerateRecipeEmbedding:
                 return_value=mock_embed_client,
             ),
         ):
-            context, embedding = await generate_recipe_embedding(recipe)  # type: ignore[arg-type]
+            context, embedding, model_name = await generate_recipe_embedding(recipe)  # type: ignore[arg-type]
 
         # Verify context was generated
         assert context == "A spicy Mexican dish perfect for taco night."
@@ -325,6 +325,10 @@ class TestGenerateRecipeEmbedding:
         assert len(embedding) == 768
         magnitude = np.linalg.norm(embedding)
         assert abs(magnitude - 1.0) < 1e-6
+
+        # Verify model name is returned
+        assert model_name is not None
+        assert isinstance(model_name, str)
 
     @pytest.mark.asyncio
     async def test_generate_recipe_embedding_combines_context_and_text(self) -> None:
