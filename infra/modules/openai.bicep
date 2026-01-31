@@ -82,7 +82,5 @@ output principalId string = openai.identity.principalId
 @description('The deployed model names')
 output deploymentNames array = [for (deployment, i) in deployments: modelDeployments[i].name]
 
-// Note: API key is stored securely in Key Vault by main.bicep
-// For production, consider using managed identity (disableLocalAuth: true) instead
-@description('The primary API key for the Azure OpenAI resource')
-output apiKey string = openai.listKeys().key1
+// Do not output API keys (secrets) from Bicep modules.
+// The root template should store keys in Key Vault (or use managed identity).

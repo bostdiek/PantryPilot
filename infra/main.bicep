@@ -138,7 +138,7 @@ module keyVault 'modules/keyvault.bicep' = {
       braveSearchApiKey: braveSearchApiKey
       geminiApiKey: geminiApiKey
       // Use API key from created Azure OpenAI resource if deployed, otherwise use provided key
-      azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI!.outputs.apiKey : azureOpenAIApiKey
+      azureOpenAIApiKey: resolvedAzureOpenAIApiKey
     }
   }
   dependsOn: deployAzureOpenAI ? [azureOpenAI] : []
@@ -167,6 +167,13 @@ module azureOpenAI 'modules/openai.bicep' = if (deployAzureOpenAI) {
     deployments: azureOpenAIDeployments
   }
 }
+
+// Reference the Azure OpenAI account so we can read keys without exposing them as module outputs
+resource azureOpenAIAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = if (deployAzureOpenAI) {
+  name: azureOpenAI!.outputs.name
+}
+
+var resolvedAzureOpenAIApiKey = deployAzureOpenAI ? azureOpenAIAccount!.listKeys().key1 : azureOpenAIApiKey
 
 // Container Apps Environment and Backend App
 // Use quickstart placeholder for initial deployment, or ACR image after CI/CD builds
@@ -289,7 +296,7 @@ module containerApps 'modules/containerapps.bicep' = {
     geminiApiKey: geminiApiKey
     // Azure OpenAI configuration (when deployed)
     azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : ''
-    azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI!.outputs.apiKey : ''
+    azureOpenAIApiKey: deployAzureOpenAI ? resolvedAzureOpenAIApiKey : ''
     llmProvider: deployAzureOpenAI ? 'azure_openai' : 'gemini'
     enableObservability: true
     tags: commonTags
