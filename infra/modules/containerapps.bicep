@@ -359,6 +359,10 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                     value: llmProvider
                   }
                   {
+                    name: 'LLM_PROVIDER'
+                    value: llmProvider
+                  }
+                  {
                     name: 'AZURE_OPENAI_ENDPOINT'
                     value: azureOpenAIEndpoint
                   }

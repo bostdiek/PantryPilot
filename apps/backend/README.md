@@ -140,7 +140,7 @@ Azure OpenAI provides enterprise-grade reliability and data privacy for producti
 
 ```bash
 # Enable Azure OpenAI for all AI features
-USE_AZURE_OPENAI=true
+LLM_PROVIDER=azure_openai
 
 # Azure OpenAI resource endpoint
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
@@ -149,9 +149,10 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-api-key
 
 # Model deployments (must match Azure deployment names)
-AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini              # Chat, recipe extraction, titles
-AZURE_OPENAI_MULTIMODAL_DEPLOYMENT=gpt-4o        # Image-based recipe extraction
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small  # Semantic search
+CHAT_MODEL=gpt-4o-mini                    # Chat, recipe extraction, titles
+MULTIMODAL_MODEL=gpt-4o                   # Image-based recipe extraction
+TEXT_MODEL=gpt-4o-mini                    # Text-only generation
+EMBEDDING_MODEL=text-embedding-3-small    # Semantic search
 
 # API version (optional, defaults to 2024-10-01-preview)
 AZURE_OPENAI_API_VERSION=2024-10-01-preview
@@ -170,23 +171,29 @@ The project includes Bicep infrastructure for Azure OpenAI. Set `deployAzureOpen
 Gemini is the default provider for local development due to simpler setup.
 
 ```bash
-# Use Gemini (default when USE_AZURE_OPENAI is false or unset)
-USE_AZURE_OPENAI=false
+# Use Gemini (default when LLM_PROVIDER is unset or =gemini)
+LLM_PROVIDER=gemini
 GEMINI_API_KEY=your-gemini-api-key
+
+# Model names (optional, defaults to Gemini models)
+CHAT_MODEL=gemini-2.5-flash
+MULTIMODAL_MODEL=gemini-2.5-flash-lite
+TEXT_MODEL=gemini-2.5-flash-lite
+EMBEDDING_MODEL=gemini-embedding-001
 ```
 
 ### AI Features Coverage
 
-When `USE_AZURE_OPENAI=true`, the following features use Azure OpenAI:
+When `LLM_PROVIDER=azure_openai`, the following features use Azure OpenAI:
 
-| Feature | Azure Deployment | Gemini Model |
-|---------|-----------------|--------------|
-| Chat Agent | `AZURE_OPENAI_DEPLOYMENT` | gemini-2.5-flash |
-| Recipe Extraction (URL) | `AZURE_OPENAI_DEPLOYMENT` | gemini-2.5-flash-lite |
-| Recipe Extraction (Image) | `AZURE_OPENAI_MULTIMODAL_DEPLOYMENT` | gemini-2.5-flash-lite |
-| Title Generation | `AZURE_OPENAI_DEPLOYMENT` | gemini-2.5-flash-lite |
-| Context Generation | `AZURE_OPENAI_DEPLOYMENT` | gemini-2.0-flash-lite |
-| Semantic Search | `AZURE_OPENAI_EMBEDDING_DEPLOYMENT` | gemini-embedding-001 |
+| Feature | Configuration Variable | Default (Gemini) |
+|---------|----------------------|------------------|
+| Chat Agent | `CHAT_MODEL` | gemini-2.5-flash |
+| Recipe Extraction (URL) | `CHAT_MODEL` | gemini-2.5-flash |
+| Recipe Extraction (Image) | `MULTIMODAL_MODEL` | gemini-2.5-flash-lite |
+| Title Generation | `TEXT_MODEL` | gemini-2.5-flash-lite |
+| Context Generation | `TEXT_MODEL` | gemini-2.5-flash-lite |
+| Semantic Search | `EMBEDDING_MODEL` | gemini-embedding-001 |
 
 All providers support tool calling and structured outputs.
 

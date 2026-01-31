@@ -16,7 +16,7 @@ param braveSearchApiKey = readEnvironmentVariable('BRAVE_SEARCH_API_KEY', '')
 param geminiApiKey = readEnvironmentVariable('GEMINI_API_KEY', '')
 
 // Azure OpenAI for AI features (replaces Gemini when enabled)
-param deployAzureOpenAI = false
+param deployAzureOpenAI = true
 param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
 param azureOpenAIDeployments = [
   // Chat/completion model for chat agent, recipe extraction, and title generation

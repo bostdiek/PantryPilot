@@ -12,111 +12,26 @@ from pydantic_ai import models
 models.ALLOW_MODEL_REQUESTS = False
 
 
-class TestCreateTitleModel:
-    """Tests for _create_title_model function."""
-
-    @patch("services.chat_title_generator.get_settings")
-    def test_creates_azure_model_when_configured(
-        self, mock_settings: MagicMock
-    ) -> None:
-        """Test creates Azure OpenAI model when provider is azure_openai."""
-        mock_settings.return_value.LLM_PROVIDER = "azure_openai"
-        mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
-            "https://test.openai.azure.com"
-        )
-        mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
-        mock_settings.return_value.TEXT_MODEL = "gpt-35-turbo"
-
-        from services.chat_title_generator import _create_title_model
-
-        model = _create_title_model()
-        assert model is not None
-        # Azure model is OpenAIModel type
-        assert "OpenAI" in type(model).__name__
-
-    @patch("services.chat_title_generator.get_settings")
-    def test_creates_gemini_model_when_not_azure(
-        self, mock_settings: MagicMock
-    ) -> None:
-        """Test creates Gemini model when provider is not azure_openai."""
-        mock_settings.return_value.LLM_PROVIDER = "gemini"
-        mock_settings.return_value.GEMINI_API_KEY = "test-gemini-key"
-        mock_settings.return_value.TEXT_MODEL = "gemini-1.5-flash-8b"
-
-        from services.chat_title_generator import _create_title_model
-
-        model = _create_title_model()
-        assert model is not None
-        # Gemini model is GoogleModel type
-        assert "Google" in type(model).__name__
-
-    @patch("services.chat_title_generator.get_settings")
-    def test_falls_back_to_gemini_on_missing_azure_credentials(
-        self, mock_settings: MagicMock, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test falls back to Gemini when Azure credentials are missing."""
-        mock_settings.return_value.LLM_PROVIDER = "azure_openai"
-        mock_settings.return_value.AZURE_OPENAI_ENDPOINT = None
-        mock_settings.return_value.AZURE_OPENAI_API_KEY = None
-        mock_settings.return_value.GEMINI_API_KEY = "test-gemini-key"
-        mock_settings.return_value.TEXT_MODEL = "gemini-1.5-flash-8b"
-
-        from services.chat_title_generator import _create_title_model
-
-        model = _create_title_model()
-        assert model is not None
-        # Falls back to Gemini model
-        assert "Google" in type(model).__name__
-        assert "falling back to Gemini" in caplog.text
-
-    @patch("services.chat_title_generator.get_settings")
-    def test_logs_azure_usage(
-        self, mock_settings: MagicMock, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test logs when using Azure OpenAI."""
-        mock_settings.return_value.LLM_PROVIDER = "azure_openai"
-        mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
-            "https://test.openai.azure.com"
-        )
-        mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
-        mock_settings.return_value.TEXT_MODEL = "gpt-35-turbo"
-
-        from services.chat_title_generator import _create_title_model
-
-        _create_title_model()
-        assert "Using Azure OpenAI for title generation" in caplog.text
-
-    @patch("services.chat_title_generator.get_settings")
-    def test_logs_gemini_usage(
-        self, mock_settings: MagicMock, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Test logs when using Gemini."""
-        mock_settings.return_value.LLM_PROVIDER = "gemini"
-        mock_settings.return_value.GEMINI_API_KEY = "test-gemini-key"
-        mock_settings.return_value.TEXT_MODEL = "gemini-1.5-flash-8b"
-
-        from services.chat_title_generator import _create_title_model
-
-        _create_title_model()
-        assert "Using Gemini for title generation" in caplog.text
-
-
 class TestGetTitleAgent:
-    """Tests for _get_title_agent function."""
+    """Tests for _get_title_agent function.
+
+    Note: Model creation is now handled by the centralized model_factory,
+    so we test integration with that instead of testing model creation directly.
+    """
 
     @patch("services.chat_title_generator.Agent")
-    @patch("services.chat_title_generator._create_title_model")
+    @patch("services.chat_title_generator.get_text_model")
     def test_creates_agent_with_correct_config(
-        self, mock_create_model: MagicMock, mock_agent_class: MagicMock
+        self, mock_get_text_model: MagicMock, mock_agent_class: MagicMock
     ) -> None:
-        """Test agent is created with correct configuration."""
+        """Test agent is created using centralized model factory."""
         # Reset global agent
         import services.chat_title_generator
 
         services.chat_title_generator._title_agent = None
 
         mock_model = MagicMock()
-        mock_create_model.return_value = mock_model
+        mock_get_text_model.return_value = mock_model
 
         mock_agent_instance = MagicMock()
         mock_agent_class.return_value = mock_agent_instance
@@ -126,13 +41,14 @@ class TestGetTitleAgent:
         agent = _get_title_agent()
         assert agent is not None
         assert agent == mock_agent_instance
-        # Verify Agent was called with model and config
+        # Verify Agent was called with model from factory
         mock_agent_class.assert_called_once()
+        mock_get_text_model.assert_called_once()
 
     @patch("services.chat_title_generator.Agent")
-    @patch("services.chat_title_generator._create_title_model")
+    @patch("services.chat_title_generator.get_text_model")
     def test_caches_agent_on_subsequent_calls(
-        self, mock_create_model: MagicMock, mock_agent_class: MagicMock
+        self, mock_get_text_model: MagicMock, mock_agent_class: MagicMock
     ) -> None:
         """Test agent is cached and reused."""
         # Reset global agent
@@ -141,7 +57,7 @@ class TestGetTitleAgent:
         services.chat_title_generator._title_agent = None
 
         mock_model = MagicMock()
-        mock_create_model.return_value = mock_model
+        mock_get_text_model.return_value = mock_model
 
         mock_agent_instance = MagicMock()
         mock_agent_class.return_value = mock_agent_instance
@@ -152,8 +68,8 @@ class TestGetTitleAgent:
         agent2 = _get_title_agent()
 
         assert agent1 is agent2
-        # Model and Agent should only be created once
-        assert mock_create_model.call_count == 1
+        # Model factory and Agent should only be called once
+        assert mock_get_text_model.call_count == 1
         assert mock_agent_class.call_count == 1
 
 

@@ -159,22 +159,23 @@ The Bicep infrastructure includes Azure OpenAI provisioning with all required mo
 Add to your `.env.dev` or `.env.prod`:
 
 ```bash
-USE_AZURE_OPENAI=true
+LLM_PROVIDER=azure_openai
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-api-key
 AZURE_OPENAI_API_VERSION=2024-10-01-preview
 
-# Model deployments
-AZURE_OPENAI_DEPLOYMENT=gpt-4o-mini              # Chat, recipe extraction, titles
-AZURE_OPENAI_MULTIMODAL_DEPLOYMENT=gpt-4o        # Image-based recipe extraction
-AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-3-small  # Semantic search
+# Model deployments (Azure OpenAI deployment names)
+CHAT_MODEL=gpt-4o-mini                    # Chat, recipe extraction, titles
+TEXT_MODEL=gpt-4o-mini                    # Text-only generation
+MULTIMODAL_MODEL=gpt-4o                   # Image-based recipe extraction
+EMBEDDING_MODEL=text-embedding-3-small    # Semantic search
 ```
 
 ### Verify Configuration
 
 Start the backend and check logs for:
 ```
-INFO: Using Azure OpenAI for recipe extraction
-INFO: Using Azure OpenAI for embeddings
-INFO: Using Azure OpenAI for title generation
+INFO: Using Azure OpenAI chat model: gpt-4o-mini
+INFO: Using Azure OpenAI for embeddings: text-embedding-3-small
+INFO: Using Azure OpenAI text model: gpt-4o-mini
 ```

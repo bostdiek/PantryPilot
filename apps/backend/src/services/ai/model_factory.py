@@ -106,6 +106,14 @@ def get_chat_model(http_client: AsyncClient | None = None) -> Model:
         logger.info(f"Using Azure OpenAI chat model: {settings.CHAT_MODEL}")
         return _create_azure_model(settings.CHAT_MODEL, http_client)
 
+    # Fallback to Gemini - validate credentials
+    if not _validate_gemini_credentials():
+        raise ValueError(
+            "No valid LLM provider configured. Either set Azure OpenAI "
+            "credentials (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY) "
+            "or Gemini credentials (GEMINI_API_KEY)."
+        )
+
     logger.info(f"Using Gemini chat model: {settings.CHAT_MODEL}")
     return _create_gemini_model(settings.CHAT_MODEL, http_client)
 
@@ -128,6 +136,14 @@ def get_multimodal_model(http_client: AsyncClient | None = None) -> Model:
         logger.info(f"Using Azure OpenAI multimodal model: {settings.MULTIMODAL_MODEL}")
         return _create_azure_model(settings.MULTIMODAL_MODEL, http_client)
 
+    # Fallback to Gemini - validate credentials
+    if not _validate_gemini_credentials():
+        raise ValueError(
+            "No valid LLM provider configured. Either set Azure OpenAI "
+            "credentials (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY) "
+            "or Gemini credentials (GEMINI_API_KEY)."
+        )
+
     logger.info(f"Using Gemini multimodal model: {settings.MULTIMODAL_MODEL}")
     return _create_gemini_model(settings.MULTIMODAL_MODEL, http_client)
 
@@ -149,6 +165,14 @@ def get_text_model(http_client: AsyncClient | None = None) -> Model:
     if _is_azure_provider() and _validate_azure_credentials():
         logger.info(f"Using Azure OpenAI text model: {settings.TEXT_MODEL}")
         return _create_azure_model(settings.TEXT_MODEL, http_client)
+
+    # Fallback to Gemini - validate credentials
+    if not _validate_gemini_credentials():
+        raise ValueError(
+            "No valid LLM provider configured. Either set Azure OpenAI "
+            "credentials (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY) "
+            "or Gemini credentials (GEMINI_API_KEY)."
+        )
 
     logger.info(f"Using Gemini text model: {settings.TEXT_MODEL}")
     return _create_gemini_model(settings.TEXT_MODEL, http_client)
@@ -175,6 +199,14 @@ def get_embedding_client() -> Any:
             azure_endpoint=settings.AZURE_OPENAI_ENDPOINT or "",
             api_key=settings.AZURE_OPENAI_API_KEY,
             api_version=settings.AZURE_OPENAI_API_VERSION,
+        )
+
+    # Fallback to Gemini - validate credentials
+    if not _validate_gemini_credentials():
+        raise ValueError(
+            "No valid embedding provider configured. Either set Azure OpenAI "
+            "credentials (AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY) "
+            "or Gemini credentials (GEMINI_API_KEY)."
         )
 
     from google import genai

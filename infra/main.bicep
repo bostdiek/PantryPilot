@@ -42,6 +42,9 @@ param geminiApiKey string = ''
 @description('Deploy Azure OpenAI for chat agent (replaces Gemini)')
 param deployAzureOpenAI bool = false
 
+@description('Azure OpenAI location (model availability varies by region - East US 2 has best coverage)')
+param azureOpenAILocation string = 'eastus2'
+
 @description('Azure OpenAI API key (from deployed resource or Key Vault)')
 @secure()
 param azureOpenAIApiKey string = ''
@@ -135,7 +138,7 @@ module keyVault 'modules/keyvault.bicep' = {
       braveSearchApiKey: braveSearchApiKey
       geminiApiKey: geminiApiKey
       // Use API key from created Azure OpenAI resource if deployed, otherwise use provided key
-      azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI.outputs.apiKey : azureOpenAIApiKey
+      azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI!.outputs.apiKey : azureOpenAIApiKey
     }
   }
   dependsOn: deployAzureOpenAI ? [azureOpenAI] : []
@@ -155,10 +158,11 @@ module postgresql 'modules/postgresql.bicep' = {
 }
 
 // Azure OpenAI module for chat agent (optional - replaces Gemini)
+// Note: Azure OpenAI uses its own location parameter since model availability varies by region
 module azureOpenAI 'modules/openai.bicep' = if (deployAzureOpenAI) {
   params: {
     name: resourceNames.azureOpenAI
-    location: location
+    location: azureOpenAILocation
     tags: commonTags
     deployments: azureOpenAIDeployments
   }
@@ -284,8 +288,8 @@ module containerApps 'modules/containerapps.bicep' = {
     braveSearchApiKey: braveSearchApiKey
     geminiApiKey: geminiApiKey
     // Azure OpenAI configuration (when deployed)
-    azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI.outputs.endpoint : ''
-    azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI.outputs.apiKey : ''
+    azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : ''
+    azureOpenAIApiKey: deployAzureOpenAI ? azureOpenAI!.outputs.apiKey : ''
     llmProvider: deployAzureOpenAI ? 'azure_openai' : 'gemini'
     enableObservability: true
     tags: commonTags

@@ -73,9 +73,15 @@ class RecipeContextGenerator:
         """Get Azure OpenAI client (lazy initialization)."""
         from openai import AsyncAzureOpenAI
 
+        api_key = self._settings.AZURE_OPENAI_API_KEY
+        if not api_key:
+            raise ValueError(
+                "AZURE_OPENAI_API_KEY must be set to use the Azure OpenAI provider."
+            )
+
         return AsyncAzureOpenAI(
             azure_endpoint=self._settings.AZURE_OPENAI_ENDPOINT or "",
-            api_key=self._settings.AZURE_OPENAI_API_KEY,
+            api_key=api_key,
             api_version=self._settings.AZURE_OPENAI_API_VERSION,
         )
 

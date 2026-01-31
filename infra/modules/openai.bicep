@@ -39,6 +39,9 @@ resource openai 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
       defaultAction: publicNetworkAccess ? 'Allow' : 'Deny'
       bypass: 'AzureServices'
     }
+    // Allow key-based auth for development. For production, consider:
+    // - Setting disableLocalAuth: true to enforce Azure AD authentication only
+    // - Using managed identity instead of API keys for better security
     disableLocalAuth: false
   }
 }
@@ -79,6 +82,7 @@ output principalId string = openai.identity.principalId
 @description('The deployed model names')
 output deploymentNames array = [for (deployment, i) in deployments: modelDeployments[i].name]
 
+// Note: API key is stored securely in Key Vault by main.bicep
+// For production, consider using managed identity (disableLocalAuth: true) instead
 @description('The primary API key for the Azure OpenAI resource')
-@secure()
 output apiKey string = openai.listKeys().key1

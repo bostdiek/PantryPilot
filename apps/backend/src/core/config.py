@@ -39,6 +39,9 @@ class Settings(BaseSettings):
 
     # Model names - generic names that apply to either provider
     # These are used by the model factory to select the appropriate model
+    # IMPORTANT: When using Azure OpenAI, override ALL model names to match
+    # your Azure deployment names (e.g., gpt-4o-mini, text-embedding-3-small)
+    # The defaults below are Gemini-specific and will not work with Azure.
     CHAT_MODEL: str = "gemini-2.5-flash"  # General chat/completion model
     MULTIMODAL_MODEL: str = "gemini-2.5-flash-lite"  # Image/vision tasks
     EMBEDDING_MODEL: str = "gemini-embedding-001"  # Semantic embeddings
@@ -51,6 +54,8 @@ class Settings(BaseSettings):
     # Azure OpenAI Configuration
     AZURE_OPENAI_ENDPOINT: str | None = None
     AZURE_OPENAI_API_KEY: str | None = None
+    # Using preview API for latest features; consider stable version for production
+    # See: https://learn.microsoft.com/en-us/azure/ai-services/openai/api-version-deprecation
     AZURE_OPENAI_API_VERSION: str = "2024-10-01-preview"
 
     # External tool providers

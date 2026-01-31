@@ -81,12 +81,15 @@ async def get_outdated_model_stats(session) -> dict[str, int]:
 
 
 async def reindex_embedding_index(session) -> None:
-    """Reindex the embedding vector index for optimal search performance."""
+    """Reindex the embedding vector index for optimal search performance.
+
+    Note: Using non-concurrent REINDEX as CONCURRENTLY requires running outside
+    a transaction block. This will lock the index during reindexing but ensures
+    compatibility with the session context.
+    """
     logger.info("🔄 Reindexing embedding vector index...")
     try:
-        await session.execute(
-            text("REINDEX INDEX CONCURRENTLY idx_recipe_names_embedding")
-        )
+        await session.execute(text("REINDEX INDEX idx_recipe_names_embedding"))
         logger.info("✅ Embedding index reindexed successfully")
     except Exception as e:
         logger.warning(f"⚠️ Failed to reindex (may not exist yet): {e}")
