@@ -21,19 +21,26 @@ param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
 param azureOpenAIDeployments = [
   // Chat/completion model for chat agent, recipe extraction, and title generation
   {
-    name: 'gpt-4o-mini'
-    model: 'gpt-4o-mini'
-    version: '2024-07-18'
+    name: 'gpt-4.1'
+    model: 'gpt-4.1'
+    version: '2025-02-24-preview'
     capacity: 20
   }
-  // Multimodal model for image-based recipe extraction
+  // Multimodal model for image-based recipe extraction (reasoning model with low effort)
   {
-    name: 'gpt-4o'
-    model: 'gpt-4o'
-    version: '2024-08-06'
+    name: 'gpt-5-mini'
+    model: 'gpt-5-mini'
+    version: '2025-02-24-preview'
     capacity: 10
   }
-  // Embedding model for semantic search (768 dimensions)
+  // Text model for fast text tasks like context generation (reasoning model with low effort)
+  {
+    name: 'gpt-5-nano'
+    model: 'gpt-5-nano'
+    version: '2025-02-24-preview'
+    capacity: 20
+  }
+  // Embedding model for semantic search (1536 dimensions)
   {
     name: 'text-embedding-3-small'
     model: 'text-embedding-3-small'

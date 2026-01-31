@@ -30,10 +30,31 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from core.config import get_settings
 
 
+# OpenAI reasoning models that support reasoning_effort parameter
+REASONING_MODELS = {
+    "gpt-5-mini",
+    "gpt-5-nano",
+    "o1-mini",
+    "o1-preview",
+    "o1",
+    "o3-mini",
+}
+
+
 if TYPE_CHECKING:
     from httpx import AsyncClient
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_azure_endpoint(endpoint: str) -> str:
+    """Normalize Azure OpenAI endpoint.
+
+    Azure endpoints are typically provided as `https://{resource}.openai.azure.com/`.
+    Trailing slashes can lead to `//openai/...` URLs, which Azure may treat as a
+    different path and return 404.
+    """
+    return endpoint.rstrip("/")
 
 
 def _is_azure_provider() -> bool:
@@ -45,7 +66,11 @@ def _is_azure_provider() -> bool:
 def _validate_azure_credentials() -> bool:
     """Validate that Azure OpenAI credentials are properly configured."""
     settings = get_settings()
-    if not settings.AZURE_OPENAI_ENDPOINT or not settings.AZURE_OPENAI_API_KEY:
+    if (
+        not settings.AZURE_OPENAI_ENDPOINT
+        or not settings.AZURE_OPENAI_API_KEY
+        or not settings.AZURE_OPENAI_API_VERSION
+    ):
         logger.warning(
             "LLM_PROVIDER=azure_openai but credentials missing, falling back to Gemini"
         )
@@ -66,13 +91,36 @@ def _create_azure_model(
     model_name: str,
     http_client: AsyncClient | None = None,
 ) -> Model:
-    """Create an Azure OpenAI model with the specified deployment name."""
+    """Create an Azure OpenAI model with the specified deployment name.
+
+    For reasoning models (o1, o3, gpt-5 series), automatically applies
+    low reasoning effort for faster, more cost-effective responses.
+    """
     settings = get_settings()
-    provider = OpenAIProvider(
-        base_url=f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{model_name}",
+
+    from openai import AsyncAzureOpenAI
+
+    # AZURE_OPENAI_ENDPOINT is validated in _validate_azure_credentials
+    azure_endpoint = _normalize_azure_endpoint(settings.AZURE_OPENAI_ENDPOINT or "")
+    azure_client = AsyncAzureOpenAI(
+        azure_endpoint=azure_endpoint,
         api_key=settings.AZURE_OPENAI_API_KEY,
+        api_version=settings.AZURE_OPENAI_API_VERSION,
         http_client=http_client,
     )
+
+    provider = OpenAIProvider(openai_client=azure_client)
+
+    # Apply low reasoning effort for reasoning models
+    if model_name in REASONING_MODELS:
+        logger.info(f"Applying low reasoning effort for reasoning model: {model_name}")
+        # reasoning_effort is a newer parameter not in TypedDict yet
+        return OpenAIModel(  # type: ignore[call-overload,no-any-return]
+            model_name,
+            provider=provider,
+            settings={"reasoning_effort": "low"},
+        )
+
     return OpenAIModel(model_name, provider=provider)
 
 
@@ -195,8 +243,11 @@ def get_embedding_client() -> Any:
         from openai import AsyncAzureOpenAI
 
         logger.info(f"Using Azure OpenAI for embeddings: {settings.EMBEDDING_MODEL}")
+        # AZURE_OPENAI_ENDPOINT is validated in _validate_azure_credentials
         return AsyncAzureOpenAI(
-            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT or "",
+            azure_endpoint=_normalize_azure_endpoint(
+                settings.AZURE_OPENAI_ENDPOINT or ""
+            ),
             api_key=settings.AZURE_OPENAI_API_KEY,
             api_version=settings.AZURE_OPENAI_API_VERSION,
         )

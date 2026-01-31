@@ -13,7 +13,7 @@ import logging
 import sys
 from datetime import UTC, datetime
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.orm import selectinload
 
 from dependencies.db import AsyncSessionLocal
@@ -39,11 +39,22 @@ async def get_pending_count(
     session,
     force_all: bool = False,
     outdated_model: str | None = None,
+    no_model_recorded: bool = False,
 ) -> int:
     """Get count of recipes needing embeddings."""
     if force_all:
         # Count all recipes
         result = await session.execute(select(func.count(Recipe.id)))
+    elif no_model_recorded:
+        # Count recipes with embeddings but no model recorded
+        result = await session.execute(
+            select(func.count(Recipe.id)).where(
+                and_(
+                    Recipe.embedding.isnot(None),
+                    Recipe.embedding_model.is_(None),
+                )
+            )
+        )
     elif outdated_model:
         # Count recipes with specific outdated model or no model recorded
         result = await session.execute(
@@ -95,10 +106,15 @@ async def reindex_embedding_index(session) -> None:
         logger.warning(f"⚠️ Failed to reindex (may not exist yet): {e}")
 
 
-def _build_where_clause(force_all: bool, outdated_model: str | None):
+def _build_where_clause(
+    force_all: bool, outdated_model: str | None, no_model_recorded: bool
+):
     """Build the WHERE clause based on processing mode."""
     if force_all:
         return True  # All recipes
+    if no_model_recorded:
+        # Only recipes with embeddings but no model recorded
+        return and_(Recipe.embedding.isnot(None), Recipe.embedding_model.is_(None))
     if outdated_model:
         return or_(
             Recipe.embedding_model == outdated_model,
@@ -143,6 +159,7 @@ async def backfill_embeddings(
     limit: int | None = None,
     force_all: bool = False,
     outdated_model: str | None = None,
+    no_model_recorded: bool = False,
 ) -> dict:
     """Backfill embeddings for recipes.
 
@@ -151,6 +168,8 @@ async def backfill_embeddings(
         limit: Maximum number of recipes to process (None for all)
         force_all: If True, regenerate embeddings for ALL recipes
         outdated_model: If set, only update recipes with this model name
+        no_model_recorded: If True, only update recipes with embeddings but
+            no model recorded
 
     Returns:
         Summary statistics
@@ -162,7 +181,13 @@ async def backfill_embeddings(
         "failed": 0,
         "start_time": datetime.now(UTC),
         "mode": (
-            "force_all" if force_all else ("outdated" if outdated_model else "missing")
+            "force_all"
+            if force_all
+            else (
+                "no_model"
+                if no_model_recorded
+                else ("outdated" if outdated_model else "missing")
+            )
         ),
     }
 
@@ -172,7 +197,10 @@ async def backfill_embeddings(
         logger.info(f"📊 Embedding model statistics: {model_stats}")
 
         stats["total_pending"] = await get_pending_count(
-            session, force_all=force_all, outdated_model=outdated_model
+            session,
+            force_all=force_all,
+            outdated_model=outdated_model,
+            no_model_recorded=no_model_recorded,
         )
         logger.info(f"📊 Found {stats['total_pending']} recipes to process")
 
@@ -180,7 +208,7 @@ async def backfill_embeddings(
             logger.info("🔍 DRY RUN - no changes will be made")
             return stats
 
-        where_clause = _build_where_clause(force_all, outdated_model)
+        where_clause = _build_where_clause(force_all, outdated_model, no_model_recorded)
         processed = 0
 
         while True:
@@ -253,6 +281,9 @@ Examples:
   # Update only recipes using a specific outdated model
   python backfill_embeddings.py --outdated-model gemini-embedding-exp-001
 
+  # Update only recipes with embeddings but no model recorded
+  python backfill_embeddings.py --no-model-recorded
+
   # Limit processing for testing
   python backfill_embeddings.py --limit 10
         """,
@@ -276,11 +307,20 @@ Examples:
         default=None,
         help="Only update recipes with this specific embedding model name",
     )
+    parser.add_argument(
+        "--no-model-recorded",
+        action="store_true",
+        help="Only update recipes with embeddings but no model name recorded",
+    )
     args = parser.parse_args()
 
     # Validate mutually exclusive options
-    if args.force_all and args.outdated_model:
-        parser.error("--force-all and --outdated-model are mutually exclusive")
+    exclusive_flags = [args.force_all, args.outdated_model, args.no_model_recorded]
+    if sum(bool(f) for f in exclusive_flags) > 1:
+        parser.error(
+            "--force-all, --outdated-model, and --no-model-recorded are "
+            "mutually exclusive"
+        )
 
     current_model = get_current_embedding_model_name()
     print(f"🔧 Current embedding model: {current_model}")
@@ -291,6 +331,7 @@ Examples:
             limit=args.limit,
             force_all=args.force_all,
             outdated_model=args.outdated_model,
+            no_model_recorded=args.no_model_recorded,
         )
     )
 
