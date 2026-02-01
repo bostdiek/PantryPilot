@@ -47,6 +47,27 @@ def _is_azure_provider() -> bool:
     return settings.LLM_PROVIDER == "azure_openai"
 
 
+def _is_reasoning_model(model_name: str) -> bool:
+    """Check if a model is an Azure OpenAI reasoning model.
+    
+    Reasoning models (gpt-5-*, o1-*, o3-*) don't support max_tokens or temperature.
+    They use max_completion_tokens instead.
+    
+    Args:
+        model_name: The model deployment name to check.
+        
+    Returns:
+        True if the model is a reasoning model, False otherwise.
+    """
+    # Check against explicit set for known reasoning models
+    if model_name in REASONING_MODELS:
+        return True
+    
+    # Check for common prefixes/patterns
+    reasoning_prefixes = ("gpt-5-", "o1-", "o3-")
+    return model_name.startswith(reasoning_prefixes)
+
+
 class RecipeContextGenerator:
     """Generates contextual prefixes for recipe embeddings.
 
@@ -175,7 +196,7 @@ class RecipeContextGenerator:
 
         # Reasoning models (gpt-5-*, o1-*, o3-*) use max_completion_tokens
         # Standard models use max_tokens
-        if model_name in REASONING_MODELS:
+        if _is_reasoning_model(model_name):
             response = await client.chat.completions.create(
                 model=model_name,
                 messages=[{"role": "user", "content": prompt}],
