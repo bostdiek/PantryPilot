@@ -5,6 +5,8 @@ import logging
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
+from services.ai.model_factory import get_text_model
+
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +34,21 @@ Examples:
 {"title": "Leftover Chicken Recipes"}
 """
 
-# Lazy-load the agent to avoid requiring GOOGLE_API_KEY at import time
+# Lazy-load the agent to avoid requiring API keys at import time
 _title_agent: Agent[None, GeneratedTitle] | None = None
 
 
 def _get_title_agent() -> Agent[None, GeneratedTitle]:
-    """Get or create the title generation agent (lazy initialization)."""
+    """Get or create the title generation agent (lazy initialization).
+
+    Uses centralized model factory for provider selection and credential
+    validation.
+    """
     global _title_agent
     if _title_agent is None:
+        model = get_text_model()
         _title_agent = Agent(
-            "gemini-2.5-flash-lite",
+            model,
             output_type=GeneratedTitle,
             system_prompt=TITLE_SYSTEM_PROMPT,
         )

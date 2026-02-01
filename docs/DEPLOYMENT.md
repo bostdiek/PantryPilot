@@ -60,3 +60,122 @@ Frontend-only (optional, via npm):
 - Configure database credentials in `.env.dev` and `.env.prod`
 
 See the root `README.md` for an overview and quick-start commands, and `docs/API_DESIGN.md` for API details.
+
+## Azure OpenAI Setup
+
+PantryPilot supports Azure OpenAI as an alternative to Google Gemini for all AI features including chat, recipe extraction, embeddings, and context generation.
+
+### Option 1: Bicep Deployment (Recommended)
+
+The Bicep infrastructure includes Azure OpenAI provisioning with all required model deployments:
+
+1. Enable Azure OpenAI in parameters:
+   ```bash
+   # In infra/parameters/main.dev.bicepparam or main.prod.bicepparam
+   param deployAzureOpenAI = true
+   ```
+
+2. Deploy infrastructure:
+   ```bash
+   az deployment group create \
+     --resource-group pantrypilot-rg \
+     --template-file infra/main.bicep \
+     --parameters infra/parameters/main.dev.bicepparam
+   ```
+
+3. Get the deployment outputs:
+   ```bash
+   az deployment group show \
+     --resource-group pantrypilot-rg \
+     --name main \
+     --query properties.outputs
+   ```
+
+### Option 2: Manual Azure CLI
+
+1. Create Azure OpenAI resource:
+   ```bash
+   az cognitiveservices account create \
+     --name pantrypilot-openai \
+     --resource-group pantrypilot-rg \
+     --kind OpenAI \
+     --sku S0 \
+     --location eastus
+   ```
+
+2. Deploy required models:
+   ```bash
+   # Chat/completion model (gpt-4o-mini)
+   az cognitiveservices account deployment create \
+     --name pantrypilot-openai \
+     --resource-group pantrypilot-rg \
+     --deployment-name gpt-4o-mini \
+     --model-name gpt-4o-mini \
+     --model-version "2024-07-18" \
+     --model-format OpenAI \
+     --sku-capacity 10 \
+     --sku-name Standard
+
+   # Multimodal model for image extraction (gpt-4o)
+   az cognitiveservices account deployment create \
+     --name pantrypilot-openai \
+     --resource-group pantrypilot-rg \
+     --deployment-name gpt-4o \
+     --model-name gpt-4o \
+     --model-version "2024-08-06" \
+     --model-format OpenAI \
+     --sku-capacity 5 \
+     --sku-name Standard
+
+   # Embedding model for semantic search
+   az cognitiveservices account deployment create \
+     --name pantrypilot-openai \
+     --resource-group pantrypilot-rg \
+     --deployment-name text-embedding-3-small \
+     --model-name text-embedding-3-small \
+     --model-version "1" \
+     --model-format OpenAI \
+     --sku-capacity 50 \
+     --sku-name Standard
+   ```
+
+3. Get endpoint and API key:
+   ```bash
+   # Endpoint
+   az cognitiveservices account show \
+     --name pantrypilot-openai \
+     --resource-group pantrypilot-rg \
+     --query properties.endpoint -o tsv
+
+   # API Key
+   az cognitiveservices account keys list \
+     --name pantrypilot-openai \
+     --resource-group pantrypilot-rg \
+     --query key1 -o tsv
+   ```
+
+### Configure Environment
+
+Add to your `.env.dev` or `.env.prod`:
+
+```bash
+LLM_PROVIDER=azure_openai
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your-api-key
+AZURE_OPENAI_API_VERSION=2024-10-01-preview
+
+# Model deployments (Azure OpenAI deployment names)
+CHAT_MODEL=gpt-4o-mini                    # Chat, recipe extraction, titles
+TEXT_MODEL=gpt-4o-mini                    # Text-only generation
+MULTIMODAL_MODEL=gpt-4o                   # Image-based recipe extraction
+EMBEDDING_MODEL=text-embedding-3-small    # Semantic search
+```
+
+### Verify Configuration
+
+Start the backend and check logs for:
+```
+INFO: Using Azure OpenAI chat model: gpt-4o-mini
+INFO: Using Azure OpenAI for embeddings: text-embedding-3-small
+INFO: Using Azure OpenAI text model: gpt-4o-mini
+```

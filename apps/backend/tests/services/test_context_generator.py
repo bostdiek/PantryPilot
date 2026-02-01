@@ -201,7 +201,7 @@ class TestGenerateContext:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(
                 name="Pasta Primavera",
@@ -227,7 +227,7 @@ class TestGenerateContext:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(
                 name="Test Recipe",
@@ -253,7 +253,7 @@ class TestGenerateContext:
             side_effect=Exception("API rate limit exceeded")
         )
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(
                 name="Fallback Recipe",
@@ -278,13 +278,116 @@ class TestGenerateContext:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             generator = RecipeContextGenerator(api_key="test-key")
             recipe = MockRecipe(name="Test")
 
             result = await generator.generate_context(recipe)  # type: ignore[arg-type]
 
         assert result == "Context with leading and trailing spaces."
+
+
+class TestAzureProviderSupport:
+    """Tests for Azure OpenAI provider support."""
+
+    @pytest.mark.asyncio
+    async def test_uses_azure_when_configured(self) -> None:
+        """Test uses Azure OpenAI when LLM_PROVIDER is azure_openai."""
+        from services.context_generator import RecipeContextGenerator
+
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "This is an Italian dinner recipe."
+        mock_response.choices = [mock_choice]
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("services.context_generator._is_azure_provider", return_value=True),
+            patch("services.context_generator.get_settings") as mock_settings,
+            patch("openai.AsyncAzureOpenAI", return_value=mock_client),
+        ):
+            mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
+                "https://test.openai.azure.com"
+            )
+            mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
+            mock_settings.return_value.AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
+            mock_settings.return_value.TEXT_MODEL = "gpt-35-turbo"
+
+            generator = RecipeContextGenerator()
+            recipe = MockRecipe(name="Pasta", ethnicity="Italian", course_type="dinner")
+
+            result = await generator.generate_context(recipe)  # type: ignore[arg-type]
+
+            assert result == "This is an Italian dinner recipe."
+            mock_client.chat.completions.create.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_azure_returns_none_on_empty_response(self) -> None:
+        """Test Azure path returns None when response is empty."""
+        from services.context_generator import RecipeContextGenerator
+
+        mock_response = MagicMock()
+        mock_response.choices = []
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("services.context_generator._is_azure_provider", return_value=True),
+            patch("services.context_generator.get_settings") as mock_settings,
+            patch("openai.AsyncAzureOpenAI", return_value=mock_client),
+        ):
+            mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
+                "https://test.openai.azure.com"
+            )
+            mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
+            mock_settings.return_value.AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
+            mock_settings.return_value.TEXT_MODEL = "gpt-35-turbo"
+
+            generator = RecipeContextGenerator()
+            recipe = MockRecipe(name="Fallback Recipe", ethnicity="Mexican")
+
+            result = await generator.generate_context(recipe)  # type: ignore[arg-type]
+
+            # Should fall back to metadata-based context
+            assert "Mexican recipe" in result
+            assert "Fallback Recipe" in result
+
+    @pytest.mark.asyncio
+    async def test_azure_fallback_on_exception(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test falls back when Azure raises exception."""
+        from services.context_generator import RecipeContextGenerator
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(
+            side_effect=Exception("Azure API error")
+        )
+
+        with (
+            patch("services.context_generator._is_azure_provider", return_value=True),
+            patch("services.context_generator.get_settings") as mock_settings,
+            patch("openai.AsyncAzureOpenAI", return_value=mock_client),
+        ):
+            mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
+                "https://test.openai.azure.com"
+            )
+            mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
+            mock_settings.return_value.AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
+            mock_settings.return_value.TEXT_MODEL = "gpt-35-turbo"
+
+            generator = RecipeContextGenerator()
+            recipe = MockRecipe(name="Error Recipe", course_type="dinner")
+
+            result = await generator.generate_context(recipe)  # type: ignore[arg-type]
+
+            # Should use fallback
+            assert "dinner" in result
+            assert "Error Recipe" in result
+            assert "Failed to generate context" in caplog.text
 
 
 class TestSingletonAndConvenienceFunction:
@@ -298,7 +401,7 @@ class TestSingletonAndConvenienceFunction:
 
         module._context_generator = None
 
-        with patch("services.context_generator.genai.Client"):
+        with patch("google.genai.Client"):
             gen1 = get_context_generator()
             gen2 = get_context_generator()
 
@@ -317,7 +420,7 @@ class TestSingletonAndConvenienceFunction:
         mock_client.aio.models = MagicMock()
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
 
-        with patch("services.context_generator.genai.Client", return_value=mock_client):
+        with patch("google.genai.Client", return_value=mock_client):
             # Reset singleton
             import services.context_generator as module
 

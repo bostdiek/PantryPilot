@@ -40,6 +40,12 @@ class Recipe(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # Embedding model tracking for version management
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
 

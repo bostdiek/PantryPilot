@@ -39,6 +39,26 @@ param braveSearchApiKey string = ''
 @secure()
 param geminiApiKey string = ''
 
+@description('Deploy Azure OpenAI for chat agent (replaces Gemini)')
+param deployAzureOpenAI bool = false
+
+@description('Azure OpenAI location (model availability varies by region - East US 2 has best coverage)')
+param azureOpenAILocation string = 'eastus2'
+
+@description('Azure OpenAI API key (from deployed resource or Key Vault)')
+@secure()
+param azureOpenAIApiKey string = ''
+
+@description('Azure OpenAI model deployments to create')
+param azureOpenAIDeployments array = [
+  {
+    name: 'gpt-4o-mini'
+    model: 'gpt-4o-mini'
+    version: '2024-07-18'
+    capacity: 10
+  }
+]
+
 // Environment-specific settings
 var environmentSettings = {
   dev: {
@@ -81,6 +101,7 @@ var resourceNames = {
   staticWebApp: 'pantrypilot-frontend-${environmentName}-${uniqueSuffix}'
   emailService: 'pantrypilot-email-${environmentName}-${uniqueSuffix}'
   communicationService: 'pantrypilot-acs-${environmentName}-${uniqueSuffix}'
+  azureOpenAI: 'ppoai${environmentName}${uniqueSuffix}'
 }
 
 // Tags for resource organization
@@ -116,8 +137,11 @@ module keyVault 'modules/keyvault.bicep' = {
       upstashRedisRestToken: upstashRedisRestToken
       braveSearchApiKey: braveSearchApiKey
       geminiApiKey: geminiApiKey
+      // Use API key from created Azure OpenAI resource if deployed, otherwise use provided key
+      azureOpenAIApiKey: resolvedAzureOpenAIApiKey
     }
   }
+  dependsOn: deployAzureOpenAI ? [azureOpenAI] : []
 }
 
 // PostgreSQL Flexible Server module
@@ -132,6 +156,26 @@ module postgresql 'modules/postgresql.bicep' = {
     tags: commonTags
   }
 }
+
+// Azure OpenAI module for chat agent (optional - replaces Gemini)
+// Note: Azure OpenAI uses its own location parameter since model availability varies by region
+module azureOpenAI 'modules/openai.bicep' = if (deployAzureOpenAI) {
+  params: {
+    name: resourceNames.azureOpenAI
+    location: azureOpenAILocation
+    tags: commonTags
+    deployments: azureOpenAIDeployments
+  }
+}
+
+// Reference the Azure OpenAI account so we can read keys without exposing them as module outputs
+// Note: Use resourceNames.azureOpenAI directly instead of module output to avoid ARM reference() in existing resource name
+resource azureOpenAIAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = if (deployAzureOpenAI) {
+  name: resourceNames.azureOpenAI
+  dependsOn: [azureOpenAI]
+}
+
+var resolvedAzureOpenAIApiKey = deployAzureOpenAI ? azureOpenAIAccount!.listKeys().key1 : azureOpenAIApiKey
 
 // Container Apps Environment and Backend App
 // Use quickstart placeholder for initial deployment, or ACR image after CI/CD builds
@@ -252,6 +296,15 @@ module containerApps 'modules/containerapps.bicep' = {
     frontendUrl: frontendUrl
     braveSearchApiKey: braveSearchApiKey
     geminiApiKey: geminiApiKey
+    // Azure OpenAI configuration (when deployed)
+    azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : ''
+    azureOpenAIApiKey: deployAzureOpenAI ? resolvedAzureOpenAIApiKey : ''
+    llmProvider: deployAzureOpenAI ? 'azure_openai' : 'gemini'
+    // Model names - use Azure deployment names when Azure OpenAI is enabled
+    chatModel: deployAzureOpenAI ? 'gpt-4.1-mini' : 'gemini-2.5-flash'
+    multimodalModel: deployAzureOpenAI ? 'gpt-5-mini' : 'gemini-2.5-flash-lite'
+    textModel: deployAzureOpenAI ? 'gpt-5-nano' : 'gemini-2.5-flash-lite'
+    embeddingModel: deployAzureOpenAI ? 'text-embedding-3-small' : 'gemini-embedding-001'
     enableObservability: true
     tags: commonTags
   }
@@ -310,3 +363,11 @@ output communicationServiceName string = communication.outputs.communicationServ
 @description('The name of the Email Service (for Azure portal reference).')
 output emailServiceName string = communication.outputs.emailServiceName
 output emailFromDomain string? = communication.outputs.?fromSenderDomain
+
+// Azure OpenAI outputs (only available when deployAzureOpenAI is true)
+@description('Azure OpenAI endpoint URL for chat agent')
+output azureOpenAIEndpoint string = azureOpenAI.?outputs.?endpoint ?? ''
+@description('Azure OpenAI resource name')
+output azureOpenAIName string = azureOpenAI.?outputs.?name ?? ''
+@description('Deployed Azure OpenAI model names')
+output azureOpenAIDeploymentNames array = azureOpenAI.?outputs.?deploymentNames ?? []
