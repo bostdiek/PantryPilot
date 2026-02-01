@@ -354,7 +354,7 @@ class TestAzureProviderSupport:
             result = await generator.generate_context(recipe)  # type: ignore[arg-type]
 
             assert result == "This is a reasoning model response."
-            
+
             # Verify the call was made with max_completion_tokens, not max_tokens
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
             assert "max_completion_tokens" in call_kwargs
@@ -392,7 +392,7 @@ class TestAzureProviderSupport:
             result = await generator.generate_context(recipe)  # type: ignore[arg-type]
 
             assert result == "This is a standard model response."
-            
+
             # Verify the call was made with max_tokens and temperature, not
             # max_completion_tokens
             call_kwargs = mock_client.chat.completions.create.call_args.kwargs
