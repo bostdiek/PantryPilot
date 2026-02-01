@@ -13,6 +13,7 @@ import RestaurantIcon from '../components/ui/icons/restaurant.svg?react';
 import { useDisplayName } from '../stores/useAuthStore';
 import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
+import { toLocalYyyyMmDd } from '../utils/dateUtils';
 
 const HomePage: React.FC = () => {
   // Get data from stores (already loaded by the route loader)
@@ -20,9 +21,9 @@ const HomePage: React.FC = () => {
   const { currentWeek, isLoading: mealPlanLoading } = useMealPlanStore();
   const displayName = useDisplayName();
 
-  // Get today's meal plan
+  // Get today's meal plan (using local timezone)
   const todayDate = new Date();
-  const yyyyMmDd = todayDate.toISOString().slice(0, 10);
+  const yyyyMmDd = toLocalYyyyMmDd(todayDate);
   const todaysDay = currentWeek?.days.find((d) => d.date === yyyyMmDd);
   const todaysEntries = todaysDay?.entries ?? [];
 
