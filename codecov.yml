@@ -5,7 +5,18 @@ coverage:
   status:
     project:
       default:
-        # Require overall project coverage to not drop more than 1%
+        # Make default project check informational (won't block PRs)
+        # The combined coverage can fluctuate when frontend tests are added
+        informational: true
+      backend:
+        # Backend-specific coverage target
+        flags:
+          - backend
+        threshold: 1%
+      frontend:
+        # Frontend-specific coverage target
+        flags:
+          - frontend
         threshold: 1%
     patch:
       default:

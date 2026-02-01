@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from core.config import get_settings
+from services.ai.model_factory import REASONING_MODELS
 
 
 if TYPE_CHECKING:
@@ -44,6 +45,27 @@ def _is_azure_provider() -> bool:
     """Check if Azure OpenAI should be used based on configuration."""
     settings = get_settings()
     return settings.LLM_PROVIDER == "azure_openai"
+
+
+def _is_reasoning_model(model_name: str) -> bool:
+    """Check if a model is an Azure OpenAI reasoning model.
+
+    Reasoning models (gpt-5-*, o1-*, o3-*) don't support max_tokens or temperature.
+    They use max_completion_tokens instead.
+
+    Args:
+        model_name: The model deployment name to check.
+
+    Returns:
+        True if the model is a reasoning model, False otherwise.
+    """
+    # Check against explicit set for known reasoning models
+    if model_name in REASONING_MODELS:
+        return True
+
+    # Check for common prefixes/patterns
+    reasoning_prefixes = ("gpt-5-", "o1-", "o3-")
+    return model_name.startswith(reasoning_prefixes)
 
 
 class RecipeContextGenerator:
@@ -170,12 +192,23 @@ class RecipeContextGenerator:
     async def _generate_with_azure(self, prompt: str, recipe_name: str) -> str | None:
         """Generate context using Azure OpenAI."""
         client = self._get_azure_client()
-        response = await client.chat.completions.create(
-            model=self._settings.TEXT_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=CONTEXT_MAX_TOKENS,
-            temperature=0.3,
-        )
+        model_name = self._settings.TEXT_MODEL
+
+        # Reasoning models (gpt-5-*, o1-*, o3-*) use max_completion_tokens
+        # Standard models use max_tokens
+        if _is_reasoning_model(model_name):
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=CONTEXT_MAX_TOKENS,
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=CONTEXT_MAX_TOKENS,
+                temperature=0.3,
+            )
         if response.choices and response.choices[0].message.content:
             content: str = response.choices[0].message.content
             return content.strip()

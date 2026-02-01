@@ -324,6 +324,84 @@ class TestAzureProviderSupport:
             mock_client.chat.completions.create.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_azure_reasoning_model_uses_max_completion_tokens(self) -> None:
+        """Test Azure reasoning models use max_completion_tokens without temperature."""
+        from services.context_generator import RecipeContextGenerator
+
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "This is a reasoning model response."
+        mock_response.choices = [mock_choice]
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("services.context_generator._is_azure_provider", return_value=True),
+            patch("services.context_generator.get_settings") as mock_settings,
+            patch("openai.AsyncAzureOpenAI", return_value=mock_client),
+        ):
+            mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
+                "https://test.openai.azure.com"
+            )
+            mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
+            mock_settings.return_value.AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
+            mock_settings.return_value.TEXT_MODEL = "gpt-5-mini"
+
+            generator = RecipeContextGenerator()
+            recipe = MockRecipe(name="Test", ethnicity="Italian", course_type="dinner")
+
+            result = await generator.generate_context(recipe)  # type: ignore[arg-type]
+
+            assert result == "This is a reasoning model response."
+
+            # Verify the call was made with max_completion_tokens, not max_tokens
+            call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+            assert "max_completion_tokens" in call_kwargs
+            assert "max_tokens" not in call_kwargs
+            assert "temperature" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_azure_standard_model_uses_max_tokens_and_temperature(self) -> None:
+        """Test Azure standard models use max_tokens and temperature."""
+        from services.context_generator import RecipeContextGenerator
+
+        mock_response = MagicMock()
+        mock_choice = MagicMock()
+        mock_choice.message.content = "This is a standard model response."
+        mock_response.choices = [mock_choice]
+
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("services.context_generator._is_azure_provider", return_value=True),
+            patch("services.context_generator.get_settings") as mock_settings,
+            patch("openai.AsyncAzureOpenAI", return_value=mock_client),
+        ):
+            mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
+                "https://test.openai.azure.com"
+            )
+            mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
+            mock_settings.return_value.AZURE_OPENAI_API_VERSION = "2024-02-15-preview"
+            mock_settings.return_value.TEXT_MODEL = "gpt-35-turbo"
+
+            generator = RecipeContextGenerator()
+            recipe = MockRecipe(name="Test", ethnicity="Mexican", course_type="dinner")
+
+            result = await generator.generate_context(recipe)  # type: ignore[arg-type]
+
+            assert result == "This is a standard model response."
+
+            # Verify the call was made with max_tokens and temperature, not
+            # max_completion_tokens
+            call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+            assert "max_tokens" in call_kwargs
+            assert "temperature" in call_kwargs
+            assert call_kwargs["temperature"] == 0.3
+            assert "max_completion_tokens" not in call_kwargs
+
+    @pytest.mark.asyncio
     async def test_azure_returns_none_on_empty_response(self) -> None:
         """Test Azure path returns None when response is empty."""
         from services.context_generator import RecipeContextGenerator
@@ -430,3 +508,66 @@ class TestSingletonAndConvenienceFunction:
             result = await generate_recipe_context(recipe)  # type: ignore[arg-type]
 
         assert result == "Convenience function test result."
+
+
+class TestIsReasoningModel:
+    """Tests for _is_reasoning_model helper function."""
+
+    def test_recognizes_known_reasoning_models(self) -> None:
+        """Test that known reasoning models from REASONING_MODELS set are recognized."""
+        from services.context_generator import _is_reasoning_model
+
+        # Test all models in the REASONING_MODELS set
+        assert _is_reasoning_model("gpt-5-mini") is True
+        assert _is_reasoning_model("gpt-5-nano") is True
+        assert _is_reasoning_model("o1-mini") is True
+        assert _is_reasoning_model("o1-preview") is True
+        assert _is_reasoning_model("o1") is True
+        assert _is_reasoning_model("o3-mini") is True
+
+    def test_recognizes_reasoning_model_prefixes(self) -> None:
+        """Test that models with reasoning prefixes are recognized."""
+        from services.context_generator import _is_reasoning_model
+
+        # Test gpt-5-* prefix variations
+        assert _is_reasoning_model("gpt-5-turbo") is True
+        assert _is_reasoning_model("gpt-5-large") is True
+        assert _is_reasoning_model("gpt-5-custom-deployment") is True
+
+        # Test o1-* prefix variations
+        assert _is_reasoning_model("o1-custom") is True
+        assert _is_reasoning_model("o1-deployment-name") is True
+
+        # Test o3-* prefix variations
+        assert _is_reasoning_model("o3-preview") is True
+        assert _is_reasoning_model("o3-custom") is True
+        assert _is_reasoning_model("o3") is True
+
+    def test_rejects_non_reasoning_models(self) -> None:
+        """Test that standard models are not recognized as reasoning models."""
+        from services.context_generator import _is_reasoning_model
+
+        # Standard GPT models
+        assert _is_reasoning_model("gpt-35-turbo") is False
+        assert _is_reasoning_model("gpt-4") is False
+        assert _is_reasoning_model("gpt-4-turbo") is False
+        assert _is_reasoning_model("gpt-4o") is False
+        assert _is_reasoning_model("gpt-4o-mini") is False
+
+        # Other models
+        assert _is_reasoning_model("text-embedding-ada-002") is False
+        assert _is_reasoning_model("gemini-flash") is False
+        assert _is_reasoning_model("custom-model") is False
+
+    def test_handles_deployment_names_with_suffixes(self) -> None:
+        """Test that deployment names with suffixes are handled correctly."""
+        from services.context_generator import _is_reasoning_model
+
+        # Reasoning models with custom deployment suffixes
+        assert _is_reasoning_model("gpt-5-mini-prod") is True
+        assert _is_reasoning_model("o1-mini-v2") is True
+        assert _is_reasoning_model("o3-mini-test") is True
+
+        # Non-reasoning models with similar patterns should not match
+        assert _is_reasoning_model("my-gpt-5-model") is False
+        assert _is_reasoning_model("custom-o1") is False
