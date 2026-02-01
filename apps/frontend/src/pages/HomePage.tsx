@@ -24,7 +24,32 @@ const HomePage: React.FC = () => {
   // Get today's meal plan (using local timezone)
   const todayDate = new Date();
   const yyyyMmDd = toLocalYyyyMmDd(todayDate);
-  const todaysDay = currentWeek?.days.find((d) => d.date === yyyyMmDd);
+  
+  // Try to find a matching day in the current week; if none exists (e.g., due to
+  // server/client timezone differences affecting week boundaries), fall back to
+  // the closest in-week day so we still show a relevant plan.
+  let todaysDay =
+    currentWeek?.days.find((d) => d.date === yyyyMmDd) ?? undefined;
+
+  if (!todaysDay && currentWeek?.days && currentWeek.days.length > 0) {
+    const daysSorted = [...currentWeek.days].sort((a, b) =>
+      a.date.localeCompare(b.date),
+    );
+
+    const firstDay = daysSorted[0];
+    const lastDay = daysSorted[daysSorted.length - 1];
+
+    if (yyyyMmDd <= firstDay.date) {
+      todaysDay = firstDay;
+    } else if (yyyyMmDd >= lastDay.date) {
+      todaysDay = lastDay;
+    } else {
+      todaysDay =
+        daysSorted.find((d) => d.date > yyyyMmDd) ??
+        firstDay;
+    }
+  }
+  
   const todaysEntries = todaysDay?.entries ?? [];
 
   function labelForEntry(e: {
