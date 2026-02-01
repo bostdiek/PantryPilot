@@ -47,6 +47,8 @@ resource openai 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
 }
 
 // Model deployments (e.g., gpt-4o-mini, gpt-4.1)
+// Use batchSize(1) to deploy sequentially - Azure OpenAI doesn't support parallel deployments
+@batchSize(1)
 resource modelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = [
   for deployment in deployments: {
     parent: openai
