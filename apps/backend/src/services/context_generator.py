@@ -10,6 +10,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from core.config import get_settings
+from services.ai.model_factory import REASONING_MODELS
 
 
 if TYPE_CHECKING:
@@ -170,12 +171,23 @@ class RecipeContextGenerator:
     async def _generate_with_azure(self, prompt: str, recipe_name: str) -> str | None:
         """Generate context using Azure OpenAI."""
         client = self._get_azure_client()
-        response = await client.chat.completions.create(
-            model=self._settings.TEXT_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=CONTEXT_MAX_TOKENS,
-            temperature=0.3,
-        )
+        model_name = self._settings.TEXT_MODEL
+
+        # Reasoning models (gpt-5-*, o1-*, o3-*) use max_completion_tokens
+        # Standard models use max_tokens
+        if model_name in REASONING_MODELS:
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=CONTEXT_MAX_TOKENS,
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=CONTEXT_MAX_TOKENS,
+                temperature=0.3,
+            )
         if response.choices and response.choices[0].message.content:
             content: str = response.choices[0].message.content
             return content.strip()
