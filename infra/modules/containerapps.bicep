@@ -72,6 +72,18 @@ param azureOpenAIApiKey string = ''
 @description('LLM provider to use: "gemini" or "azure_openai"')
 param llmProvider string = 'gemini'
 
+@description('Chat model name (Azure deployment name when using Azure OpenAI)')
+param chatModel string = 'gemini-2.5-flash'
+
+@description('Multimodal model name for image/vision tasks')
+param multimodalModel string = 'gemini-2.5-flash-lite'
+
+@description('Text model name for fast text tasks')
+param textModel string = 'gemini-2.5-flash-lite'
+
+@description('Embedding model name for semantic search')
+param embeddingModel string = 'gemini-embedding-001'
+
 @description('Enable observability (Application Insights + OpenTelemetry)')
 param enableObservability bool = true
 
@@ -365,6 +377,22 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                   {
                     name: 'AZURE_OPENAI_API_KEY'
                     secretRef: 'azure-openai-api-key' // pragma: allowlist secret
+                  }
+                  {
+                    name: 'CHAT_MODEL'
+                    value: chatModel
+                  }
+                  {
+                    name: 'MULTIMODAL_MODEL'
+                    value: multimodalModel
+                  }
+                  {
+                    name: 'TEXT_MODEL'
+                    value: textModel
+                  }
+                  {
+                    name: 'EMBEDDING_MODEL'
+                    value: embeddingModel
                   }
                 ],
             // Optional Application Insights for observability

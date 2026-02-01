@@ -300,6 +300,11 @@ module containerApps 'modules/containerapps.bicep' = {
     azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : ''
     azureOpenAIApiKey: deployAzureOpenAI ? resolvedAzureOpenAIApiKey : ''
     llmProvider: deployAzureOpenAI ? 'azure_openai' : 'gemini'
+    // Model names - use Azure deployment names when Azure OpenAI is enabled
+    chatModel: deployAzureOpenAI ? 'gpt-4.1-mini' : 'gemini-2.5-flash'
+    multimodalModel: deployAzureOpenAI ? 'gpt-5-mini' : 'gemini-2.5-flash-lite'
+    textModel: deployAzureOpenAI ? 'gpt-5-nano' : 'gemini-2.5-flash-lite'
+    embeddingModel: deployAzureOpenAI ? 'text-embedding-3-small' : 'gemini-embedding-001'
     enableObservability: true
     tags: commonTags
   }
