@@ -201,15 +201,21 @@ def _serialize_raw_output_for_training(raw_output: object) -> str:
 def _get_tokens_from_usage(usage: object) -> tuple[int | None, int | None]:
     """Extract prompt and completion tokens from a usage object or dict."""
     if isinstance(usage, dict):
-        prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
-        completion = usage.get("completion_tokens") or usage.get("output_tokens")
+        prompt = usage.get("prompt_tokens")
+        if prompt is None:
+            prompt = usage.get("input_tokens")
+
+        completion = usage.get("completion_tokens")
+        if completion is None:
+            completion = usage.get("output_tokens")
     else:
-        prompt = getattr(usage, "prompt_tokens", None) or getattr(
-            usage, "input_tokens", None
-        )
-        completion = getattr(usage, "completion_tokens", None) or getattr(
-            usage, "output_tokens", None
-        )
+        prompt = getattr(usage, "prompt_tokens", None)
+        if prompt is None:
+            prompt = getattr(usage, "input_tokens", None)
+
+        completion = getattr(usage, "completion_tokens", None)
+        if completion is None:
+            completion = getattr(usage, "output_tokens", None)
     return (prompt, completion)
 
 
@@ -225,9 +231,9 @@ def _sum_usage_from_messages(agent_result: object) -> tuple[int, int]:
     for msg in all_msgs:
         if isinstance(msg, ModelResponse) and hasattr(msg, "usage") and msg.usage:
             input_t, output_t = _get_tokens_from_usage(msg.usage)
-            if input_t:
+            if input_t is not None:
                 total_input += input_t
-            if output_t:
+            if output_t is not None:
                 total_output += output_t
     return (total_input, total_output)
 

@@ -364,7 +364,33 @@ def _build_filter_list(
     min_times_cooked: int | None,
     times_cooked_sq: Any,
 ) -> list[Any]:
-    """Build a list of SQL filter conditions based on provided parameters."""
+    """Build SQLAlchemy filter expressions for recipe search queries.
+
+    This helper translates optional filter arguments into a list of boolean
+    expressions that can be combined in a SQLAlchemy `where`/`and_` clause.
+
+    Args:
+        cuisine:
+            Optional cuisine string used to filter recipes whose `ethnicity`
+            matches the value case-insensitively (via `ilike` and wildcards).
+        difficulty:
+            Optional difficulty level used to filter recipes by the
+            `Recipe.difficulty` column.
+        max_cook_time:
+            If provided, filters recipes whose `total_time_minutes` is less
+            than or equal to this value.
+        min_times_cooked:
+            If provided, filters recipes that have been cooked at least this many
+            times, based on the `times_cooked_sq` subquery.
+        times_cooked_sq:
+            A SQLAlchemy subquery (or aliased selectable) that exposes a
+            `cook_count` column representing how many times each recipe was
+            cooked. Used in combination with `min_times_cooked`.
+
+    Returns:
+        A list of SQLAlchemy boolean expressions to be applied as filters
+        in recipe search queries.
+    """
     filters: list[Any] = []
     if cuisine:
         filters.append(Recipe.ethnicity.ilike(f"%{cuisine}%"))

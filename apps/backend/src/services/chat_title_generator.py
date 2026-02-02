@@ -62,6 +62,10 @@ async def generate_conversation_title(
 ) -> str:
     """Generate a title from the conversation messages.
 
+    Requires a minimum of 3 user messages for sufficient context. When fewer than
+    3 user messages are available, this function returns `current_title` if
+    provided; otherwise it raises `ValueError`.
+
     Args:
         messages: List of message dicts with 'role' and 'content' keys
         current_title: The current conversation title (often timestamp-based)
