@@ -10,10 +10,7 @@ import { useAuthStore } from './stores/useAuthStore';
 import { useMealPlanStore } from './stores/useMealPlanStore';
 import { useRecipeStore } from './stores/useRecipeStore';
 import { ApiErrorImpl } from './types/api';
-import {
-  toLocalYyyyMmDd,
-  getLocalStartOfSundayWeek,
-} from './utils/dateUtils';
+import { toLocalYyyyMmDd, getLocalStartOfSundayWeek } from './utils/dateUtils';
 // Lazy loaded pages for code-splitting (use top-level `lazy` import)
 const HomePage = lazy(() => import('./pages/HomePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -45,7 +42,9 @@ const homeLoader = async () => {
     // Start both fetches in parallel
     logger.debug('Starting parallel data fetching for home page');
     // Use browser's local week start to ensure timezone consistency
-    const localWeekStart = toLocalYyyyMmDd(getLocalStartOfSundayWeek(new Date()));
+    const localWeekStart = toLocalYyyyMmDd(
+      getLocalStartOfSundayWeek(new Date())
+    );
     await Promise.all([fetchRecipes(), loadWeek(localWeekStart)]);
     logger.debug('Home loader completed');
   } catch (error) {
@@ -183,7 +182,9 @@ const mealPlanLoader = async () => {
 
   try {
     // Use browser's local week start to ensure timezone consistency
-    const localWeekStart = toLocalYyyyMmDd(getLocalStartOfSundayWeek(new Date()));
+    const localWeekStart = toLocalYyyyMmDd(
+      getLocalStartOfSundayWeek(new Date())
+    );
     await Promise.all([
       loadWeek(localWeekStart),
       recipes.length === 0 ? fetchRecipes() : Promise.resolve(),

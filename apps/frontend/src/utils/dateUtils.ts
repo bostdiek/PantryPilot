@@ -1,5 +1,6 @@
 /**
- * Date utility functions that use the user's local timezone.
+ * @module dateUtils
+ * @description Date utility functions that use the user's local timezone.
  * These functions ensure dates are displayed and compared based on the user's browser timezone,
  * not UTC.
  */

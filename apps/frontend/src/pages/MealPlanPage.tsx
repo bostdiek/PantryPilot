@@ -52,9 +52,9 @@ import { useRecipeStore } from '../stores/useRecipeStore';
 import type { DayOption } from '../types/DayOption';
 import type { Recipe, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
 import {
-  toLocalYyyyMmDd,
-  getLocalStartOfSundayWeek,
   addDaysToDateString,
+  getLocalStartOfSundayWeek,
+  toLocalYyyyMmDd,
 } from '../utils/dateUtils';
 
 const MealPlanPage: FC = () => {
@@ -78,13 +78,12 @@ const MealPlanPage: FC = () => {
   // Load week on mount or reload if the current week doesn't match browser's local week
   useEffect(() => {
     const localWeekStart = toLocalYyyyMmDd(getLocalStartOfSundayWeek(today));
-    
+
     // Load if we don't have a week, or if the current week doesn't match the local week
     if (!currentWeek || currentWeek.weekStartDate !== localWeekStart) {
       void loadWeek(localWeekStart);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentWeek, loadWeek, today]);
 
   // Horizontal scroll helpers to reveal the full day card in view
   const scrollRef = useRef<HTMLDivElement | null>(null);
