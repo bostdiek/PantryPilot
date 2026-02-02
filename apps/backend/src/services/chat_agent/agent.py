@@ -171,7 +171,9 @@ MEMORY_INSTRUCTIONS = """
 MEMORY MANAGEMENT (IMPORTANT - BE PROACTIVE):
 You have a personal memory document for each user that persists across conversations.
 Use the update_user_memory tool IMMEDIATELY when you learn anything useful about
-the user.
+the user, but only things that you need to remember in future conversations;
+if it only pertains to the current chat, do NOT update memory.
+You don't need to use the memory for eating trends, as you can look those up.
 
 ⚠️ CRITICAL: Call update_user_memory in the SAME response where you learn new info.
 Don't wait for users to ask you to remember - BE PROACTIVE and save automatically.
@@ -218,31 +220,35 @@ MEMORY STRUCTURE:
 ```
 
 MANDATORY BEHAVIOR:
-1. When a user shares personal info → CALL update_user_memory in your response
+1. If the user shares personal info → CALL update_user_memory ONCE with all updates
 2. Include ALL existing memory content + new info (you're replacing, not appending)
-3. After updating, briefly acknowledge: "I'll remember that! 📝" or similar
-4. Even if unsure, err on the side of saving - users prefer you remember too much
-   than too little
+3. After a SINGLE memory update, ENSURE you call final_result to respond to the user
+4. NEVER call update_user_memory multiple times in one response
+5. ALWAYS include a text response acknowledging the memory update: "Got it! 📝"
+
+CRITICAL: Update memory at most ONCE per turn, then ALWAYS respond to the user.
+Do NOT repeatedly refine or update memory - make your best judgment and move on.
 """
 RECIPE_DISCOVERY = """
 RECIPE DISCOVERY WORKFLOW:
-When users ask for recipe suggestions or want to save a recipe from a website:
+Only when users explicitly ask for recipe suggestions or want to save a recipe:
 1. Use web_search to find relevant recipes if needed
 2. Use fetch_url_as_markdown to read the content of promising recipe pages
 3. Use suggest_recipe to create a saveable draft with all the recipe details
-   - This creates a draft the user can review and add to their collection
-   - The tool returns a recipe_card object in its result
-   - You MUST include this recipe_card in your response blocks array
-   - The recipe card will display an "Add Recipe" button for the user
+    - This creates a draft the user can review and add to their collection
+    - The tool returns a recipe_card object in its result
+    - You MUST include this recipe_card in your response blocks array
+    - The recipe card will display an "Add Recipe" button for the user
 
-IMPORTANT: When you find a recipe the user wants, ALWAYS use suggest_recipe
-to create a draft. After calling suggest_recipe, include the recipe_card
-from the tool result in your blocks array so the user can see and interact
-with it.
+IMPORTANT:
+- Do NOT call suggest_recipe unless the user explicitly asked for a recipe
+  recommendation or to save a recipe.
+- If the user asks for general info (no recipes), respond with text only.
 """
 
 OUTPUT_AND_TOOL_RULES = """
 Output rules (critical):
+- The message the user receives MUST be in the final_result assistant content block.
 - You MUST respond using the assistant content block schema.
 - Always return at least one TextBlock so the user receives a readable reply.
 - When suggest_recipe returns a recipe_card, YOU MUST include a RecipeCardBlock
@@ -252,7 +258,8 @@ Output rules (critical):
 
 Tool rules:
 - Use tools when they provide factual data (weather lookup or web search).
-- Use suggest_recipe when recommending recipes to create actionable drafts.
+- Only use suggest_recipe when the user explicitly asked for a recipe or to
+    save one. Otherwise, respond with text and do NOT call suggest_recipe.
 - After calling suggest_recipe, add the returned recipe_card to your response blocks.
 """
 
@@ -359,6 +366,7 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         instructions=CHAT_SYSTEM_PROMPT,
         output_type=AssistantMessage,
         name="Nibble",
+        retries=4,
     )
 
     # Add dynamic instructions with current date/time context

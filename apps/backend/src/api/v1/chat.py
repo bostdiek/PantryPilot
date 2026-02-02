@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -29,6 +30,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from core.config import get_settings
 from core.observability import get_tracer
 from core.ratelimit import check_rate_limit
 from crud.user_preferences import UserPreferencesCRUD
@@ -194,6 +196,89 @@ def _serialize_raw_output_for_training(raw_output: object) -> str:
         logger.warning("Failed to serialize raw output for training: %s", exc)
         # Fallback: convert to string representation
         return str(raw_output)
+
+
+def _get_tokens_from_usage(usage: object) -> tuple[int | None, int | None]:
+    """Extract prompt and completion tokens from a usage object or dict."""
+    if isinstance(usage, dict):
+        prompt = usage.get("prompt_tokens") or usage.get("input_tokens")
+        completion = usage.get("completion_tokens") or usage.get("output_tokens")
+    else:
+        prompt = getattr(usage, "prompt_tokens", None) or getattr(
+            usage, "input_tokens", None
+        )
+        completion = getattr(usage, "completion_tokens", None) or getattr(
+            usage, "output_tokens", None
+        )
+    return (prompt, completion)
+
+
+def _sum_usage_from_messages(agent_result: object) -> tuple[int, int]:
+    """Sum token usage from all ModelResponse messages."""
+    from pydantic_ai.messages import ModelResponse
+
+    all_msgs = (
+        agent_result.all_messages() if hasattr(agent_result, "all_messages") else []
+    )
+    total_input = 0
+    total_output = 0
+    for msg in all_msgs:
+        if isinstance(msg, ModelResponse) and hasattr(msg, "usage") and msg.usage:
+            input_t, output_t = _get_tokens_from_usage(msg.usage)
+            if input_t:
+                total_input += input_t
+            if output_t:
+                total_output += output_t
+    return (total_input, total_output)
+
+
+def _extract_usage_metrics(
+    agent_result: object | None,
+) -> tuple[int | None, int | None, int | None]:
+    """Extract token usage metrics from agent result.
+
+    For streaming runs (especially Azure OpenAI), tries multiple approaches:
+    1. Check agent_result.usage directly
+    2. Sum usage from all ModelResponse messages in all_messages()
+    3. Return None if unavailable
+    """
+    if agent_result is None:
+        return (None, None, None)
+
+    # Try direct usage access first
+    usage = getattr(agent_result, "usage", None)
+    if usage is not None:
+        prompt_tokens, completion_tokens = _get_tokens_from_usage(usage)
+        if prompt_tokens is not None or completion_tokens is not None:
+            return (prompt_tokens, completion_tokens, None)
+
+    # Fallback: sum usage from all ModelResponse messages (streaming)
+    try:
+        total_input, total_output = _sum_usage_from_messages(agent_result)
+        if total_input > 0 or total_output > 0:
+            return (
+                total_input if total_input > 0 else None,
+                total_output if total_output > 0 else None,
+                None,
+            )
+    except Exception as exc:
+        logger.debug(f"Failed to extract usage from all_messages: {exc}")
+
+    return (None, None, None)
+
+
+def _extract_model_metadata(agent_result: object | None) -> tuple[str, str | None]:
+    """Resolve model name/version for training samples."""
+    if agent_result is not None:
+        model_name = getattr(agent_result, "model_name", None)
+        model_version = getattr(agent_result, "model_version", None)
+        if model_name:
+            return (str(model_name), str(model_version) if model_version else None)
+
+    settings = get_settings()
+    provider = settings.LLM_PROVIDER
+    model_name = settings.CHAT_MODEL
+    return (f"{provider}:{model_name}", None)
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -1094,9 +1179,12 @@ async def stream_chat_message(  # noqa: C901
             data={"status": "thinking"},
         ).to_sse()
         try:
+            run_started_at = time.monotonic()
             tool_calls_by_id: dict[str, _ToolCallStart] = {}
             # Counter for tool call ordering (use list for mutability in nested scope)
             tool_call_order: list[int] = [0]
+            # Track memory update calls to detect excessive updates
+            memory_update_count: int = 0
             raw_output: object | None = None
             agent_result: object | None = None  # Avoid NameError if stream ends early
             # Track blocks emitted from tool results (e.g., recipe cards)
@@ -1142,6 +1230,19 @@ async def stream_chat_message(  # noqa: C901
                     tool_calls_by_id=tool_calls_by_id,
                     tool_call_order=tool_call_order,
                 )
+
+                # Track memory updates and warn if excessive
+                if isinstance(agent_event, FunctionToolCallEvent):
+                    tool_name = _extract_tool_name(agent_event.part)
+                    if tool_name == "update_user_memory":
+                        memory_update_count += 1
+                        if memory_update_count > 2:
+                            logger.warning(
+                                f"Excessive memory updates detected "
+                                f"(count={memory_update_count}) in conversation "
+                                f"{conversation_id} - possible agent loop"
+                            )
+
                 for sse_line in sse_events:
                     yield sse_line
                 if emitted_blocks:
@@ -1206,6 +1307,12 @@ async def stream_chat_message(  # noqa: C901
                 history_data = _build_training_prompt_data(agent_result)
                 raw_output_for_training = _serialize_raw_output_for_training(raw_output)
 
+                prompt_tokens, completion_tokens, _ = _extract_usage_metrics(
+                    agent_result
+                )
+                model_name, model_version = _extract_model_metadata(agent_result)
+                latency_ms = int((time.monotonic() - run_started_at) * 1000)
+
                 await capture_training_sample(
                     db,
                     conversation_id=conversation_id,
@@ -1214,7 +1321,11 @@ async def stream_chat_message(  # noqa: C901
                     raw_prompt=json.dumps(history_data),
                     raw_response=raw_output_for_training,
                     tool_calls=tool_calls_data,
-                    model_name="gemini-2.5-flash",
+                    model_name=model_name,
+                    model_version=model_version,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    latency_ms=latency_ms,
                 )
             except Exception as capture_exc:
                 logger.warning("Failed to capture training sample: %s", capture_exc)

@@ -60,7 +60,7 @@ async def generate_conversation_title(
     current_title: str | None = None,
     created_at: str | None = None,
 ) -> str:
-    """Generate a title from the first 3 exchanges (6 messages).
+    """Generate a title from the conversation messages.
 
     Args:
         messages: List of message dicts with 'role' and 'content' keys
@@ -74,11 +74,28 @@ async def generate_conversation_title(
         Exception: If AI generation fails
     """
     try:
-        # Format first 6 messages (3 exchanges)
-        # Limit content to first 200 chars per message for token efficiency
-        formatted = "\n".join(
-            f"{m['role']}: {m['content'][:200]}" for m in messages[:6]
-        )
+        user_messages = [m for m in messages if m.get("role") == "user"]
+        if len(user_messages) < 3:
+            if current_title:
+                return current_title
+            raise ValueError("Not enough conversation context to generate title")
+
+        # Format all messages, trimming to keep a reasonable prompt size.
+        formatted_lines: list[str] = []
+        total_chars = 0
+        max_total_chars = 20000
+        for message in messages:
+            content = message.get("content", "")
+            if not content:
+                continue
+            snippet = content[:200]
+            line = f"{message.get('role', 'unknown')}: {snippet}"
+            if total_chars + len(line) + 1 > max_total_chars:
+                break
+            formatted_lines.append(line)
+            total_chars += len(line) + 1
+
+        formatted = "\n".join(formatted_lines)
 
         # Include current title context if available
         context = f"Generate a title for:\n{formatted}"
@@ -87,9 +104,7 @@ async def generate_conversation_title(
                 f"Current title: '{current_title}' (created {created_at})\n\n{context}"
             )
 
-        logger.info(
-            f"Generating title for conversation with {len(messages[:6])} messages"
-        )
+        logger.info(f"Generating title for conversation with {len(messages)} messages")
 
         agent = _get_title_agent()
         result = await agent.run(context)
