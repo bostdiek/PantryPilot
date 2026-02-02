@@ -207,7 +207,7 @@ class TestDraftTokenGeneration:
 
     def test_create_draft_token_contains_required_claims(self) -> None:
         """Test that draft token contains all required claims."""
-        from jose import jwt
+        import jwt
 
         from core.config import get_settings
 
@@ -229,7 +229,7 @@ class TestDraftTokenGeneration:
 
     def test_create_draft_token_default_expiration(self) -> None:
         """Test that token has default 1-hour expiration."""
-        from jose import jwt
+        import jwt
 
         from core.config import get_settings
 
