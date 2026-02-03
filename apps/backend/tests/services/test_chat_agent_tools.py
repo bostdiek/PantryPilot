@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic_ai import models
@@ -531,3 +531,325 @@ class TestSearchRecipesOutput:
         }
 
         assert set(sample_recipe.keys()) >= expected_keys
+
+
+class TestBuildHybridResult:
+    """Tests for _build_hybrid_result helper function."""
+
+    def test_builds_result_with_items(self) -> None:
+        """Test building hybrid result with recipe items."""
+        from services.chat_agent.tools.recipes import _build_hybrid_result
+
+        # Create mock recipe objects
+        mock_recipe = MagicMock()
+        mock_recipe.id = uuid.uuid4()
+        mock_recipe.name = "Test Recipe"
+
+        items = [
+            {
+                "recipe": mock_recipe,
+                "times_cooked": 5,
+                "text_rank": 1,
+                "vector_rank": 2,
+            }
+        ]
+        full_payload_by_id = {str(mock_recipe.id): {"title": "Test Recipe"}}
+
+        result = _build_hybrid_result(
+            items=items,
+            full_payload_by_id=full_payload_by_id,
+            query="test query",
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+            sort_by="relevance",
+            rrf_k=60,
+        )
+
+        assert result["status"] == "ok"
+        assert result["query"] == "test query"
+        assert result["total_results"] == 1
+        assert len(result["recipes"]) == 1
+        assert result["recipes"][0]["title"] == "Test Recipe"
+        assert result["recipes"][0]["times_cooked"] == 5
+        assert "relevance_score" in result["recipes"][0]
+
+    def test_builds_result_with_fallback_flag(self) -> None:
+        """Test fallback_used flag is included in result."""
+        from services.chat_agent.tools.recipes import _build_hybrid_result
+
+        result = _build_hybrid_result(
+            items=[],
+            full_payload_by_id={},
+            query="fallback query",
+            cuisine="italian",
+            difficulty=None,
+            max_cook_time=30,
+            min_times_cooked=None,
+            sort_by="relevance",
+            rrf_k=60,
+            fallback_used=True,
+        )
+
+        assert result["fallback_used"] is True
+        assert result["filters_applied"]["cuisine"] == "italian"
+        assert result["filters_applied"]["max_cook_time"] == 30
+
+    def test_builds_empty_result(self) -> None:
+        """Test building result with no items."""
+        from services.chat_agent.tools.recipes import _build_hybrid_result
+
+        result = _build_hybrid_result(
+            items=[],
+            full_payload_by_id={},
+            query="no results",
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+            sort_by="relevance",
+            rrf_k=60,
+        )
+
+        assert result["total_results"] == 0
+        assert result["recipes"] == []
+
+
+class TestBuildMetadataResult:
+    """Tests for _build_metadata_result helper function."""
+
+    def test_builds_result_with_rows(self) -> None:
+        """Test building metadata result with recipe rows."""
+        from services.chat_agent.tools.recipes import _build_metadata_result
+
+        mock_recipe = MagicMock()
+        mock_recipe.id = uuid.uuid4()
+        mock_recipe.name = "Pasta Dish"
+
+        rows = [(mock_recipe, 3)]
+        full_payload_by_id = {str(mock_recipe.id): {"title": "Pasta Dish"}}
+
+        result = _build_metadata_result(
+            rows=rows,
+            full_payload_by_id=full_payload_by_id,
+            cuisine="italian",
+            difficulty="easy",
+            max_cook_time=30,
+            min_times_cooked=2,
+            sort_by="name",
+        )
+
+        assert result["status"] == "ok"
+        assert result["query"] is None  # No query for metadata-only search
+        assert result["total_results"] == 1
+        assert len(result["recipes"]) == 1
+        assert result["recipes"][0]["title"] == "Pasta Dish"
+        assert result["recipes"][0]["times_cooked"] == 3
+
+    def test_builds_result_with_all_filters(self) -> None:
+        """Test all filters are captured in result."""
+        from services.chat_agent.tools.recipes import _build_metadata_result
+
+        result = _build_metadata_result(
+            rows=[],
+            full_payload_by_id={},
+            cuisine="mexican",
+            difficulty="hard",
+            max_cook_time=60,
+            min_times_cooked=5,
+            sort_by="times_cooked",
+        )
+
+        assert result["filters_applied"]["cuisine"] == "mexican"
+        assert result["filters_applied"]["difficulty"] == "hard"
+        assert result["filters_applied"]["max_cook_time"] == 60
+        assert result["filters_applied"]["min_times_cooked"] == 5
+        assert result["sort_by"] == "times_cooked"
+
+
+class TestBuildFallbackQuery:
+    """Tests for _build_fallback_query helper function."""
+
+    def test_builds_query_from_cuisine(self) -> None:
+        """Test building fallback query from cuisine filter."""
+        from services.chat_agent.tools.recipes import _build_fallback_query
+
+        result = _build_fallback_query(
+            cuisine="italian",
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+        )
+
+        assert "italian cuisine" in result
+
+    def test_builds_query_from_difficulty(self) -> None:
+        """Test building fallback query from difficulty filter."""
+        from services.chat_agent.tools.recipes import _build_fallback_query
+
+        result = _build_fallback_query(
+            cuisine=None,
+            difficulty="easy",
+            max_cook_time=None,
+            min_times_cooked=None,
+        )
+
+        assert "easy difficulty" in result
+
+    def test_builds_query_from_max_cook_time(self) -> None:
+        """Test building fallback query from max_cook_time filter."""
+        from services.chat_agent.tools.recipes import _build_fallback_query
+
+        result = _build_fallback_query(
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=30,
+            min_times_cooked=None,
+        )
+
+        assert "under 30 minutes" in result
+
+    def test_builds_query_from_min_times_cooked(self) -> None:
+        """Test building fallback query from min_times_cooked filter."""
+        from services.chat_agent.tools.recipes import _build_fallback_query
+
+        result = _build_fallback_query(
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=5,
+        )
+
+        assert "cooked at least 5 times" in result
+
+    def test_builds_combined_query(self) -> None:
+        """Test building fallback query from multiple filters."""
+        from services.chat_agent.tools.recipes import _build_fallback_query
+
+        result = _build_fallback_query(
+            cuisine="mexican",
+            difficulty="medium",
+            max_cook_time=45,
+            min_times_cooked=2,
+        )
+
+        assert "mexican cuisine" in result
+        assert "medium difficulty" in result
+        assert "under 45 minutes" in result
+        assert "cooked at least 2 times" in result
+
+    def test_returns_empty_string_when_no_filters(self) -> None:
+        """Test returns empty string when no filters provided."""
+        from services.chat_agent.tools.recipes import _build_fallback_query
+
+        result = _build_fallback_query(
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+        )
+
+        assert result == ""
+
+
+class TestBuildFilterList:
+    """Tests for _build_filter_list helper function."""
+
+    def test_adds_cuisine_filter(self) -> None:
+        """Test cuisine filter is added to list."""
+        from services.chat_agent.tools.recipes import _build_filter_list
+
+        mock_sq = MagicMock()
+
+        filters = _build_filter_list(
+            cuisine="asian",
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+            times_cooked_sq=mock_sq,
+        )
+
+        assert len(filters) == 1
+
+    def test_adds_difficulty_filter(self) -> None:
+        """Test difficulty filter is added to list."""
+        from services.chat_agent.tools.recipes import _build_filter_list
+
+        mock_sq = MagicMock()
+
+        filters = _build_filter_list(
+            cuisine=None,
+            difficulty="hard",
+            max_cook_time=None,
+            min_times_cooked=None,
+            times_cooked_sq=mock_sq,
+        )
+
+        assert len(filters) == 1
+
+    def test_adds_max_cook_time_filter(self) -> None:
+        """Test max_cook_time filter is added to list."""
+        from services.chat_agent.tools.recipes import _build_filter_list
+
+        mock_sq = MagicMock()
+
+        filters = _build_filter_list(
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=30,
+            min_times_cooked=None,
+            times_cooked_sq=mock_sq,
+        )
+
+        assert len(filters) == 1
+
+    def test_adds_min_times_cooked_filter(self) -> None:
+        """Test min_times_cooked filter is added to list."""
+        from services.chat_agent.tools.recipes import _build_filter_list
+
+        mock_sq = MagicMock()
+        mock_sq.c.cook_count = MagicMock()
+
+        filters = _build_filter_list(
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=3,
+            times_cooked_sq=mock_sq,
+        )
+
+        assert len(filters) == 1
+
+    def test_combines_all_filters(self) -> None:
+        """Test all filters are combined."""
+        from services.chat_agent.tools.recipes import _build_filter_list
+
+        mock_sq = MagicMock()
+        mock_sq.c.cook_count = MagicMock()
+
+        filters = _build_filter_list(
+            cuisine="french",
+            difficulty="medium",
+            max_cook_time=60,
+            min_times_cooked=2,
+            times_cooked_sq=mock_sq,
+        )
+
+        assert len(filters) == 4
+
+    def test_returns_empty_list_when_no_filters(self) -> None:
+        """Test returns empty list when no filters provided."""
+        from services.chat_agent.tools.recipes import _build_filter_list
+
+        mock_sq = MagicMock()
+
+        filters = _build_filter_list(
+            cuisine=None,
+            difficulty=None,
+            max_cook_time=None,
+            min_times_cooked=None,
+            times_cooked_sq=mock_sq,
+        )
+
+        assert filters == []

@@ -312,3 +312,61 @@ class TestGenerateConversationTitle:
 
         with pytest.raises(ValueError, match="Not enough conversation context"):
             await generate_conversation_title(messages)
+
+    async def test_skips_messages_with_empty_content(self) -> None:
+        """Test skips messages with empty or missing content."""
+        messages = self._make_sufficient_messages()
+        # Add messages with empty content
+        messages.extend(
+            [
+                {"role": "user", "content": ""},  # Empty content
+                {"role": "assistant", "content": None},  # None content
+                {"role": "user"},  # Missing content key
+            ]
+        )
+
+        mock_result = MagicMock()
+        mock_result.output.title = "🍲 Test Title"
+
+        mock_agent = AsyncMock()
+        mock_agent.run.return_value = mock_result
+
+        with patch(
+            "services.chat_title_generator._get_title_agent",
+            return_value=mock_agent,
+        ):
+            from services.chat_title_generator import generate_conversation_title
+
+            title = await generate_conversation_title(messages)
+
+            assert title == "🍲 Test Title"
+            # Verify the empty content messages were not included
+            call_args = mock_agent.run.call_args[0][0]
+            # Should not have extra empty lines from empty content
+            assert "user: \n" not in call_args
+
+    async def test_handles_only_current_title_without_created_at(self) -> None:
+        """Test context formatting with current_title but no created_at."""
+        messages = self._make_sufficient_messages()
+
+        mock_result = MagicMock()
+        mock_result.output.title = "📝 Updated Title"
+
+        mock_agent = AsyncMock()
+        mock_agent.run.return_value = mock_result
+
+        with patch(
+            "services.chat_title_generator._get_title_agent",
+            return_value=mock_agent,
+        ):
+            from services.chat_title_generator import generate_conversation_title
+
+            await generate_conversation_title(
+                messages,
+                current_title="Old Title",
+                created_at=None,  # No created_at
+            )
+
+            call_args = mock_agent.run.call_args[0][0]
+            # Should not include "Current title:" since both are needed
+            assert "Current title:" not in call_args

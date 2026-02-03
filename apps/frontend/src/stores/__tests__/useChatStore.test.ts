@@ -475,3 +475,28 @@ describe('useChatStore', () => {
     expect(result.current.error).toBe('Failed to delete conversation');
   });
 });
+
+describe('formatToolName', () => {
+  test('returns friendly name for known tool', async () => {
+    const { formatToolName } = await import('../useChatStore');
+
+    expect(formatToolName('search_recipes')).toBe('Searching recipes...');
+    expect(formatToolName('get_meal_plan_history')).toBe(
+      'Analyzing meal history...'
+    );
+    expect(formatToolName('get_daily_weather')).toBe('Checking forecast...');
+    expect(formatToolName('web_search')).toBe('Searching the web...');
+    expect(formatToolName('fetch_url_as_markdown')).toBe('Reading web page...');
+    expect(formatToolName('suggest_recipe')).toBe('Creating recipe draft...');
+    expect(formatToolName('propose_meal_for_day')).toBe('Proposing meal...');
+    expect(formatToolName('update_user_memory')).toBe('Updating memory...');
+    expect(formatToolName('final_result')).toBe('Finalizing response...');
+  });
+
+  test('returns fallback for unknown tool', async () => {
+    const { formatToolName } = await import('../useChatStore');
+
+    expect(formatToolName('unknown_tool')).toBe('Using unknown_tool...');
+    expect(formatToolName('custom_action')).toBe('Using custom_action...');
+  });
+});

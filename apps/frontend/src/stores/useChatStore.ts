@@ -88,7 +88,7 @@ function capMessages(messages: Message[]): Message[] {
  * e.g., "search_recipes" -> "Searching recipes..."
  *       "get_meal_plan_history" -> "Analyzing meal history..."
  */
-function formatToolName(toolName: string): string {
+export function formatToolName(toolName: string): string {
   const toolNameMap: Record<string, string> = {
     get_meal_plan_history: 'Analyzing meal history...',
     search_recipes: 'Searching recipes...',

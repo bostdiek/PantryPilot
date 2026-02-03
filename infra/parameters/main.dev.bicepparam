@@ -36,7 +36,7 @@ param azureOpenAIDeployments = [
     model: 'gpt-4.1'
     version: '2025-04-14'
     sku: 'GlobalStandard'
-    capacity: 50
+    capacity: 100
   }
   // Multimodal model for image-based recipe extraction
   {
