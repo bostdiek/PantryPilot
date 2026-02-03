@@ -49,6 +49,21 @@ param azureOpenAILocation string = 'eastus2'
 @secure()
 param azureOpenAIApiKey string = ''
 
+@description('Azure OpenAI endpoint URL (use this to point to an existing/shared Azure OpenAI resource when deployAzureOpenAI=false)')
+param azureOpenAIEndpoint string = ''
+
+@description('Azure OpenAI chat model deployment name (must match a deployment in the target Azure OpenAI resource)')
+param azureChatModel string = 'gpt-4.1'
+
+@description('Azure OpenAI multimodal model deployment name (must match a deployment in the target Azure OpenAI resource)')
+param azureMultimodalModel string = 'gpt-5-mini'
+
+@description('Azure OpenAI fast text model deployment name (must match a deployment in the target Azure OpenAI resource)')
+param azureTextModel string = 'gpt-5-nano'
+
+@description('Azure OpenAI embedding model deployment name (must match a deployment in the target Azure OpenAI resource)')
+param azureEmbeddingModel string = 'text-embedding-3-small'
+
 @description('Azure OpenAI model deployments to create')
 param azureOpenAIDeployments array = [
   {
@@ -177,6 +192,11 @@ resource azureOpenAIAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' ex
 
 var resolvedAzureOpenAIApiKey = deployAzureOpenAI ? azureOpenAIAccount!.listKeys().key1 : azureOpenAIApiKey
 
+// Support using an existing/shared Azure OpenAI resource without deploying one in this stack.
+// This helps when subscription-level TPM quota must be shared between dev and prod.
+var useAzureOpenAI = deployAzureOpenAI || (!empty(azureOpenAIEndpoint) && !empty(azureOpenAIApiKey))
+var resolvedAzureOpenAIEndpoint = deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : azureOpenAIEndpoint
+
 // Container Apps Environment and Backend App
 // Use quickstart placeholder for initial deployment, or ACR image after CI/CD builds
 var containerImage = useQuickstartImage
@@ -297,14 +317,14 @@ module containerApps 'modules/containerapps.bicep' = {
     braveSearchApiKey: braveSearchApiKey
     geminiApiKey: geminiApiKey
     // Azure OpenAI configuration (when deployed)
-    azureOpenAIEndpoint: deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : ''
-    azureOpenAIApiKey: deployAzureOpenAI ? resolvedAzureOpenAIApiKey : ''
-    llmProvider: deployAzureOpenAI ? 'azure_openai' : 'gemini'
-    // Model names - use Azure deployment names when Azure OpenAI is enabled
-    chatModel: deployAzureOpenAI ? 'gpt-4.1-mini' : 'gemini-2.5-flash'
-    multimodalModel: deployAzureOpenAI ? 'gpt-5-mini' : 'gemini-2.5-flash-lite'
-    textModel: deployAzureOpenAI ? 'gpt-5-nano' : 'gemini-2.5-flash-lite'
-    embeddingModel: deployAzureOpenAI ? 'text-embedding-3-small' : 'gemini-embedding-001'
+    azureOpenAIEndpoint: useAzureOpenAI ? resolvedAzureOpenAIEndpoint : ''
+    azureOpenAIApiKey: useAzureOpenAI ? resolvedAzureOpenAIApiKey : ''
+    llmProvider: useAzureOpenAI ? 'azure_openai' : 'gemini'
+    // Model names - for Azure OpenAI, these must match deployment names on the target resource.
+    chatModel: useAzureOpenAI ? azureChatModel : 'gemini-2.5-flash'
+    multimodalModel: useAzureOpenAI ? azureMultimodalModel : 'gemini-2.5-flash-lite'
+    textModel: useAzureOpenAI ? azureTextModel : 'gemini-2.5-flash-lite'
+    embeddingModel: useAzureOpenAI ? azureEmbeddingModel : 'gemini-embedding-001'
     enableObservability: true
     tags: commonTags
   }

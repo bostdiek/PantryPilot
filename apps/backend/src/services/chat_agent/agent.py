@@ -32,6 +32,12 @@ from services.chat_agent.tools import (
 logger = logging.getLogger(__name__)
 
 
+# pydantic-ai tool-call retries (argument validation / ModelRetry). Note this is
+# distinct from HTTP transport retries and from the agent's result validation retries.
+# A value of 4 allows up to 5 total attempts (initial + 4 retries).
+_TOOL_CALL_RETRIES = 4
+
+
 MEAL_PLANNING_WORKFLOW = """
 MEAL PLANNING WORKFLOW:
 When users ask you to help plan their meals for a week:
@@ -260,6 +266,7 @@ Tool rules:
 - Use tools when they provide factual data (weather lookup or web search).
 - Only use suggest_recipe when the user explicitly asked for a recipe or to
     save one. Otherwise, respond with text and do NOT call suggest_recipe.
+- When calling suggest_recipe, you MUST include a non-empty ingredients list.
 - After calling suggest_recipe, add the returned recipe_card to your response blocks.
 """
 
@@ -465,14 +472,24 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         return "\n\n" + "\n".join(sections)
 
     # Register tools using extracted implementations
-    agent.tool(name="get_meal_plan_history")(tool_get_meal_plan_history)
-    agent.tool(name="search_recipes")(tool_search_recipes)
-    agent.tool(name="get_daily_weather")(tool_get_daily_weather)
-    agent.tool(name="web_search")(tool_web_search)
-    agent.tool(name="fetch_url_as_markdown")(tool_fetch_url_as_markdown)
-    agent.tool(name="suggest_recipe")(tool_suggest_recipe)
-    agent.tool(name="propose_meal_for_day")(tool_propose_meal_for_day)
-    agent.tool(name="update_user_memory")(tool_update_user_memory)
+    agent.tool(name="get_meal_plan_history", retries=_TOOL_CALL_RETRIES)(
+        tool_get_meal_plan_history
+    )
+    agent.tool(name="search_recipes", retries=_TOOL_CALL_RETRIES)(tool_search_recipes)
+    agent.tool(name="get_daily_weather", retries=_TOOL_CALL_RETRIES)(
+        tool_get_daily_weather
+    )
+    agent.tool(name="web_search", retries=_TOOL_CALL_RETRIES)(tool_web_search)
+    agent.tool(name="fetch_url_as_markdown", retries=_TOOL_CALL_RETRIES)(
+        tool_fetch_url_as_markdown
+    )
+    agent.tool(name="suggest_recipe", retries=_TOOL_CALL_RETRIES)(tool_suggest_recipe)
+    agent.tool(name="propose_meal_for_day", retries=_TOOL_CALL_RETRIES)(
+        tool_propose_meal_for_day
+    )
+    agent.tool(name="update_user_memory", retries=_TOOL_CALL_RETRIES)(
+        tool_update_user_memory
+    )
 
     return agent
 
