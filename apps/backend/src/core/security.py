@@ -3,12 +3,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import HashingError, VerifyMismatchError
 from fastapi import HTTPException, status
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
-from jose import JWTError, jwt
-from jose.exceptions import ExpiredSignatureError, JWSSignatureError
+from jwt.exceptions import ExpiredSignatureError, InvalidSignatureError, PyJWTError
 
 from core.config import Settings, get_settings
 from schemas.auth import TokenData
@@ -87,7 +87,7 @@ def decode_token(token: str) -> TokenData:
             algorithms=[s.ALGORITHM],
             options={"verify_aud": False},
         )
-    except JWTError as err:
+    except PyJWTError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -150,7 +150,7 @@ def decode_draft_token(token: str) -> dict[str, Any]:
     """
     try:
         s = _settings()
-        payload = jwt.decode(
+        payload: dict[str, Any] = jwt.decode(
             token,
             s.SECRET_KEY,
             algorithms=[s.ALGORITHM],
@@ -165,7 +165,7 @@ def decode_draft_token(token: str) -> dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired draft token",
         ) from err
-    except JWSSignatureError as err:
+    except InvalidSignatureError as err:
         _logger.warning(
             "Draft token validation failed: invalid signature",
             extra={"error_type": "invalid_signature"},
@@ -174,7 +174,7 @@ def decode_draft_token(token: str) -> dict[str, Any]:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired draft token",
         ) from err
-    except JWTError as err:
+    except PyJWTError as err:
         _logger.warning(
             "Draft token validation failed: %s",
             type(err).__name__,

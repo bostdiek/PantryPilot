@@ -103,7 +103,7 @@ class TestAccessToken:
 
     def test_decode_token_missing_sub(self):
         """Token without sub claim should raise 401."""
-        from jose import jwt
+        import jwt
 
         from core.config import get_settings
 
@@ -166,7 +166,7 @@ class TestDraftToken:
 
     def test_decode_draft_token_missing_claims(self):
         """Draft token missing required claims should raise 401."""
-        from jose import jwt
+        import jwt
 
         from core.config import get_settings
 
@@ -184,7 +184,7 @@ class TestDraftToken:
 
     def test_decode_draft_token_wrong_type(self):
         """Draft token with wrong type should raise 401."""
-        from jose import jwt
+        import jwt
 
         from core.config import get_settings
 
