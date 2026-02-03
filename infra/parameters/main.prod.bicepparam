@@ -35,7 +35,7 @@ param azureOpenAIDeployments = [
     version: '2025-04-14'
     // Use regional quota (per-region) instead of GlobalStandard
     sku: 'Standard'
-    capacity: 5000
+    capacity: 40
   }
   // Multimodal model for image-based recipe extraction
   {
@@ -43,7 +43,7 @@ param azureOpenAIDeployments = [
     model: 'gpt-5-mini'
     version: '2025-08-07'
     sku: 'GlobalStandard'
-    capacity: 50
+    capacity: 40
   }
   // Fast text model for context generation
   {
@@ -51,7 +51,7 @@ param azureOpenAIDeployments = [
     model: 'gpt-5-nano'
     version: '2025-08-07'
     sku: 'GlobalStandard'
-    capacity: 50
+    capacity: 40
   }
   // Embedding model for semantic search (1536 dimensions)
   {
@@ -59,6 +59,6 @@ param azureOpenAIDeployments = [
     model: 'text-embedding-3-small'
     version: '1'
     sku: 'Standard'
-    capacity: 50
+    capacity: 40
   }
 ]
