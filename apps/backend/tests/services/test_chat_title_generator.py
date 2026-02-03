@@ -77,12 +77,28 @@ class TestGetTitleAgent:
 class TestGenerateConversationTitle:
     """Tests for generate_conversation_title function."""
 
+    def _make_sufficient_messages(
+        self, extra_messages: list[dict[str, str]] | None = None
+    ) -> list[dict[str, str]]:
+        """Create a message list that passes the minimum validation.
+
+        The service requires at least 3 user messages with 120+ total chars.
+        """
+        base_messages = [
+            {"role": "user", "content": "I want to make pasta carbonara tonight"},
+            {"role": "assistant", "content": "Great choice! Here's a recipe..."},
+            {"role": "user", "content": "What ingredients do I need for this dish?"},
+            {"role": "assistant", "content": "You'll need eggs, pancetta, cheese..."},
+            {"role": "user", "content": "How long does it take to prepare and cook?"},
+            {"role": "assistant", "content": "About 30 minutes total."},
+        ]
+        if extra_messages:
+            return base_messages + extra_messages
+        return base_messages
+
     async def test_generates_title_from_messages(self) -> None:
         """Test generates title from message list."""
-        messages = [
-            {"role": "user", "content": "I want to make pasta carbonara"},
-            {"role": "assistant", "content": "Great choice! Here's a recipe..."},
-        ]
+        messages = self._make_sufficient_messages()
 
         # Mock the agent and result
         mock_result = MagicMock()
@@ -102,9 +118,14 @@ class TestGenerateConversationTitle:
             assert title == "🍝 Pasta Carbonara Recipe"
             mock_agent.run.assert_called_once()
 
-    async def test_limits_messages_to_six(self) -> None:
-        """Test only uses first 6 messages (3 exchanges)."""
-        messages = [{"role": "user", "content": f"Message {i}"} for i in range(20)]
+    async def test_limits_messages_by_char_count(self) -> None:
+        """Test limits messages by total character count (20000 chars max)."""
+        # Create many messages that exceed the 20000 char limit
+        messages = self._make_sufficient_messages()
+        # Add more messages to test truncation behavior
+        for i in range(50):
+            content = f"Additional message {i} " * 20
+            messages.append({"role": "user", "content": content})
 
         mock_result = MagicMock()
         mock_result.output.title = "📝 Test Title"
@@ -120,19 +141,19 @@ class TestGenerateConversationTitle:
 
             await generate_conversation_title(messages)
 
-            # Check that context includes only first 6 messages
+            # Check that the agent was called (messages were processed)
             call_args = mock_agent.run.call_args[0][0]
-            assert "Message 0" in call_args
-            assert "Message 5" in call_args
-            assert "Message 6" not in call_args
+            # First messages should be included
+            assert "pasta carbonara" in call_args
+            # Total context should be under the limit
+            assert len(call_args) <= 21000  # Some buffer for formatting
 
     async def test_truncates_long_messages(self) -> None:
         """Test truncates message content to 200 characters."""
         long_content = "x" * 500
-        messages = [
-            {"role": "user", "content": long_content},
-            {"role": "assistant", "content": "Short response"},
-        ]
+        # Start with sufficient messages, then add the long one
+        messages = self._make_sufficient_messages()
+        messages.append({"role": "user", "content": long_content})
 
         mock_result = MagicMock()
         mock_result.output.title = "📝 Test Title"
@@ -155,7 +176,7 @@ class TestGenerateConversationTitle:
 
     async def test_includes_current_title_context(self) -> None:
         """Test includes current title and created_at in context."""
-        messages = [{"role": "user", "content": "Test message"}]
+        messages = self._make_sufficient_messages()
 
         mock_result = MagicMock()
         mock_result.output.title = "📝 New Title"
@@ -181,7 +202,7 @@ class TestGenerateConversationTitle:
 
     async def test_works_without_current_title(self) -> None:
         """Test generates title without current title context."""
-        messages = [{"role": "user", "content": "Test message"}]
+        messages = self._make_sufficient_messages()
 
         mock_result = MagicMock()
         mock_result.output.title = "📝 New Title"
@@ -203,10 +224,7 @@ class TestGenerateConversationTitle:
 
     async def test_logs_generation_info(self, caplog: pytest.LogCaptureFixture) -> None:
         """Test logs information about title generation."""
-        messages = [
-            {"role": "user", "content": "Message 1"},
-            {"role": "assistant", "content": "Message 2"},
-        ]
+        messages = self._make_sufficient_messages()
 
         mock_result = MagicMock()
         mock_result.output.title = "🍕 Pizza Night"
@@ -223,14 +241,14 @@ class TestGenerateConversationTitle:
             await generate_conversation_title(messages)
 
             assert "Generating title" in caplog.text
-            assert "2 messages" in caplog.text
+            assert "6 messages" in caplog.text
             assert "Generated title: 🍕 Pizza Night" in caplog.text
 
     async def test_raises_on_generation_failure(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test raises exception when generation fails."""
-        messages = [{"role": "user", "content": "Test"}]
+        messages = self._make_sufficient_messages()
 
         mock_agent = AsyncMock()
         mock_agent.run.side_effect = Exception("API error")
@@ -248,10 +266,7 @@ class TestGenerateConversationTitle:
 
     async def test_formats_context_correctly(self) -> None:
         """Test context formatting includes role and content."""
-        messages = [
-            {"role": "user", "content": "What's for dinner?"},
-            {"role": "assistant", "content": "How about tacos?"},
-        ]
+        messages = self._make_sufficient_messages()
 
         mock_result = MagicMock()
         mock_result.output.title = "🌮 Taco Tuesday"
@@ -268,6 +283,90 @@ class TestGenerateConversationTitle:
             await generate_conversation_title(messages)
 
             call_args = mock_agent.run.call_args[0][0]
-            assert "user: What's for dinner?" in call_args
-            assert "assistant: How about tacos?" in call_args
+            assert "user: I want to make pasta carbonara" in call_args
+            assert "assistant: Great choice!" in call_args
             assert "Generate a title for:" in call_args
+
+    async def test_returns_current_title_when_insufficient_messages(self) -> None:
+        """Test returns current_title when fewer than 3 user messages."""
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+
+        from services.chat_title_generator import generate_conversation_title
+
+        title = await generate_conversation_title(
+            messages, current_title="Existing Title"
+        )
+        assert title == "Existing Title"
+
+    async def test_raises_when_insufficient_messages_no_current_title(self) -> None:
+        """Test raises ValueError when <3 user messages and no current_title."""
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Hi there!"},
+        ]
+
+        from services.chat_title_generator import generate_conversation_title
+
+        with pytest.raises(ValueError, match="Not enough conversation context"):
+            await generate_conversation_title(messages)
+
+    async def test_skips_messages_with_empty_content(self) -> None:
+        """Test skips messages with empty or missing content."""
+        messages = self._make_sufficient_messages()
+        # Add messages with empty content
+        messages.extend(
+            [
+                {"role": "user", "content": ""},  # Empty content
+                {"role": "assistant", "content": None},  # None content
+                {"role": "user"},  # Missing content key
+            ]
+        )
+
+        mock_result = MagicMock()
+        mock_result.output.title = "🍲 Test Title"
+
+        mock_agent = AsyncMock()
+        mock_agent.run.return_value = mock_result
+
+        with patch(
+            "services.chat_title_generator._get_title_agent",
+            return_value=mock_agent,
+        ):
+            from services.chat_title_generator import generate_conversation_title
+
+            title = await generate_conversation_title(messages)
+
+            assert title == "🍲 Test Title"
+            # Verify the empty content messages were not included
+            call_args = mock_agent.run.call_args[0][0]
+            # Should not have extra empty lines from empty content
+            assert "user: \n" not in call_args
+
+    async def test_handles_only_current_title_without_created_at(self) -> None:
+        """Test context formatting with current_title but no created_at."""
+        messages = self._make_sufficient_messages()
+
+        mock_result = MagicMock()
+        mock_result.output.title = "📝 Updated Title"
+
+        mock_agent = AsyncMock()
+        mock_agent.run.return_value = mock_result
+
+        with patch(
+            "services.chat_title_generator._get_title_agent",
+            return_value=mock_agent,
+        ):
+            from services.chat_title_generator import generate_conversation_title
+
+            await generate_conversation_title(
+                messages,
+                current_title="Old Title",
+                created_at=None,  # No created_at
+            )
+
+            call_args = mock_agent.run.call_args[0][0]
+            # Should not include "Current title:" since both are needed
+            assert "Current title:" not in call_args

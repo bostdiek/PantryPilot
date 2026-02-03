@@ -40,6 +40,95 @@ def _rrf_score(*, text_rank: int | None, vector_rank: int | None, k: int) -> flo
     return score
 
 
+def _build_hybrid_result(
+    *,
+    items: list[dict[str, Any]],
+    full_payload_by_id: dict[str, Any],
+    query: str,
+    cuisine: str | None,
+    difficulty: str | None,
+    max_cook_time: int | None,
+    min_times_cooked: int | None,
+    sort_by: SortBy,
+    rrf_k: int,
+    fallback_used: bool = False,
+) -> dict[str, Any]:
+    """Build the response dict for hybrid search results."""
+    return {
+        "status": "ok",
+        "query": query,
+        "recipes_page_path": "/recipes",
+        "meal_plan_page_path": "/meal-plan",
+        "filters_applied": {
+            "cuisine": cuisine,
+            "difficulty": difficulty,
+            "max_cook_time": max_cook_time,
+            "min_times_cooked": min_times_cooked,
+        },
+        "fallback_used": fallback_used,
+        "sort_by": sort_by,
+        "total_results": len(items),
+        "recipes": [
+            {
+                "id": str(item["recipe"].id),
+                "title": item["recipe"].name,
+                "detail_path": f"/recipes/{item['recipe'].id}",
+                "edit_path": f"/recipes/{item['recipe'].id}/edit",
+                "full_recipe": full_payload_by_id.get(str(item["recipe"].id)),
+                "times_cooked": item["times_cooked"],
+                "relevance_score": round(
+                    _rrf_score(
+                        text_rank=item["text_rank"],
+                        vector_rank=item["vector_rank"],
+                        k=rrf_k,
+                    ),
+                    4,
+                ),
+            }
+            for item in items
+        ],
+    }
+
+
+def _build_metadata_result(
+    *,
+    rows: list[tuple[Any, int]],
+    full_payload_by_id: dict[str, Any],
+    cuisine: str | None,
+    difficulty: str | None,
+    max_cook_time: int | None,
+    min_times_cooked: int | None,
+    sort_by: SortBy,
+) -> dict[str, Any]:
+    """Build the response dict for metadata-only search results."""
+    return {
+        "status": "ok",
+        "query": None,
+        "recipes_page_path": "/recipes",
+        "meal_plan_page_path": "/meal-plan",
+        "filters_applied": {
+            "cuisine": cuisine,
+            "difficulty": difficulty,
+            "max_cook_time": max_cook_time,
+            "min_times_cooked": min_times_cooked,
+        },
+        "fallback_used": False,
+        "sort_by": sort_by,
+        "total_results": len(rows),
+        "recipes": [
+            {
+                "id": str(recipe.id),
+                "title": recipe.name,
+                "detail_path": f"/recipes/{recipe.id}",
+                "edit_path": f"/recipes/{recipe.id}/edit",
+                "full_recipe": full_payload_by_id.get(str(recipe.id)),
+                "times_cooked": times_cooked,
+            }
+            for recipe, times_cooked in rows
+        ],
+    }
+
+
 def _recipe_to_full_payload(recipe: Recipe) -> dict[str, Any]:
     now_ts = datetime.now(UTC)
     response_data: dict[str, Any] = {
@@ -267,6 +356,75 @@ async def _hybrid_search_with_query(
     return items[:max_results]
 
 
+def _build_filter_list(
+    *,
+    cuisine: str | None,
+    difficulty: str | None,
+    max_cook_time: int | None,
+    min_times_cooked: int | None,
+    times_cooked_sq: Any,
+) -> list[Any]:
+    """Build SQLAlchemy filter expressions for recipe search queries.
+
+    This helper translates optional filter arguments into a list of boolean
+    expressions that can be combined in a SQLAlchemy `where`/`and_` clause.
+
+    Args:
+        cuisine:
+            Optional cuisine string used to filter recipes whose `ethnicity`
+            matches the value case-insensitively (via `ilike` and wildcards).
+        difficulty:
+            Optional difficulty level used to filter recipes by the
+            `Recipe.difficulty` column.
+        max_cook_time:
+            If provided, filters recipes whose `total_time_minutes` is less
+            than or equal to this value.
+        min_times_cooked:
+            If provided, filters recipes that have been cooked at least this many
+            times, based on the `times_cooked_sq` subquery.
+        times_cooked_sq:
+            A SQLAlchemy subquery (or aliased selectable) that exposes a
+            `cook_count` column representing how many times each recipe was
+            cooked. Used in combination with `min_times_cooked`.
+
+    Returns:
+        A list of SQLAlchemy boolean expressions to be applied as filters
+        in recipe search queries.
+    """
+    filters: list[Any] = []
+    if cuisine:
+        filters.append(Recipe.ethnicity.ilike(f"%{cuisine}%"))
+    if difficulty:
+        filters.append(Recipe.difficulty.ilike(difficulty))
+    if max_cook_time:
+        filters.append(Recipe.total_time_minutes <= max_cook_time)
+    if min_times_cooked:
+        filters.append(
+            func.coalesce(times_cooked_sq.c.cook_count, 0) >= min_times_cooked
+        )
+    return filters
+
+
+def _build_fallback_query(
+    *,
+    cuisine: str | None,
+    difficulty: str | None,
+    max_cook_time: int | None,
+    min_times_cooked: int | None,
+) -> str:
+    """Build a semantic search query string from filter terms."""
+    filter_terms: list[str] = []
+    if cuisine:
+        filter_terms.append(f"{cuisine} cuisine")
+    if difficulty:
+        filter_terms.append(f"{difficulty} difficulty")
+    if max_cook_time is not None:
+        filter_terms.append(f"under {max_cook_time} minutes")
+    if min_times_cooked is not None:
+        filter_terms.append(f"cooked at least {min_times_cooked} times")
+    return " ".join(filter_terms).strip()
+
+
 async def tool_search_recipes(
     ctx: RunContext[ChatAgentDeps],
     query: str | None = None,
@@ -339,115 +497,111 @@ async def tool_search_recipes(
             recipes=[item["recipe"] for item in items],
         )
 
-        return {
-            "status": "ok",
-            "query": query,
-            "recipes_page_path": "/recipes",
-            "meal_plan_page_path": "/meal-plan",
-            "filters_applied": {
-                "cuisine": cuisine,
-                "difficulty": difficulty,
-                "max_cook_time": max_cook_time,
-                "min_times_cooked": min_times_cooked,
-            },
-            "total_results": len(items),
-            "recipes": [
-                {
-                    "id": str(item["recipe"].id),
-                    "title": item["recipe"].name,
-                    "detail_path": f"/recipes/{item['recipe'].id}",
-                    "edit_path": f"/recipes/{item['recipe'].id}/edit",
-                    "full_recipe": full_payload_by_id.get(str(item["recipe"].id)),
-                    "times_cooked": item["times_cooked"],
-                    "relevance_score": round(
-                        _rrf_score(
-                            text_rank=item["text_rank"],
-                            vector_rank=item["vector_rank"],
-                            k=rrf_k,
-                        ),
-                        4,
-                    ),
-                }
-                for item in items
-            ],
-        }
+        return _build_hybrid_result(
+            items=items,
+            full_payload_by_id=full_payload_by_id,
+            query=query,
+            cuisine=cuisine,
+            difficulty=difficulty,
+            max_cook_time=max_cook_time,
+            min_times_cooked=min_times_cooked,
+            sort_by=sort_by,
+            rrf_k=rrf_k,
+        )
 
     # Case 2: No query - use metadata filters only
-    else:
-        stmt = (
-            select(
-                Recipe,
-                func.coalesce(times_cooked_sq.c.cook_count, 0).label("times_cooked"),
-            )
-            .outerjoin(times_cooked_sq, Recipe.id == times_cooked_sq.c.recipe_id)
-            .where(
-                or_(
-                    Recipe.user_id == ctx.deps.user.id,
-                    Recipe.user_id.is_(None),
-                )
+    filters = _build_filter_list(
+        cuisine=cuisine,
+        difficulty=difficulty,
+        max_cook_time=max_cook_time,
+        min_times_cooked=min_times_cooked,
+        times_cooked_sq=times_cooked_sq,
+    )
+
+    stmt = (
+        select(
+            Recipe,
+            func.coalesce(times_cooked_sq.c.cook_count, 0).label("times_cooked"),
+        )
+        .outerjoin(times_cooked_sq, Recipe.id == times_cooked_sq.c.recipe_id)
+        .where(
+            or_(
+                Recipe.user_id == ctx.deps.user.id,
+                Recipe.user_id.is_(None),
             )
         )
+    )
 
-        # Apply filters
-        filters: list[Any] = []
+    if filters:
+        stmt = stmt.where(and_(*filters))
 
-        if cuisine:
-            filters.append(Recipe.ethnicity.ilike(f"%{cuisine}%"))
+    # Apply sorting
+    sort_map = {
+        "name": Recipe.name.asc(),
+        "times_cooked": desc(func.coalesce(times_cooked_sq.c.cook_count, 0)),
+        "cook_time": Recipe.total_time_minutes.asc(),
+        "relevance": Recipe.name.asc(),  # Fallback to name when no query
+    }
+    stmt = stmt.order_by(sort_map.get(sort_by, Recipe.name.asc()))
+    stmt = stmt.limit(max_results)
 
-        if difficulty:
-            filters.append(Recipe.difficulty.ilike(difficulty))
+    result = await ctx.deps.db.execute(stmt)
+    rows = result.all()
 
-        if max_cook_time:
-            filters.append(Recipe.total_time_minutes <= max_cook_time)
-
-        if min_times_cooked:
-            filters.append(
-                func.coalesce(times_cooked_sq.c.cook_count, 0) >= min_times_cooked
+    # If filters were applied but no rows returned, fall back to semantic search
+    if filters and not rows:
+        fallback_query = _build_fallback_query(
+            cuisine=cuisine,
+            difficulty=difficulty,
+            max_cook_time=max_cook_time,
+            min_times_cooked=min_times_cooked,
+        )
+        if fallback_query:
+            query_embedding = await generate_query_embedding(fallback_query)
+            items = await _hybrid_search_with_query(
+                ctx=ctx,
+                query=fallback_query,
+                query_embedding=query_embedding,
+                times_cooked_sq=times_cooked_sq,
+                cuisine=None,
+                difficulty=None,
+                max_cook_time=None,
+                min_times_cooked=None,
+                sort_by=sort_by,
+                max_results=max_results,
+                cte_limit=cte_limit,
+                rrf_k=rrf_k,
             )
 
-        if filters:
-            stmt = stmt.where(and_(*filters))
+            full_payload_by_id = await _load_full_recipes(
+                ctx=ctx,
+                recipes=[item["recipe"] for item in items],
+            )
 
-        # Apply sorting
-        sort_map = {
-            "name": Recipe.name.asc(),
-            "times_cooked": desc(func.coalesce(times_cooked_sq.c.cook_count, 0)),
-            "cook_time": Recipe.total_time_minutes.asc(),
-            "relevance": Recipe.name.asc(),  # Fallback to name when no query
-        }
-        stmt = stmt.order_by(sort_map.get(sort_by, Recipe.name.asc()))
-        stmt = stmt.limit(max_results)
+            return _build_hybrid_result(
+                items=items,
+                full_payload_by_id=full_payload_by_id,
+                query=fallback_query,
+                cuisine=cuisine,
+                difficulty=difficulty,
+                max_cook_time=max_cook_time,
+                min_times_cooked=min_times_cooked,
+                sort_by=sort_by,
+                rrf_k=rrf_k,
+                fallback_used=True,
+            )
 
-        result = await ctx.deps.db.execute(stmt)
-        rows = result.all()
+    full_payload_by_id = await _load_full_recipes(
+        ctx=ctx,
+        recipes=[recipe for recipe, _times_cooked in rows],
+    )
 
-        full_payload_by_id = await _load_full_recipes(
-            ctx=ctx,
-            recipes=[recipe for recipe, _times_cooked in rows],
-        )
-
-        return {
-            "status": "ok",
-            "query": None,
-            "recipes_page_path": "/recipes",
-            "meal_plan_page_path": "/meal-plan",
-            "filters_applied": {
-                "cuisine": cuisine,
-                "difficulty": difficulty,
-                "max_cook_time": max_cook_time,
-                "min_times_cooked": min_times_cooked,
-            },
-            "sort_by": sort_by,
-            "total_results": len(rows),
-            "recipes": [
-                {
-                    "id": str(recipe.id),
-                    "title": recipe.name,
-                    "detail_path": f"/recipes/{recipe.id}",
-                    "edit_path": f"/recipes/{recipe.id}/edit",
-                    "full_recipe": full_payload_by_id.get(str(recipe.id)),
-                    "times_cooked": times_cooked,
-                }
-                for recipe, times_cooked in rows
-            ],
-        }
+    return _build_metadata_result(
+        rows=rows,
+        full_payload_by_id=full_payload_by_id,
+        cuisine=cuisine,
+        difficulty=difficulty,
+        max_cook_time=max_cook_time,
+        min_times_cooked=min_times_cooked,
+        sort_by=sort_by,
+    )
