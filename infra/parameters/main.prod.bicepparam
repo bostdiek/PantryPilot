@@ -32,6 +32,7 @@ param azureOpenAIDeployments = [
   {
     name: 'gpt-4.1'
     model: 'gpt-4.1'
+    version: '2025-04-14'
     // Use regional quota (per-region) instead of GlobalStandard
     sku: 'Standard'
     capacity: 5000
