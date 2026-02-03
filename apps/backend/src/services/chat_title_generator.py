@@ -92,7 +92,7 @@ async def generate_conversation_title(
             content = message.get("content", "")
             if not content:
                 continue
-            snippet = content[:200]
+            snippet = content[:500]
             line = f"{message.get('role', 'unknown')}: {snippet}"
             if total_chars + len(line) + 1 > max_total_chars:
                 break

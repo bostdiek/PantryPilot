@@ -149,8 +149,8 @@ class TestGenerateConversationTitle:
             assert len(call_args) <= 21000  # Some buffer for formatting
 
     async def test_truncates_long_messages(self) -> None:
-        """Test truncates message content to 200 characters."""
-        long_content = "x" * 500
+        """Test truncates message content to 500 characters."""
+        long_content = "x" * 1000
         # Start with sufficient messages, then add the long one
         messages = self._make_sufficient_messages()
         messages.append({"role": "user", "content": long_content})
@@ -170,9 +170,9 @@ class TestGenerateConversationTitle:
             await generate_conversation_title(messages)
 
             call_args = mock_agent.run.call_args[0][0]
-            # Content should be truncated to 200 chars
-            assert "x" * 200 in call_args
-            assert "x" * 201 not in call_args
+            # Content should be truncated to 500 chars
+            assert "x" * 500 in call_args
+            assert "x" * 501 not in call_args
 
     async def test_includes_current_title_context(self) -> None:
         """Test includes current title and created_at in context."""

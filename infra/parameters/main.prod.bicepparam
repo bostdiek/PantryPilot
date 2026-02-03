@@ -17,23 +17,24 @@ param geminiApiKey = readEnvironmentVariable('GEMINI_API_KEY', '')
 
 // Azure OpenAI for AI features (replaces Gemini when enabled)
 param deployAzureOpenAI = true
+param azureOpenAILocation = readEnvironmentVariable('AZURE_OPENAI_LOCATION', 'eastus2')
 param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
+param azureOpenAIEndpoint = readEnvironmentVariable('AZURE_OPENAI_ENDPOINT', '')
+
+// Deployment names used by the backend when LLM_PROVIDER=azure_openai
+// These MUST match the deployment names configured in Azure OpenAI.
+param azureChatModel = readEnvironmentVariable('AZURE_OPENAI_CHAT_MODEL', 'gpt-4.1')
+param azureMultimodalModel = readEnvironmentVariable('AZURE_OPENAI_MULTIMODAL_MODEL', 'gpt-5-mini')
+param azureTextModel = readEnvironmentVariable('AZURE_OPENAI_TEXT_MODEL', 'gpt-5-nano')
+param azureEmbeddingModel = readEnvironmentVariable('AZURE_OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')
 param azureOpenAIDeployments = [
   // Chat/completion model for chat agent, recipe extraction, and title generation
   {
-    name: 'gpt-4.1-mini'
-    model: 'gpt-4.1-mini'
-    version: '2025-04-14'
-    sku: 'GlobalStandard'
-    capacity: 100
-  }
-  // Larger model for complex reasoning tasks
-  {
     name: 'gpt-4.1'
     model: 'gpt-4.1'
-    version: '2025-04-14'
-    sku: 'GlobalStandard'
-    capacity: 100
+    // Use regional quota (per-region) instead of GlobalStandard
+    sku: 'Standard'
+    capacity: 5000
   }
   // Multimodal model for image-based recipe extraction
   {
@@ -41,7 +42,7 @@ param azureOpenAIDeployments = [
     model: 'gpt-5-mini'
     version: '2025-08-07'
     sku: 'GlobalStandard'
-    capacity: 100
+    capacity: 50
   }
   // Fast text model for context generation
   {
@@ -49,7 +50,7 @@ param azureOpenAIDeployments = [
     model: 'gpt-5-nano'
     version: '2025-08-07'
     sku: 'GlobalStandard'
-    capacity: 100
+    capacity: 50
   }
   // Embedding model for semantic search (1536 dimensions)
   {
@@ -57,6 +58,6 @@ param azureOpenAIDeployments = [
     model: 'text-embedding-3-small'
     version: '1'
     sku: 'Standard'
-    capacity: 100
+    capacity: 50
   }
 ]
