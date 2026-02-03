@@ -287,8 +287,8 @@ class TestGenerateConversationTitle:
             assert "assistant: Great choice!" in call_args
             assert "Generate a title for:" in call_args
 
-    async def test_returns_current_title_when_insufficient_messages(self) -> None:
-        """Test returns current_title when fewer than 3 user messages."""
+    async def test_returns_none_when_insufficient_messages(self) -> None:
+        """Test returns None when fewer than 3 user messages to allow retry later."""
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
@@ -299,10 +299,14 @@ class TestGenerateConversationTitle:
         title = await generate_conversation_title(
             messages, current_title="Existing Title"
         )
-        assert title == "Existing Title"
+        # Returns None so scheduler skips this conversation
+        # (doesn't set title_updated_at)
+        assert title is None
 
-    async def test_raises_when_insufficient_messages_no_current_title(self) -> None:
-        """Test raises ValueError when <3 user messages and no current_title."""
+    async def test_returns_none_when_insufficient_messages_no_current_title(
+        self,
+    ) -> None:
+        """Test returns None when <3 user messages, regardless of current_title."""
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"},
@@ -310,8 +314,9 @@ class TestGenerateConversationTitle:
 
         from services.chat_title_generator import generate_conversation_title
 
-        with pytest.raises(ValueError, match="Not enough conversation context"):
-            await generate_conversation_title(messages)
+        # Should return None (not raise) to allow retry later
+        title = await generate_conversation_title(messages)
+        assert title is None
 
     async def test_skips_messages_with_empty_content(self) -> None:
         """Test skips messages with empty or missing content."""

@@ -59,12 +59,12 @@ async def generate_conversation_title(
     messages: list[dict[str, str]],
     current_title: str | None = None,
     created_at: str | None = None,
-) -> str:
+) -> str | None:
     """Generate a title from the conversation messages.
 
     Requires a minimum of 3 user messages for sufficient context. When fewer than
-    3 user messages are available, this function returns `current_title` if
-    provided; otherwise it raises `ValueError`.
+    3 user messages are available, returns None to signal the conversation should
+    be skipped and retried later.
 
     Args:
         messages: List of message dicts with 'role' and 'content' keys
@@ -72,7 +72,8 @@ async def generate_conversation_title(
         created_at: ISO timestamp when conversation was created
 
     Returns:
-        Generated title string (3-5 words with food emoji)
+        Generated title string (3-5 words with food emoji), or None if not enough
+        context is available
 
     Raises:
         Exception: If AI generation fails
@@ -80,9 +81,9 @@ async def generate_conversation_title(
     try:
         user_messages = [m for m in messages if m.get("role") == "user"]
         if len(user_messages) < 3:
-            if current_title:
-                return current_title
-            raise ValueError("Not enough conversation context to generate title")
+            # Return None to signal we should skip this conversation
+            # The scheduler will not update title_updated_at, allowing retry later
+            return None
 
         # Format all messages, trimming to keep a reasonable prompt size.
         formatted_lines: list[str] = []
