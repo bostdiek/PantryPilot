@@ -150,7 +150,7 @@ def decode_draft_token(token: str) -> dict[str, Any]:
     """
     try:
         s = _settings()
-        payload = jwt.decode(
+        payload: dict[str, Any] = jwt.decode(
             token,
             s.SECRET_KEY,
             algorithms=[s.ALGORITHM],
