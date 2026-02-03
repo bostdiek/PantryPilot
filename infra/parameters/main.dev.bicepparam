@@ -19,9 +19,7 @@ param geminiApiKey = readEnvironmentVariable('GEMINI_API_KEY', '')
 
 // Azure OpenAI for AI features (replaces Gemini when enabled)
 // Bicep is idempotent - if resources exist with matching config, deployment will pass
-// Dev defaults to NOT deploying Azure OpenAI to avoid consuming shared quota twice.
-// Point at an existing/shared Azure OpenAI resource via AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY.
-param deployAzureOpenAI = false
+param deployAzureOpenAI = true
 param azureOpenAILocation = readEnvironmentVariable('AZURE_OPENAI_LOCATION', 'eastus2')
 param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
 param azureOpenAIEndpoint = readEnvironmentVariable('AZURE_OPENAI_ENDPOINT', '')
