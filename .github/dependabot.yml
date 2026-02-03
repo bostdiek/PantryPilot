@@ -10,11 +10,10 @@ updates:
     commit-message:
       prefix: "chore(deps)"
 
-  - package-ecosystem: "pip"
+  - package-ecosystem: "uv"
     directory: "/apps/backend"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 5
 
   - package-ecosystem: "docker"
     directory: "/"
