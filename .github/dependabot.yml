@@ -7,14 +7,31 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      # This name appears in the PR title
+      minor-and-patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: "chore(deps)"
+
 
   - package-ecosystem: "uv"
     directory: "/apps/backend"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      # This name appears in the PR title
+      minor-and-patch-updates:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       prefix: "chore(deps)"
 
