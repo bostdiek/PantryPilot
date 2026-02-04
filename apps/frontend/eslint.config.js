@@ -2,7 +2,7 @@ import js from '@eslint/js';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import reactHooks from 'eslint-plugin-react-hooks';
-import reactRefresh from 'eslint-plugin-react-refresh';
+import { reactRefresh } from 'eslint-plugin-react-refresh';
 import globals from 'globals';
 
 // Provide a minimal structuredClone polyfill for environments where it's missing (e.g. some Node runtimes).
@@ -106,5 +106,16 @@ export default [
     },
   },
   reactHooks.configs['recommended-latest'],
-  reactRefresh.configs.vite,
+  reactRefresh.configs.vite({
+    extraHOCs: ['withErrorBoundary', 'lazy'],
+    allowConstantExport: true,
+  }),
+  // Disable react-refresh rules for router config and HOC utility files
+  // These files intentionally export non-component code and don't benefit from Fast Refresh
+  {
+    files: ['**/routerConfig.tsx', '**/ErrorBoundary.tsx'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ];
