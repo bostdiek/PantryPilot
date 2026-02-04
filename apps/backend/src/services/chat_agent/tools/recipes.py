@@ -142,10 +142,10 @@ def _recipe_to_full_payload(recipe: Recipe) -> dict[str, Any]:
         "serving_max": recipe.serving_max,
         "instructions": recipe.instructions or [],
         "difficulty": RecipeDifficulty(
-            recipe.difficulty or RecipeDifficulty.MEDIUM.value
+            str(recipe.difficulty or RecipeDifficulty.MEDIUM.value)
         ),
         "category": (
-            RecipeCategory(recipe.course_type)
+            RecipeCategory(str(recipe.course_type))
             if recipe.course_type
             else RecipeCategory.LUNCH
         ),
@@ -339,9 +339,11 @@ async def _hybrid_search_with_query(
         items.sort(key=lambda x: x["times_cooked"], reverse=True)
     elif sort_by == "cook_time":
         items.sort(
-            key=lambda x: x["recipe"].total_time_minutes
-            if x["recipe"].total_time_minutes is not None
-            else 10**9
+            key=lambda x: (
+                x["recipe"].total_time_minutes
+                if x["recipe"].total_time_minutes is not None
+                else 10**9
+            )
         )
     else:
         items.sort(

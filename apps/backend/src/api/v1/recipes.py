@@ -238,7 +238,7 @@ async def create_recipe(
             "instructions": new_recipe.instructions,
             # recipe_data.difficulty is already an enum
             "difficulty": recipe_data.difficulty,
-            "category": RecipeCategory(new_recipe.course_type),
+            "category": RecipeCategory(str(new_recipe.course_type)),
             "ethnicity": new_recipe.ethnicity,
             "oven_temperature_f": new_recipe.oven_temperature_f,
             "user_notes": new_recipe.user_notes,
@@ -321,10 +321,10 @@ def _recipe_to_response(
         # Provide defaults for enums when the DB value is missing so Pydantic
         # always receives an allowed enum value.
         "difficulty": RecipeDifficulty(
-            recipe.difficulty or RecipeDifficulty.MEDIUM.value
+            str(recipe.difficulty or RecipeDifficulty.MEDIUM.value)
         ),
         "category": (
-            RecipeCategory(recipe.course_type)
+            RecipeCategory(str(recipe.course_type))
             if recipe.course_type
             else RecipeCategory.LUNCH
         ),

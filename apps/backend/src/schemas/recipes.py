@@ -1,12 +1,12 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class RecipeDifficulty(str, Enum):
+class RecipeDifficulty(StrEnum):
     """Difficulty level of the recipe."""
 
     EASY = "easy"
@@ -14,7 +14,7 @@ class RecipeDifficulty(str, Enum):
     HARD = "hard"
 
 
-class RecipeCategory(str, Enum):
+class RecipeCategory(StrEnum):
     """Recipe category type."""
 
     BREAKFAST = "breakfast"
