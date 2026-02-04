@@ -105,19 +105,51 @@ async def test_capture_training_sample_minimal(mock_db: MockSession) -> None:
 @pytest.mark.asyncio
 async def test_capture_training_sample_simulated(mock_db: MockSession) -> None:
     """Verify is_simulated flag is set correctly for synthetic data."""
+    # Create a synthetic user with @pantrypilot.synthetic email
+    synthetic_user = SimpleNamespace(
+        id=uuid.uuid4(),
+        email="synthetic-veggie-val@pantrypilot.synthetic",
+        username="synthetic-veggie-val",
+    )
+
     sample = await capture_training_sample(
         mock_db,
         conversation_id=uuid.uuid4(),
         message_id=uuid.uuid4(),
-        user_id=uuid.uuid4(),
+        user_id=synthetic_user.id,
         raw_prompt="Synthetic prompt",
         raw_response="Synthetic response",
         tool_calls=None,
         model_name="test-model",
-        is_simulated=True,
+        user=synthetic_user,
     )
 
     assert sample.is_simulated is True
+
+
+@pytest.mark.asyncio
+async def test_capture_training_sample_real_user(mock_db: MockSession) -> None:
+    """Verify is_simulated is False for real users."""
+    # Create a real user with regular email
+    real_user = SimpleNamespace(
+        id=uuid.uuid4(),
+        email="user@example.com",
+        username="realuser",
+    )
+
+    sample = await capture_training_sample(
+        mock_db,
+        conversation_id=uuid.uuid4(),
+        message_id=uuid.uuid4(),
+        user_id=real_user.id,
+        raw_prompt="Real prompt",
+        raw_response="Real response",
+        tool_calls=None,
+        model_name="test-model",
+        user=real_user,
+    )
+
+    assert sample.is_simulated is False
 
 
 @pytest.mark.asyncio

@@ -1332,6 +1332,7 @@ async def stream_chat_message(  # noqa: C901
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     latency_ms=latency_ms,
+                    user=current_user,  # Pass user for synthetic detection
                 )
             except Exception as capture_exc:
                 logger.warning("Failed to capture training sample: %s", capture_exc)
