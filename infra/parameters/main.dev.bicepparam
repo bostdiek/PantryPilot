@@ -14,12 +14,13 @@ param upstashRedisRestToken = readEnvironmentVariable('UPSTASH_REDIS_REST_TOKEN'
 // Brave Search API key for web search integration (optional - leave empty to disable)
 param braveSearchApiKey = readEnvironmentVariable('BRAVE_SEARCH_API_KEY', '')
 
-// Gemini API key for AI model access (optional - leave empty to disable)
+// Gemini API key for AI model access (used for chat/endpoints instead of Azure OpenAI)
 param geminiApiKey = readEnvironmentVariable('GEMINI_API_KEY', '')
 
-// Azure OpenAI for AI features (replaces Gemini when enabled)
+// Azure OpenAI - deploy models for other project parts, but use Gemini for chat/endpoints
 // Bicep is idempotent - if resources exist with matching config, deployment will pass
 param deployAzureOpenAI = true
+param useAzureOpenAIForLLM = false
 param azureOpenAILocation = readEnvironmentVariable('AZURE_OPENAI_LOCATION', 'eastus2')
 param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
 param azureOpenAIEndpoint = readEnvironmentVariable('AZURE_OPENAI_ENDPOINT', '')

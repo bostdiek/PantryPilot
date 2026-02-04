@@ -39,8 +39,11 @@ param braveSearchApiKey string = ''
 @secure()
 param geminiApiKey string = ''
 
-@description('Deploy Azure OpenAI for chat agent (replaces Gemini)')
+@description('Deploy Azure OpenAI resources (can deploy without using for LLM)')
 param deployAzureOpenAI bool = false
+
+@description('Use Azure OpenAI as LLM provider (instead of Gemini) - can be false even when deployAzureOpenAI is true')
+param useAzureOpenAIForLLM bool = false
 
 @description('Azure OpenAI location (model availability varies by region - East US 2 has best coverage)')
 param azureOpenAILocation string = 'eastus2'
@@ -192,9 +195,10 @@ resource azureOpenAIAccount 'Microsoft.CognitiveServices/accounts@2024-10-01' ex
 
 var resolvedAzureOpenAIApiKey = deployAzureOpenAI ? azureOpenAIAccount!.listKeys().key1 : azureOpenAIApiKey
 
-// Support using an existing/shared Azure OpenAI resource without deploying one in this stack.
-// This helps when subscription-level TPM quota must be shared between dev and prod.
-var useAzureOpenAI = deployAzureOpenAI || (!empty(azureOpenAIEndpoint) && !empty(azureOpenAIApiKey))
+// Determine whether to use Azure OpenAI as the LLM provider
+// Can deploy Azure OpenAI (deployAzureOpenAI=true) but still use Gemini (useAzureOpenAIForLLM=false)
+// Or point to existing resource via azureOpenAIEndpoint/ApiKey when not deploying
+var useAzureOpenAI = useAzureOpenAIForLLM || (!empty(azureOpenAIEndpoint) && !empty(azureOpenAIApiKey))
 var resolvedAzureOpenAIEndpoint = deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : azureOpenAIEndpoint
 
 // Container Apps Environment and Backend App
