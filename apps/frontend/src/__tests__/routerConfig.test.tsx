@@ -54,7 +54,7 @@ import {
   newRecipeLoader,
   recipeDetailLoader,
   recipesLoader,
-} from '../routerConfig';
+} from '../loaders';
 
 /**
  * Helper function to assert that a result is a redirect to the clean /recipes/new URL

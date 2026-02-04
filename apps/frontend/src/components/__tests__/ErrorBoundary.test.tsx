@@ -1,8 +1,9 @@
-import React from 'react';
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import userEvent from '@testing-library/user-event';
-import { ErrorBoundary, withErrorBoundary } from '../ErrorBoundary';
+import React from 'react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ErrorBoundary } from '../ErrorBoundary';
+import { withErrorBoundary } from '../withErrorBoundary';
 
 // Test component that throws an error
 const ThrowingComponent: React.FC<{ shouldThrow?: boolean }> = ({

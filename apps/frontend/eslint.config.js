@@ -106,5 +106,15 @@ export default [
     },
   },
   reactHooks.configs['recommended-latest'],
-  reactRefresh.configs.vite,
+  {
+    plugins: {
+      'react-refresh': reactRefresh,
+    },
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true },
+      ],
+    },
+  },
 ];
