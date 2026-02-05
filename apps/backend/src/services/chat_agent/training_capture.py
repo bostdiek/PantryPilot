@@ -26,7 +26,7 @@ def _is_synthetic_user(user: User) -> bool:
     Returns:
         True if user is synthetic, False otherwise
     """
-    return user.email.endswith("@pantrypilot.synthetic")
+    return user.email.lower().endswith("@pantrypilot.synthetic")
 
 
 async def capture_training_sample(

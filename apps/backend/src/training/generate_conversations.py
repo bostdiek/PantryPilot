@@ -142,7 +142,6 @@ class GenerationStats:
     total_duration_seconds: float = 0.0
     conversations_per_persona: dict[str, int] = field(default_factory=dict)
     failures: list[FailedConversation] = field(default_factory=list)
-    failures: list[FailedConversation] = field(default_factory=list)
 
 
 class ConversationGenerator:
@@ -756,42 +755,6 @@ class ConversationGenerator:
 
         logger.warning("Saved %d failures to %s", len(all_failures), failures_file)
         logger.warning("To retry: Load file and re-run failed queries manually")
-        if self.stats.failures:
-            logger.warning("")
-            logger.warning("Failed conversations: %d", len(self.stats.failures))
-            logger.warning("Saving failures to failed_conversations.json for retry...")
-            self._save_failures()
-
-        logger.info("=" * 60)
-
-    def _save_failures(self) -> None:
-        """Save failed conversations to JSON file for retry."""
-        failures_file = Path("failed_conversations.json")
-
-        # Load existing failures if file exists
-        existing_failures = []
-        if failures_file.exists():
-            try:
-                with failures_file.open() as f:
-                    existing_data = json.load(f)
-                    existing_failures = [
-                        FailedConversation(**item) for item in existing_data
-                    ]
-            except Exception as e:
-                logger.warning("Could not load existing failures: %s", e)
-
-        # Merge with new failures
-        all_failures = existing_failures + self.stats.failures
-
-        # Save to file
-        with failures_file.open("w") as f:
-            json.dump(
-                [vars(failure) for failure in all_failures],
-                f,
-                indent=2,
-            )
-
-        logger.info("Saved %d failures to %s", len(all_failures), failures_file)
 
 
 async def run_generation(

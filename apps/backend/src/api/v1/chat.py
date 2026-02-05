@@ -935,7 +935,15 @@ async def _handle_agent_stream_event(
         elif isinstance(result_content, BaseModel):
             # Handle Pydantic models (e.g., MealPlanHistoryResponse)
             # by converting to dict
-            persisted_result = result_content.model_dump(mode="json")
+            try:
+                persisted_result = result_content.model_dump(mode="json")
+            except (TypeError, ValueError) as e:
+                logger.warning(
+                    "Failed to serialize BaseModel %s: %s",
+                    type(result_content).__name__,
+                    e,
+                )
+                persisted_result = {"error": "serialization_failed"}
         else:
             logger.warning(
                 "Tool result content had unexpected type %s; coercing to string",

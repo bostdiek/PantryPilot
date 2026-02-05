@@ -31,8 +31,8 @@ class TestIsSyntheticUser:
         )
         assert _is_synthetic_user(user) is False
 
-    def test_synthetic_domain_case_sensitive(self):
-        """Should match exact domain (case matters in email spec)"""
+    def test_synthetic_domain_case_insensitive(self):
+        """Should match domains case-insensitively (RFC 5321)"""
         user = User(
             id=uuid.uuid4(),
             username="test",
@@ -40,9 +40,9 @@ class TestIsSyntheticUser:
             hashed_password="fake",
             is_verified=True,
         )
-        # This should NOT match because email domains are case-insensitive
-        # but Python str.endswith is case-sensitive
-        assert _is_synthetic_user(user) is False
+        # Email domains are case-insensitive per RFC 5321
+        # so mixed-case synthetic domains should still be detected
+        assert _is_synthetic_user(user) is True
 
     def test_similar_domain_not_synthetic(self):
         """Should not match similar but different domains"""
