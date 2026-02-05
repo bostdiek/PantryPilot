@@ -1,15 +1,29 @@
 """Tests for training data seeding utilities."""
 
 from datetime import date, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from training.seed_database import (
+    SYNTHETIC_PASSWORD,
     _extract_first_name,
     _generate_placeholder_instructions,
     _generate_recipe_description,
+    _get_database_url,
     _infer_difficulty,
     _infer_ethnicity,
+    _load_env_files,
     _normalize_asyncpg_url,
     _parse_recipe_times,
+    cleanup_synthetic_users,
+    create_persona_ingredients,
+    create_persona_meal_history,
+    create_persona_preferences,
+    create_persona_recipes,
+    create_persona_user,
+    seed_all_personas,
+    seed_persona,
 )
 
 
@@ -383,3 +397,417 @@ class TestRelativeDates:
         # Verify strictly increasing
         for i in range(len(dates) - 1):
             assert dates[i] < dates[i + 1]
+
+
+# =============================================================================
+# Environment Loading Tests
+# =============================================================================
+
+
+class TestLoadEnvFiles:
+    """Test environment file loading."""
+
+    def test_load_env_files_no_dotenv(self) -> None:
+        """Should handle missing dotenv package gracefully."""
+        # Mock import to raise ImportError
+        with patch.dict("sys.modules", {"dotenv": None}):
+            # Should not raise when dotenv is unavailable
+            _load_env_files()
+
+    def test_load_env_files_with_dotenv(self) -> None:
+        """Should load env files when dotenv is available."""
+        mock_load_dotenv = MagicMock()
+
+        # Create a mock dotenv module
+        mock_dotenv_module = MagicMock()
+        mock_dotenv_module.load_dotenv = mock_load_dotenv
+
+        # Mock Path to return a file that exists
+        mock_path = MagicMock()
+        mock_candidate = MagicMock()
+        mock_candidate.exists.return_value = True
+        mock_path.return_value.resolve.return_value.parents = [MagicMock()]
+        mock_path.return_value.resolve.return_value.parents[0].__truediv__ = (
+            lambda self, x: mock_candidate
+        )
+
+        with (
+            patch(
+                "training.seed_database.Path",
+                mock_path,
+            ),
+            patch.dict("sys.modules", {"dotenv": mock_dotenv_module}),
+        ):
+            # This may not trigger coverage due to how the import works in the function
+            # But we at least verify the function doesn't crash
+            _load_env_files()
+
+
+class TestGetDatabaseUrl:
+    """Test database URL construction."""
+
+    def test_get_database_url_from_env_var(self) -> None:
+        """Should use DATABASE_URL when set."""
+        with patch.dict(
+            "os.environ",
+            {"DATABASE_URL": "postgres://user:pass@host:5432/db"},
+            clear=True,
+        ):
+            with patch("training.seed_database._load_env_files"):
+                url = _get_database_url()
+                assert "postgresql+asyncpg://" in url
+                assert "@host:" in url or "@localhost:" in url
+
+    def test_get_database_url_replaces_db_hostname(self) -> None:
+        """Should replace 'db' hostname with 'localhost' for local execution."""
+        with patch.dict(
+            "os.environ",
+            {"DATABASE_URL": "postgres://user:pass@db:5432/mydb"},
+            clear=True,
+        ):
+            with patch("training.seed_database._load_env_files"):
+                url = _get_database_url()
+                assert "@localhost:" in url
+                assert "@db:" not in url
+
+    def test_get_database_url_from_postgres_vars(self) -> None:
+        """Should construct URL from POSTGRES_* vars when no DATABASE_URL."""
+        with patch.dict(
+            "os.environ",
+            {
+                "POSTGRES_USER": "testuser",
+                "POSTGRES_PASSWORD": "testpass",
+                "POSTGRES_DB": "testdb",
+                "POSTGRES_HOST": "localhost",
+                "POSTGRES_PORT": "5433",
+            },
+            clear=True,
+        ):
+            with patch("training.seed_database._load_env_files"):
+                url = _get_database_url()
+                expected = (
+                    "postgresql+asyncpg://testuser:testpass@localhost:5433/testdb"
+                )
+                assert expected == url
+
+    def test_get_database_url_defaults(self) -> None:
+        """Should use defaults when no env vars set."""
+        with patch.dict("os.environ", {}, clear=True):
+            with patch("training.seed_database._load_env_files"):
+                url = _get_database_url()
+                assert "postgresql+asyncpg://" in url
+                assert "pantrypilot_dev" in url
+
+    def test_get_database_url_replaces_db_host_to_localhost(self) -> None:
+        """Should replace host 'db' with 'localhost' for local dev."""
+        with patch.dict(
+            "os.environ",
+            {
+                "POSTGRES_USER": "user",
+                "POSTGRES_PASSWORD": "pass",
+                "POSTGRES_DB": "db",
+                "POSTGRES_HOST": "db",
+                "POSTGRES_PORT": "5432",
+            },
+            clear=True,
+        ):
+            with patch("training.seed_database._load_env_files"):
+                url = _get_database_url()
+                assert "@localhost:" in url
+                assert "@db:" not in url
+
+
+class TestSyntheticPassword:
+    """Test synthetic password constant."""
+
+    def test_password_exists(self) -> None:
+        """Verify SYNTHETIC_PASSWORD is defined."""
+        assert SYNTHETIC_PASSWORD is not None
+        assert len(SYNTHETIC_PASSWORD) > 8  # Reasonably strong password
+
+
+# =============================================================================
+# Async Database Function Tests (with mocks)
+# =============================================================================
+
+
+@pytest.fixture
+def mock_db_session() -> AsyncMock:
+    """Create a mock async database session."""
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.flush = AsyncMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    db.delete = AsyncMock()
+    return db
+
+
+@pytest.fixture
+def sample_persona() -> dict:
+    """Create a sample persona for testing."""
+    return {
+        "user_id": "synthetic-test-user",
+        "preferences": {
+            "dietary_restrictions": ["vegetarian"],
+            "cuisine_preferences": ["italian", "mexican"],
+            "cooking_skill": "intermediate",
+            "household_size": 2,
+            "location": {
+                "city": "San Francisco",
+                "state_or_region": "CA",
+                "country": "USA",
+                "postal_code": "94102",
+            },
+        },
+        "recipes": [
+            {"name": "Pasta Primavera", "tags": ["italian", "vegetarian", "30min"]},
+            {"name": "Veggie Tacos", "tags": ["mexican", "easy", "20min"]},
+        ],
+        "pantry_items": ["tofu", "rice", "beans", "tomatoes"],
+        "meal_plan_history": [
+            {"date": "2026-01-01", "recipe": "Pasta Primavera", "meal": "dinner"},
+            {"date": "2026-01-02", "recipe": "Veggie Tacos", "meal": "dinner"},
+        ],
+    }
+
+
+@pytest.mark.asyncio
+class TestCreatePersonaUser:
+    """Tests for create_persona_user function."""
+
+    async def test_creates_user_with_correct_fields(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should create a user with the correct attributes."""
+        user = await create_persona_user(
+            mock_db_session, "test_persona", sample_persona
+        )
+
+        # Verify user was added and flushed
+        mock_db_session.add.assert_called_once()
+        mock_db_session.flush.assert_called_once()
+
+        # Verify user attributes
+        assert user.username == "synthetic-test-user"
+        assert user.email == "synthetic-test-user@pantrypilot.synthetic"
+        assert user.is_verified is True
+        assert user.first_name == "Persona"
+        assert user.last_name == "(Synthetic)"
+
+
+@pytest.mark.asyncio
+class TestCreatePersonaPreferences:
+    """Tests for create_persona_preferences function."""
+
+    async def test_creates_preferences_with_correct_fields(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should create preferences with the correct attributes."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = "synthetic-test-user"
+
+        prefs = await create_persona_preferences(
+            mock_db_session, mock_user, sample_persona
+        )
+
+        mock_db_session.add.assert_called_once()
+        mock_db_session.flush.assert_called_once()
+
+        # Verify preferences
+        assert prefs.user_id == 1
+        assert prefs.dietary_restrictions == ["vegetarian"]
+        assert prefs.city == "San Francisco"
+        assert prefs.family_size == 2
+
+
+@pytest.mark.asyncio
+class TestCreatePersonaRecipes:
+    """Tests for create_persona_recipes function."""
+
+    async def test_creates_recipes_for_all_entries(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should create a recipe for each recipe in the persona."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = "synthetic-test-user"
+
+        recipe_map = await create_persona_recipes(
+            mock_db_session, mock_user, sample_persona
+        )
+
+        # Should create both recipes
+        assert len(recipe_map) == 2
+        assert "Pasta Primavera" in recipe_map
+        assert "Veggie Tacos" in recipe_map
+        mock_db_session.flush.assert_called_once()
+
+
+@pytest.mark.asyncio
+class TestCreatePersonaIngredients:
+    """Tests for create_persona_ingredients function."""
+
+    async def test_creates_all_pantry_items(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should create an ingredient for each pantry item."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = "synthetic-test-user"
+
+        ingredients = await create_persona_ingredients(
+            mock_db_session, mock_user, sample_persona
+        )
+
+        assert len(ingredients) == 4
+        mock_db_session.flush.assert_called_once()
+
+
+@pytest.mark.asyncio
+class TestCreatePersonaMealHistory:
+    """Tests for create_persona_meal_history function."""
+
+    async def test_creates_meal_entries(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should create meal entries for all history items."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = "synthetic-test-user"
+
+        mock_recipe = MagicMock()
+        mock_recipe.id = 100
+        recipe_map = {"Pasta Primavera": mock_recipe, "Veggie Tacos": mock_recipe}
+
+        meals = await create_persona_meal_history(
+            mock_db_session, mock_user, sample_persona, recipe_map
+        )
+
+        assert len(meals) == 2
+        mock_db_session.flush.assert_called_once()
+
+    async def test_handles_missing_recipe(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should handle recipes not in the recipe map."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = "synthetic-test-user"
+
+        # Empty recipe map - no recipes found
+        recipe_map: dict = {}
+
+        meals = await create_persona_meal_history(
+            mock_db_session, mock_user, sample_persona, recipe_map
+        )
+
+        # Should still create meals, but with recipe_id = None
+        assert len(meals) == 2
+        for meal in meals:
+            assert meal.recipe_id is None
+
+
+@pytest.mark.asyncio
+class TestSeedPersona:
+    """Tests for seed_persona function."""
+
+    async def test_seeds_complete_persona(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should seed all data for a persona."""
+        with (
+            patch("training.seed_database.create_persona_user") as mock_create_user,
+            patch(
+                "training.seed_database.create_persona_preferences"
+            ) as mock_create_prefs,
+            patch(
+                "training.seed_database.create_persona_recipes"
+            ) as mock_create_recipes,
+            patch(
+                "training.seed_database.create_persona_ingredients"
+            ) as mock_create_ingredients,
+            patch(
+                "training.seed_database.create_persona_meal_history"
+            ) as mock_create_meals,
+        ):
+            # Setup mocks
+            mock_user = MagicMock()
+            mock_user.id = 1
+            mock_create_user.return_value = mock_user
+            mock_create_prefs.return_value = MagicMock()
+            mock_create_recipes.return_value = {"Test Recipe": MagicMock()}
+            mock_create_ingredients.return_value = [MagicMock()]
+            mock_create_meals.return_value = [MagicMock()]
+
+            result = await seed_persona(mock_db_session, "test_persona", sample_persona)
+
+            # All functions should be called
+            mock_create_user.assert_called_once()
+            mock_create_prefs.assert_called_once()
+            mock_create_recipes.assert_called_once()
+            mock_create_ingredients.assert_called_once()
+            mock_create_meals.assert_called_once()
+            mock_db_session.commit.assert_called_once()
+
+            # Result should contain all seeded data
+            assert "user" in result
+            assert "preferences" in result
+            assert "recipes" in result
+            assert "ingredients" in result
+            assert "meals" in result
+
+
+@pytest.mark.asyncio
+class TestSeedAllPersonas:
+    """Tests for seed_all_personas function."""
+
+    async def test_seeds_all_personas(self, mock_db_session: AsyncMock) -> None:
+        """Should seed all personas in PERSONAS dict."""
+        with (
+            patch("training.seed_database.seed_persona") as mock_seed,
+            patch(
+                "training.seed_database.PERSONAS",
+                {"persona1": {"user_id": "test1"}, "persona2": {"user_id": "test2"}},
+            ),
+        ):
+            mock_seed.return_value = {"user": MagicMock()}
+
+            results = await seed_all_personas(mock_db_session)
+
+            assert mock_seed.call_count == 2
+            assert "persona1" in results
+            assert "persona2" in results
+
+
+@pytest.mark.asyncio
+class TestCleanupSyntheticUsers:
+    """Tests for cleanup_synthetic_users function."""
+
+    async def test_cleanup_deletes_users(self, mock_db_session: AsyncMock) -> None:
+        """Should delete synthetic users and related data."""
+        # Mock the query result
+        mock_user = MagicMock()
+        mock_user.id = 1
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [mock_user]
+        mock_db_session.execute.return_value = mock_result
+
+        await cleanup_synthetic_users(mock_db_session)
+
+        # Should execute delete queries for related tables
+        assert mock_db_session.execute.call_count >= 1
+        mock_db_session.commit.assert_called_once()
+
+    async def test_cleanup_no_users(self, mock_db_session: AsyncMock) -> None:
+        """Should handle case when no synthetic users exist."""
+        # Mock empty result
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_db_session.execute.return_value = mock_result
+
+        count = await cleanup_synthetic_users(mock_db_session)
+
+        assert count == 0

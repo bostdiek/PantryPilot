@@ -21,8 +21,11 @@ from training.query_templates import (
     PERSONA_QUERIES,
     QUERY_TOOL_COVERAGE,
     format_query,
+    get_all_queries,
     get_conversation_scenarios,
+    get_follow_ups,
     get_persona_queries,
+    get_tool_coverage_queries,
 )
 
 
@@ -324,6 +327,50 @@ class TestQueryFormatting:
         for scenario in scenarios:
             assert isinstance(scenario, list)
             assert all(isinstance(q, str) for q in scenario)
+
+    def test_get_all_queries_returns_dict(self) -> None:
+        """Verify get_all_queries returns dictionary of all persona queries."""
+        all_queries = get_all_queries()
+        assert isinstance(all_queries, dict)
+        assert all_queries == PERSONA_QUERIES
+        for persona_name in PERSONAS:
+            assert persona_name in all_queries
+
+    def test_get_tool_coverage_queries_returns_list(self) -> None:
+        """Verify get_tool_coverage_queries returns list of queries for a tool."""
+        queries = get_tool_coverage_queries("veggie_val", "search_recipes")
+        assert isinstance(queries, list)
+        assert len(queries) > 0
+        assert all(isinstance(q, str) for q in queries)
+
+    def test_get_tool_coverage_queries_raises_on_invalid_persona(self) -> None:
+        """Verify get_tool_coverage_queries raises KeyError for unknown persona."""
+        with pytest.raises(KeyError):
+            get_tool_coverage_queries("nonexistent_persona", "search_recipes")
+
+    def test_get_tool_coverage_queries_raises_on_invalid_tool(self) -> None:
+        """Verify get_tool_coverage_queries raises KeyError for unknown tool."""
+        with pytest.raises(KeyError):
+            get_tool_coverage_queries("veggie_val", "nonexistent_tool")
+
+    def test_get_follow_ups_returns_list(self) -> None:
+        """Verify get_follow_ups returns list of follow-up templates."""
+        follow_ups = get_follow_ups("refinement")
+        assert isinstance(follow_ups, list)
+        assert len(follow_ups) > 0
+        assert all(isinstance(f, str) for f in follow_ups)
+
+    def test_get_follow_ups_raises_on_invalid_type(self) -> None:
+        """Verify get_follow_ups raises KeyError for unknown type."""
+        with pytest.raises(KeyError):
+            get_follow_ups("nonexistent_type")
+
+    def test_get_follow_ups_all_types(self) -> None:
+        """Verify get_follow_ups works for all defined types."""
+        for follow_up_type in FOLLOW_UP_TYPES:
+            follow_ups = get_follow_ups(follow_up_type)
+            assert isinstance(follow_ups, list)
+            assert len(follow_ups) > 0
 
 
 class TestPersonaDiversity:
