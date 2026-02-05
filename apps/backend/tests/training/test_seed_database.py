@@ -130,16 +130,16 @@ class TestInferDifficulty:
     """Test difficulty inference from tags."""
 
     def test_advanced_from_complex(self):
-        """Should return 'advanced' for 'complex' tag"""
-        assert _infer_difficulty(["complex", "italian"]) == "advanced"
+        """Should return 'hard' for 'complex' tag"""
+        assert _infer_difficulty(["complex", "italian"]) == "hard"
 
     def test_advanced_from_advanced(self):
-        """Should return 'advanced' for 'advanced' tag"""
-        assert _infer_difficulty(["advanced"]) == "advanced"
+        """Should return 'hard' for 'advanced' tag"""
+        assert _infer_difficulty(["advanced"]) == "hard"
 
     def test_intermediate_tag(self):
-        """Should return 'intermediate' for 'intermediate' tag"""
-        assert _infer_difficulty(["intermediate", "thai"]) == "intermediate"
+        """Should return 'medium' for 'intermediate' tag"""
+        assert _infer_difficulty(["intermediate", "thai"]) == "medium"
 
     def test_easy_from_easy(self):
         """Should return 'easy' for 'easy' tag"""
@@ -150,17 +150,17 @@ class TestInferDifficulty:
         assert _infer_difficulty(["quick", "15min"]) == "easy"
 
     def test_default_intermediate(self):
-        """Should default to 'intermediate' with no difficulty tags"""
-        assert _infer_difficulty(["italian", "30min"]) == "intermediate"
+        """Should default to 'medium' with no difficulty tags"""
+        assert _infer_difficulty(["italian", "30min"]) == "medium"
 
     def test_empty_tags(self):
-        """Should default to 'intermediate' for empty tags"""
-        assert _infer_difficulty([]) == "intermediate"
+        """Should default to 'medium' for empty tags"""
+        assert _infer_difficulty([]) == "medium"
 
     def test_case_insensitive(self):
         """Should handle case-insensitive tag matching"""
         assert _infer_difficulty(["EASY", "Quick"]) == "easy"
-        assert _infer_difficulty(["COMPLEX"]) == "advanced"
+        assert _infer_difficulty(["COMPLEX"]) == "hard"
 
 
 class TestInferEthnicity:

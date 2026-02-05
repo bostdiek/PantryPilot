@@ -59,12 +59,37 @@ from training.query_templates import (
 from training.seed_database import SYNTHETIC_PASSWORD
 
 
+# Retry configuration
+MAX_RETRIES = 5
+BASE_RETRY_DELAY = 2.0  # seconds
+MAX_RETRY_DELAY = 60.0  # seconds
+
+# Request delay configuration (seconds between requests)
+# Default to 7s to safely stay under 10 req/60s rate limit (6s theoretical minimum)
+DEFAULT_REQUEST_DELAY = float(os.getenv("REQUEST_DELAY_SECONDS", "7.0"))
+DEFAULT_MULTI_TURN_DELAY = float(os.getenv("MULTI_TURN_DELAY_SECONDS", "8.0"))
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _calculate_retry_delay(attempt: int) -> float:
+    """Calculate exponential backoff delay for retry attempts.
+
+    Args:
+        attempt: Current retry attempt (0-indexed)
+
+    Returns:
+        Delay in seconds with jitter
+    """
+    delay = min(BASE_RETRY_DELAY * (2**attempt), MAX_RETRY_DELAY)
+    # Add jitter to avoid thundering herd
+    jitter = random.uniform(0, delay * 0.1)
+    return delay + jitter
 
 
 def _load_env_files() -> None:
@@ -127,17 +152,29 @@ class ConversationGenerator:
         self,
         api_base_url: str = "http://localhost:8000",
         timeout: float = 120.0,
+        request_delay: float = DEFAULT_REQUEST_DELAY,
+        multi_turn_delay: float = DEFAULT_MULTI_TURN_DELAY,
     ):
         """Initialize the generator.
 
         Args:
             api_base_url: Base URL of the PantryPilot backend
             timeout: Request timeout in seconds
+            request_delay: Delay between single-turn requests (seconds)
+            multi_turn_delay: Delay between multi-turn conversation turns (seconds)
         """
         self.api_base_url = api_base_url.rstrip("/")
         self.timeout = timeout
+        self.request_delay = request_delay
+        self.multi_turn_delay = multi_turn_delay
         self.tokens: dict[str, str] = {}  # persona -> access_token
         self.stats = GenerationStats()
+
+        logger.info(
+            "Initialized with request_delay=%.1fs, multi_turn_delay=%.1fs",
+            request_delay,
+            multi_turn_delay,
+        )
 
     async def login(self, client: httpx.AsyncClient, persona_name: str) -> str | None:
         """Login as a synthetic user and get access token.
@@ -180,6 +217,52 @@ class ConversationGenerator:
         except Exception as e:
             logger.exception("Login error for %s: %s", username, e)
             return None
+
+    async def send_chat_message_with_retry(
+        self,
+        client: httpx.AsyncClient,
+        persona_name: str,
+        message: str,
+        conversation_id: str | None = None,
+    ) -> ConversationResult:
+        """Send a chat message with retry logic for rate limiting.
+
+        Args:
+            client: HTTP client
+            persona_name: Name of the persona
+            message: User message to send
+            conversation_id: Optional conversation ID (creates new if None)
+
+        Returns:
+            ConversationResult with response data
+        """
+        for attempt in range(MAX_RETRIES):
+            result = await self.send_chat_message(
+                client, persona_name, message, conversation_id
+            )
+
+            # Check if we got a 429 error
+            if result.error and "429" in result.error:
+                if attempt < MAX_RETRIES - 1:
+                    delay = _calculate_retry_delay(attempt)
+                    logger.warning(
+                        "Rate limited (429), retry %d/%d after %.1fs",
+                        attempt + 1,
+                        MAX_RETRIES,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    logger.error(
+                        "Rate limited after %d retries, giving up",
+                        MAX_RETRIES,
+                    )
+
+            return result
+
+        # Shouldn't reach here, but return last result
+        return result
 
     async def send_chat_message(  # noqa: C901
         self,
@@ -336,7 +419,9 @@ class ConversationGenerator:
                 query[:80] + "..." if len(query) > 80 else query,
             )
 
-            result = await self.send_chat_message(client, persona_name, query)
+            result = await self.send_chat_message_with_retry(
+                client, persona_name, query
+            )
             results.append(result)
 
             # Update stats
@@ -362,8 +447,9 @@ class ConversationGenerator:
                     result.duration_seconds,
                 )
 
-            # Small delay between requests
-            await asyncio.sleep(0.5)
+            # Delay between requests to respect rate limits
+            if i < num_queries - 1:  # Don't delay after last request
+                await asyncio.sleep(self.request_delay)
 
         return results
 
@@ -399,20 +485,22 @@ class ConversationGenerator:
             min(num_conversations, len(scenarios)),
         )
 
-        for scenario in selected:
+        for i, scenario in enumerate(selected):
             conversation_id = str(uuid4())
             conversation_results: list[ConversationResult] = []
 
             logger.info(
-                "[%s] Multi-turn conversation: %s",
+                "[%s] Multi-turn conversation %d/%d: %d turns",
                 persona_name,
-                scenario.get("name", "unnamed"),
+                i + 1,
+                len(selected),
+                len(scenario),
             )
 
-            for turn in scenario.get("turns", []):
+            for turn_idx, turn in enumerate(scenario):
                 query = format_query(turn, persona)
 
-                result = await self.send_chat_message(
+                result = await self.send_chat_message_with_retry(
                     client,
                     persona_name,
                     query,
@@ -438,8 +526,9 @@ class ConversationGenerator:
                     self.stats.successful_conversations += 1
                     self.stats.total_tool_calls += len(result.tool_calls)
 
-                # Delay between turns
-                await asyncio.sleep(1.0)
+                # Delay between turns to respect rate limits
+                if turn_idx < len(scenario) - 1:  # Don't delay after last turn
+                    await asyncio.sleep(self.multi_turn_delay)
 
             results.append(conversation_results)
 
@@ -711,6 +800,8 @@ async def run_generation(
     target_per_persona: int | None = None,
     seed_first: bool = False,
     concurrent: bool = True,
+    request_delay: float | None = None,
+    multi_turn_delay: float | None = None,
 ) -> dict[str, Any]:
     """Main entry point for generation.
 
@@ -720,6 +811,8 @@ async def run_generation(
         target_per_persona: Override target samples
         seed_first: Whether to seed database before generating
         concurrent: Run personas concurrently (default: True)
+        request_delay: Delay between single-turn requests (env var if None)
+        multi_turn_delay: Delay between multi-turn turns (env var if None)
 
     Returns:
         Generation results
@@ -738,7 +831,11 @@ async def run_generation(
         logger.info("Seeding complete")
 
     # Generate conversations
-    generator = ConversationGenerator(api_base_url=url)
+    generator = ConversationGenerator(
+        api_base_url=url,
+        request_delay=request_delay or DEFAULT_REQUEST_DELAY,
+        multi_turn_delay=multi_turn_delay or DEFAULT_MULTI_TURN_DELAY,
+    )
     return await generator.generate_all(
         personas=personas,
         target_per_persona=target_per_persona,

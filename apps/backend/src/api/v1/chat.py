@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -931,6 +932,10 @@ async def _handle_agent_stream_event(
             persisted_result: dict[str, object] | None = result_content
         elif result_content is None:
             persisted_result = None
+        elif isinstance(result_content, BaseModel):
+            # Handle Pydantic models (e.g., MealPlanHistoryResponse)
+            # by converting to dict
+            persisted_result = result_content.model_dump(mode="json")
         else:
             logger.warning(
                 "Tool result content had unexpected type %s; coercing to string",

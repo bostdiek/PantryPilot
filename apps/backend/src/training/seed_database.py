@@ -526,15 +526,18 @@ def _parse_recipe_times(tags: list[str]) -> tuple[int | None, int | None]:
 
 
 def _infer_difficulty(tags: list[str]) -> str:
-    """Infer recipe difficulty from tags."""
+    """Infer recipe difficulty from tags.
+
+    Returns valid RecipeDifficulty enum values: 'easy', 'medium', or 'hard'.
+    """
     tag_set = {t.lower() for t in tags}
-    if "complex" in tag_set or "advanced" in tag_set:
-        return "advanced"
-    if "intermediate" in tag_set:
-        return "intermediate"
+    if "complex" in tag_set or "advanced" in tag_set or "hard" in tag_set:
+        return "hard"
+    if "intermediate" in tag_set or "medium" in tag_set:
+        return "medium"
     if "easy" in tag_set or "quick" in tag_set:
         return "easy"
-    return "intermediate"
+    return "medium"
 
 
 def _infer_ethnicity(tags: list[str]) -> str | None:

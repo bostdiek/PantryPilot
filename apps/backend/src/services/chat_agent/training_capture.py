@@ -95,7 +95,8 @@ async def capture_training_sample(
 
     db.add(sample)
     await db.flush()
-    await db.commit()
+    # Note: Do not commit here - let the endpoint manage the transaction
+    # to avoid nested transaction conflicts with asyncpg
 
     logger.debug(
         "Captured training sample %s for conversation %s",
@@ -128,7 +129,8 @@ async def update_training_sample_feedback(
 
     sample.user_feedback = feedback
     await db.flush()
-    await db.commit()
+    # Note: Do not commit here - let the endpoint manage the transaction
+    # to avoid nested transaction conflicts with asyncpg
 
     logger.debug("Updated feedback for training sample %s: %s", sample_id, feedback)
 
