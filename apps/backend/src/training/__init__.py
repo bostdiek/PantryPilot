@@ -4,6 +4,12 @@ This module provides tools for generating synthetic training data using
 user personas, query templates, and multi-turn conversation scenarios.
 """
 
+from training.generate_conversations import (
+    ConversationGenerator,
+    ConversationResult,
+    GenerationStats,
+    run_generation,
+)
 from training.personas import (
     PERSONAS,
     SAMPLE_TARGETS,
@@ -27,6 +33,13 @@ from training.query_templates import (
     get_follow_ups,
     get_persona_queries,
     get_tool_coverage_queries,
+)
+from training.seed_database import (
+    SYNTHETIC_PASSWORD,
+    cleanup_synthetic_users,
+    run_seeding,
+    seed_all_personas,
+    seed_persona,
 )
 
 
@@ -53,4 +66,15 @@ __all__ = [
     "get_follow_ups",
     "get_persona_queries",
     "get_tool_coverage_queries",
+    # Seeding
+    "SYNTHETIC_PASSWORD",
+    "cleanup_synthetic_users",
+    "run_seeding",
+    "seed_all_personas",
+    "seed_persona",
+    # Conversation generation
+    "ConversationGenerator",
+    "ConversationResult",
+    "GenerationStats",
+    "run_generation",
 ]

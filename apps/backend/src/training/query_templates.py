@@ -22,7 +22,7 @@ from typing import Any
 PERSONA_QUERIES: dict[str, list[str]] = {
     "veggie_val": [
         # search_recipes - recipe discovery
-        "I want to make something with {pantry_item} tonight",
+        "I want to make something with tofu tonight",
         "Can you suggest a Mediterranean dish?",
         "What vegetarian dishes use quinoa?",
         "I'm craving Italian food - any suggestions?",
@@ -32,19 +32,19 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "What have I been eating this month?",
         "Show me my meal history for the past week",
         # get_daily_weather - weather-based suggestions
-        "It's cold and rainy in San Francisco today, what should I cook?",
-        "What's a good recipe for this weather?",
-        "Something warming for a foggy day",
+        "What's the weather like in San Francisco today?",
+        "What should I cook based on today's weather?",
+        "Can you check the weather and suggest something appropriate?",
         # web_search - find new recipes online
         "Find me a new vegetarian recipe online",
         "Search the web for tofu stir fry recipes",
         "Look up Mediterranean chickpea recipes",
         # fetch_url_as_markdown - get specific recipe
-        "Get the recipe from this link: https://example.com/veggie-curry",
-        "Save that recipe from Minimalist Baker",
+        "Get the recipe from minimalistbaker.com/vegan-curry",
+        "Fetch the Buddha bowl recipe from ohsheglows.com",
         # suggest_recipe - save recipe drafts
-        "Save this tofu recipe for later",
-        "Add this Buddha bowl recipe to my collection",
+        "Save a tofu recipe for later",
+        "Add the best Buddha bowl recipe to my collection",
         # propose_meal_for_day - meal planning
         "Plan my dinners for next week",
         "Add Chickpea Curry to Monday's dinner",
@@ -70,19 +70,17 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "It's Taco Tuesday, remind me what we usually do",
         "Show me what we've eaten this month",
         # get_daily_weather
-        "It's a cold day in Columbus, what's a good comfort dinner?",
-        "Hot day today, something light for dinner?",
-        "Rainy Saturday, perfect for comfort food",
+        "What's the weather like in Columbus today?",
+        "Check the weather - should we do comfort food or something light?",
+        "What's the forecast for Saturday? Planning a family dinner.",
         # web_search
         "Find me new kid-friendly recipes online",
         "Search for easy school night dinners",
         "Look up crockpot family meals",
         # fetch_url_as_markdown
-        "Get that mac and cheese recipe from Tasty",
-        "Save the recipe from this Pinterest link",
+        "Get that mac and cheese recipe from tasty.co",
         # suggest_recipe
-        "Save this chicken nuggets recipe",
-        "Add this to my family favorites",
+        "Save a chicken nuggets recipe",
         # propose_meal_for_day
         "Help me plan dinners for the whole week",
         "Add mac and cheese to Tuesday's dinner",
@@ -108,19 +106,17 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "What did I eat last week?",
         "I think I made ramen recently, when was that?",
         # get_daily_weather
-        "It's pouring in Seattle, good soup weather?",
-        "Cold and dark tonight, comfort food please",
-        "Nice day, maybe a quick salad?",
+        "What's the weather like in Seattle?",
+        "Check the weather - soup weather or salad weather?",
+        "What's the forecast for tonight?",
         # web_search
         "Find quick single-serving recipes online",
         "Search for easy microwave meals",
         "Look up instant ramen upgrades",
         # fetch_url_as_markdown
-        "Get that ramen recipe from Serious Eats",
-        "Grab the recipe from this TikTok video link",
+        "Get that ramen recipe from seriouseats.com",
         # suggest_recipe
-        "Save this for when I'm feeling lazy",
-        "Add this to my quick meals",
+        "Save a quick lazy dinner recipe",
         # propose_meal_for_day
         "Just plan tomorrow's dinner",
         "Add something quick for Wednesday",
@@ -146,19 +142,19 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Show me my safe meal history",
         "What have I been eating lately?",
         # get_daily_weather
-        "Cold day in Denver, want something warm and GF",
-        "It's snowing, perfect for soup - but gluten-free",
-        "Nice spring day, light GF meal ideas?",
+        "What's the weather like in Denver today?",
+        "Check the weather - I want to cook something appropriate",
+        "What's the forecast? I'm planning a GF meal.",
         # web_search
         "Find gluten-free bread recipes online",
         "Search for celiac-safe Italian recipes",
         "Look up certified GF restaurant recipes",
         # fetch_url_as_markdown
-        "Get that GF pizza recipe from King Arthur",
-        "Save the recipe from this GF blogger",
+        "Get the GF pizza recipe from kingarthurbaking.com",
+        "Fetch the recipe from glutenfreeonashoestring.com",
         # suggest_recipe
-        "Save this - I verified it's safe",
-        "Add this cauliflower crust recipe",
+        "Save a verified gluten-free pasta recipe",
+        "Add a cauliflower crust pizza recipe to my collection",
         # propose_meal_for_day
         "Plan my week with only GF options",
         "Add GF pasta carbonara to Thursday",
@@ -186,21 +182,21 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "What cuisines have I been exploring lately?",
         "Show me my cooking adventures this year",
         # get_daily_weather
-        "It's freezing in New York, perfect for pho?",
-        "Hot summer day, maybe some cold Japanese noodles?",
-        "Rainy weekend, great for a cooking project",
+        "What's the weather like in New York today?",
+        "Check the forecast - I want to plan a cooking project",
+        "What's the weather this weekend?",
         # web_search
         "Find authentic butter chicken recipe from an Indian chef",
         "Search for traditional ramen recipes from Japan",
         "Look up Moroccan tagine techniques",
         "Find the best Thai green curry recipe online",
         # fetch_url_as_markdown
-        "Get that Maangchi Korean recipe",
-        "Save the recipe from Serious Eats on biryani",
-        "Grab the technique from this culinary blog",
+        "Get that Korean recipe from maangchi.com",
+        "Fetch the biryani recipe from seriouseats.com",
+        "Grab the technique guide from bonappetit.com",
         # suggest_recipe
-        "Save this, it's a proper authentic recipe",
-        "Add this to my Japanese collection",
+        "Save an authentic ramen recipe to my collection",
+        "Add a traditional Korean dish to my Japanese collection",
         # propose_meal_for_day
         "Plan a world cuisine tour for next week",
         "Add something Indian for Wednesday's dinner",
@@ -228,19 +224,19 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Show me our weekly rotation",
         "What's our normal schedule?",
         # get_daily_weather
-        "Typical winter day in Indianapolis, usual comfort food",
-        "It's cold, perfect for our regular beef stew",
-        "Weather doesn't change what I cook!",
+        "What's the weather like in Indianapolis?",
+        "Check the weather, though it doesn't change what I cook",
+        "What's the forecast for Sunday?",
         # web_search
         "Find a classic meatloaf recipe like grandma made",
         "Search for traditional Sunday roast recipes",
         "Look up old-fashioned pot roast",
         # fetch_url_as_markdown
-        "Get that Betty Crocker recipe my mom used",
-        "Save the traditional recipe from this site",
+        "Get the Betty Crocker meatloaf recipe from bettycrocker.com",
+        "Fetch the traditional pot roast from allrecipes.com",
         # suggest_recipe
-        "Save this - it's close to what we usually make",
-        "Add this classic to my regulars",
+        "Save a classic comfort food recipe",
+        "Add a traditional roast recipe to my regulars",
         # propose_meal_for_day
         "Same meal plan as last week please",
         "Make my usual Sunday dinner",
@@ -269,19 +265,19 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "How much protein have I been getting this week?",
         "Show me my meal prep history",
         # get_daily_weather
-        "Hot day in Austin, still need high protein but light",
-        "Nice weather for a post-workout outdoor meal",
-        "It's gym day, need fuel",
+        "What's the weather like in Austin today?",
+        "Check the forecast - planning outdoor meal prep",
+        "What's the weather this weekend?",
         # web_search
         "Find high-protein meal prep recipes online",
         "Search for bodybuilding meal recipes",
         "Look up lean bulk diet recipes",
         # fetch_url_as_markdown
-        "Get that chicken meal prep from Fitness Volt",
-        "Save the protein pancake recipe from that fitness blog",
+        "Get the chicken meal prep recipe from fitnessvolt.com",
+        "Fetch the protein pancake recipe from muscleandstrength.com",
         # suggest_recipe
-        "Save this - great macros",
-        "Add this to my meal prep rotation",
+        "Save a high-protein meal prep recipe",
+        "Add a great macro-friendly recipe to my rotation",
         # propose_meal_for_day
         "Plan my meal prep for the entire week",
         "I need 6 meals a day planned",
@@ -310,19 +306,19 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Show me what I've been making lately",
         "What dairy-free meals have I had this month?",
         # get_daily_weather
-        "Rainy day in Portland, want something creamy but dairy-free",
-        "Cold and gloomy, comfort food without dairy",
-        "Nice day for a light Asian-inspired meal",
+        "What's the weather like in Portland today?",
+        "Check the forecast - planning my meals",
+        "What's the weather this week?",
         # web_search
         "Find cashew cream pasta recipes online",
         "Search for dairy-free Italian recipes",
         "Look up vegan comfort food",
         # fetch_url_as_markdown
-        "Get that vegan cheese sauce recipe from Minimalist Baker",
-        "Save the dairy-free mac and cheese from this blog",
+        "Get the vegan cheese sauce recipe from minimalistbaker.com",
+        "Fetch the dairy-free mac and cheese from ohsheglows.com",
         # suggest_recipe
-        "Save this - verified dairy-free",
-        "Add this to my dairy alternatives",
+        "Save a verified dairy-free pasta recipe",
+        "Add a good dairy alternative recipe to my collection",
         # propose_meal_for_day
         "Plan dairy-free dinners for the week",
         "Add coconut curry to Wednesday",
@@ -360,7 +356,8 @@ CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
         ],
         # Weather-based cooking (get_daily_weather + search_recipes)
         [
-            "It's cold and rainy in San Francisco today",
+            "What's the weather like in San Francisco today?",
+            "Based on that, what should I cook?",
             "What's a good warming vegetarian dish?",
             "The lentil soup sounds perfect",
             "Add it to tonight's dinner",
@@ -416,8 +413,8 @@ CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
     "solo_sam": [
         # Quick weather-based decision (weather + search + propose)
         [
-            "It's pouring in Seattle",
-            "Perfect soup weather, what do I have?",
+            "What's the weather like in Seattle right now?",
+            "Sounds like soup weather, what do I have?",
             "The ramen upgrade sounds good",
             "That's dinner for tonight",
         ],
@@ -448,8 +445,8 @@ CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
         ],
         # Weather-based with constraints (weather + search)
         [
-            "It's snowing in Denver today",
-            "Something warm and definitely gluten-free",
+            "What's the weather like in Denver today?",
+            "Sounds cold! Something warm and definitely gluten-free",
             "Is the beef stew safe?",
             "Perfect, that's dinner",
         ],
@@ -473,8 +470,8 @@ CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
         ],
         # Weather-inspired adventure (weather + search + history)
         [
-            "It's freezing in New York",
-            "Perfect weather for something warming and complex",
+            "What's the weather like in New York today?",
+            "Cold! Perfect weather for something warming and complex",
             "What challenging recipes haven't I tried?",
             "The homemade ramen sounds perfect",
             "Put it on Sunday - I have all day",
@@ -536,8 +533,8 @@ CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
         ],
         # Weather and workout (weather + search)
         [
-            "Hot day in Austin today",
-            "But still need high protein after the gym",
+            "What's the weather like in Austin today?",
+            "Hot! But still need high protein after the gym",
             "Something light but macro-friendly",
             "The tuna poke bowl sounds perfect",
         ],
@@ -569,8 +566,8 @@ CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
         ],
         # Weather and restrictions (weather + search)
         [
-            "It's a cold rainy day in Portland",
-            "I want something creamy but dairy-free",
+            "What's the weather like in Portland today?",
+            "Sounds chilly! I want something creamy but dairy-free",
             "The coconut soup sounds perfect",
             "Is that also vegetarian?",
             "Great, that's dinner",

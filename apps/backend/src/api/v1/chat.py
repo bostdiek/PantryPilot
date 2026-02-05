@@ -13,6 +13,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -931,6 +932,18 @@ async def _handle_agent_stream_event(
             persisted_result: dict[str, object] | None = result_content
         elif result_content is None:
             persisted_result = None
+        elif isinstance(result_content, BaseModel):
+            # Handle Pydantic models (e.g., MealPlanHistoryResponse)
+            # by converting to dict
+            try:
+                persisted_result = result_content.model_dump(mode="json")
+            except (TypeError, ValueError) as e:
+                logger.warning(
+                    "Failed to serialize BaseModel %s: %s",
+                    type(result_content).__name__,
+                    e,
+                )
+                persisted_result = {"error": "serialization_failed"}
         else:
             logger.warning(
                 "Tool result content had unexpected type %s; coercing to string",
@@ -1332,6 +1345,7 @@ async def stream_chat_message(  # noqa: C901
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                     latency_ms=latency_ms,
+                    user=current_user,  # Pass user for synthetic detection
                 )
             except Exception as capture_exc:
                 logger.warning("Failed to capture training sample: %s", capture_exc)

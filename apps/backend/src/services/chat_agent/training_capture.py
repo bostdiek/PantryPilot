@@ -9,9 +9,24 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.ai_training_samples import AITrainingSample
+from models.users import User
 
 
 logger = logging.getLogger(__name__)
+
+
+def _is_synthetic_user(user: User) -> bool:
+    """Check if user is a synthetic data generation user.
+
+    Synthetic users are identified by the @pantrypilot.synthetic email domain.
+
+    Args:
+        user: User object to check
+
+    Returns:
+        True if user is synthetic, False otherwise
+    """
+    return user.email.lower().endswith("@pantrypilot.synthetic")
 
 
 async def capture_training_sample(
@@ -30,9 +45,11 @@ async def capture_training_sample(
     prompt_tokens: int | None = None,
     completion_tokens: int | None = None,
     latency_ms: int | None = None,
-    is_simulated: bool = False,
+    user: User | None = None,
 ) -> AITrainingSample:
     """Capture LLM interaction for fine-tuning training data.
+
+    Automatically detects synthetic users by email pattern and sets is_simulated flag.
 
     Args:
         db: Database session
@@ -49,11 +66,16 @@ async def capture_training_sample(
         prompt_tokens: Prompt token count
         completion_tokens: Completion token count
         latency_ms: Total request latency in milliseconds
-        is_simulated: True if from synthetic data generation
+        user: User object (optional, for synthetic detection)
 
     Returns:
         Created training sample record
     """
+    # Auto-detect synthetic data by checking user email
+    is_simulated = False
+    if user is not None:
+        is_simulated = _is_synthetic_user(user)
+
     sample = AITrainingSample(
         conversation_id=conversation_id,
         message_id=message_id,
@@ -73,7 +95,8 @@ async def capture_training_sample(
 
     db.add(sample)
     await db.flush()
-    await db.commit()
+    # Note: Do not commit here - let the endpoint manage the transaction
+    # to avoid nested transaction conflicts with asyncpg
 
     logger.debug(
         "Captured training sample %s for conversation %s",
@@ -106,7 +129,8 @@ async def update_training_sample_feedback(
 
     sample.user_feedback = feedback
     await db.flush()
-    await db.commit()
+    # Note: Do not commit here - let the endpoint manage the transaction
+    # to avoid nested transaction conflicts with asyncpg
 
     logger.debug("Updated feedback for training sample %s: %s", sample_id, feedback)
 
