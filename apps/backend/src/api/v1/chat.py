@@ -1307,9 +1307,10 @@ async def stream_chat_message(  # noqa: C901
 
             # Update conversation activity timestamp
             await _update_conversation_activity(db, conversation_id=conversation_id)
-            await db.commit()
 
-            # Capture training sample (non-blocking, failures logged but ignored)
+            # Capture training sample before commit so flush() joins the
+            # same transaction — avoids nested-transaction conflicts with
+            # asyncpg
             try:
                 # Build tool calls data from completed tool calls
                 tool_calls_data = None
@@ -1349,6 +1350,8 @@ async def stream_chat_message(  # noqa: C901
                 )
             except Exception as capture_exc:
                 logger.warning("Failed to capture training sample: %s", capture_exc)
+
+            await db.commit()
 
             yield ChatSseEvent(
                 event="message.complete",
