@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -27,6 +27,7 @@ from models.meal_history import Meal
 from models.recipes_names import Recipe
 from models.user_preferences import UserPreferences
 from models.users import User
+from services.geocoding import GeocodingService
 from training.personas import PERSONAS, PersonaProfile, RecipeData
 
 
@@ -39,6 +40,64 @@ logger = logging.getLogger(__name__)
 
 # Synthetic user password (used for authentication in training data generation)
 SYNTHETIC_PASSWORD = "SyntheticUser2026!"  # noqa: S105  # pragma: allowlist secret
+
+# Geocoding retry configuration (best-effort, respects Nominatim 1 req/sec policy)
+_GEOCODE_MAX_ATTEMPTS = 3
+_GEOCODE_RETRY_INITIAL_DELAY_SECONDS = 1.0
+
+
+async def _geocode_preferences_best_effort(
+    db: AsyncSession,
+    preferences: UserPreferences,
+    username: str,
+) -> None:
+    """Best-effort geocode for seeding.
+
+    Uses a small retry loop with exponential backoff. The underlying
+    `GeocodingService` enforces a 1 request/second rate limit; this retry adds
+    extra spacing between attempts when results are missing or transient errors
+    occur.
+
+    Does not commit; seeding owns the transaction lifecycle.
+    """
+    geocoder = GeocodingService(db)
+
+    for attempt in range(1, _GEOCODE_MAX_ATTEMPTS + 1):
+        try:
+            result = await geocoder.geocode_location(
+                city=preferences.city,
+                state_or_region=preferences.state_or_region,
+                postal_code=preferences.postal_code,
+                country=preferences.country,
+            )
+        except Exception:
+            logger.exception(
+                "Geocoding attempt %d/%d failed for %s",
+                attempt,
+                _GEOCODE_MAX_ATTEMPTS,
+                username,
+            )
+            result = None
+
+        if result is not None:
+            preferences.latitude = result.latitude
+            preferences.longitude = result.longitude
+            preferences.timezone = result.timezone
+            preferences.geocoded_at = datetime.now(UTC)
+            return
+
+        if attempt < _GEOCODE_MAX_ATTEMPTS:
+            delay_seconds = _GEOCODE_RETRY_INITIAL_DELAY_SECONDS * (2 ** (attempt - 1))
+            await asyncio.sleep(delay_seconds)
+
+    logger.warning(
+        "Geocoding returned no results for %s (%s, %s %s, %s)",
+        username,
+        preferences.city,
+        preferences.state_or_region,
+        preferences.postal_code,
+        preferences.country,
+    )
 
 
 def _load_env_files() -> None:
@@ -182,6 +241,12 @@ async def create_persona_preferences(
     )
     db.add(preferences)
     await db.flush()
+
+    # Best-effort: populate geocoded fields for weather/tooling usage.
+    try:
+        await _geocode_preferences_best_effort(db, preferences, user.username)
+    except Exception:
+        logger.exception("Geocoding failed for %s (continuing seeding)", user.username)
 
     logger.info(
         "Created preferences for %s: %s, %s",
