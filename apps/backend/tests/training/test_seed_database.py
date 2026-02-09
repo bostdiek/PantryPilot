@@ -608,18 +608,69 @@ class TestCreatePersonaPreferences:
         mock_user.id = 1
         mock_user.username = "synthetic-test-user"
 
-        prefs = await create_persona_preferences(
-            mock_db_session, mock_user, sample_persona
-        )
+        mock_geocode_result = MagicMock()
+        mock_geocode_result.latitude = 37.779
+        mock_geocode_result.longitude = -122.419
+        mock_geocode_result.timezone = "America/Los_Angeles"
+
+        with patch(
+            "training.seed_database.GeocodingService.geocode_location",
+            new=AsyncMock(return_value=mock_geocode_result),
+        ) as geocode_mock:
+            prefs = await create_persona_preferences(
+                mock_db_session, mock_user, sample_persona
+            )
 
         mock_db_session.add.assert_called_once()
         mock_db_session.flush.assert_called_once()
+
+        geocode_mock.assert_awaited_once()
 
         # Verify preferences
         assert prefs.user_id == 1
         assert prefs.dietary_restrictions == ["vegetarian"]
         assert prefs.city == "San Francisco"
         assert prefs.family_size == 2
+
+        assert prefs.latitude is not None
+        assert prefs.longitude is not None
+        assert prefs.timezone == "America/Los_Angeles"
+        assert prefs.geocoded_at is not None
+
+    async def test_geocoding_retries_then_succeeds(
+        self, mock_db_session: AsyncMock, sample_persona: dict
+    ) -> None:
+        """Should retry geocoding with backoff and populate fields on success."""
+        mock_user = MagicMock()
+        mock_user.id = 1
+        mock_user.username = "synthetic-test-user"
+
+        mock_geocode_result = MagicMock()
+        mock_geocode_result.latitude = 37.779
+        mock_geocode_result.longitude = -122.419
+        mock_geocode_result.timezone = "America/Los_Angeles"
+
+        geocode = AsyncMock(side_effect=[None, mock_geocode_result])
+        sleep = AsyncMock(return_value=None)
+
+        with (
+            patch(
+                "training.seed_database.GeocodingService.geocode_location",
+                new=geocode,
+            ),
+            patch("training.seed_database.asyncio.sleep", new=sleep),
+        ):
+            prefs = await create_persona_preferences(
+                mock_db_session, mock_user, sample_persona
+            )
+
+        assert geocode.await_count == 2
+        sleep.assert_awaited_once()
+
+        assert prefs.latitude is not None
+        assert prefs.longitude is not None
+        assert prefs.timezone == "America/Los_Angeles"
+        assert prefs.geocoded_at is not None
 
 
 @pytest.mark.asyncio
