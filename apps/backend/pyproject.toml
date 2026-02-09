@@ -48,6 +48,13 @@ dev = [
     "pydantic-ai-slim[web]>=1.42.0",
     "pip-audit>=2.10.0",
 ]
+dapt = [
+    "pandas>=2.2.0",
+    "tqdm>=4.66.0",
+    "kaggle>=1.6.0",
+    "azure-ai-ml>=1.22.0",
+    "azure-identity>=1.19.0",
+]
 
 [tool.ruff]
 line-length = 88
