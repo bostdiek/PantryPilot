@@ -17,14 +17,12 @@ import json
 import logging
 import sys
 import urllib.request
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import IO, Any
 
 from tqdm import tqdm
 
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -86,48 +84,62 @@ def download_openrecipes(output_dir: Path) -> Path | None:
     return None
 
 
-def parse_openrecipes(file_path: Path) -> Iterator[dict]:
-    """Parse OpenRecipes JSON file."""
+def _detect_json_format(f: IO[str]) -> str | None:
+    """Detect the first non-whitespace character to determine JSON format."""
+    while True:
+        chunk = f.read(1024)
+        if not chunk:
+            break
+        for ch in chunk:
+            if not ch.isspace():
+                return ch
+    return None
+
+
+def parse_openrecipes(file_path: Path) -> Iterator[dict[str, Any]]:
+    """Parse OpenRecipes JSON file with streaming to avoid memory issues."""
     with open(file_path, encoding="utf-8") as f:
-        content = f.read().strip()
+        first_char = _detect_json_format(f)
+        f.seek(0)  # Rewind for actual parsing
 
-        # Handle both JSONL and JSON array formats
-        if content.startswith("["):
-            # JSON array format
-            recipes = json.loads(content)
-            yield from recipes
+        if first_char == "[":
+            # JSON array format - must load into memory
+            recipes = json.load(f)
+            if isinstance(recipes, list):
+                yield from recipes
         else:
-            # JSONL format (one JSON object per line)
-            for line in content.split("\n"):
+            # JSONL format - stream line by line
+            for line in f:
                 line = line.strip()
-                if line:
-                    try:
-                        yield json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
 
 
-def _format_list_or_str(value: str | list | None) -> str:
+def _format_list_or_str(value: str | Sequence[Any] | None) -> str:
     """Convert list or string value to string."""
-    if isinstance(value, list):
-        return ", ".join(str(i) for i in value if i)
     if isinstance(value, str):
         return value
+    if isinstance(value, Sequence):
+        return ", ".join(str(i) for i in value if i)
     return str(value) if value else ""
 
 
-def _format_instructions(instructions: str | list | None) -> str:
+def _format_instructions(instructions: str | Sequence[Any] | None) -> str:
     """Format instructions as numbered steps."""
-    if isinstance(instructions, list):
+    if isinstance(instructions, str):
+        return instructions
+    if isinstance(instructions, Sequence):
         return "\n".join(
             f"{i + 1}. {step}" for i, step in enumerate(instructions) if step
         )
-    if isinstance(instructions, str):
-        return instructions
     return str(instructions) if instructions else ""
 
 
-def _format_times(recipe: dict) -> str | None:
+def _format_times(recipe: Mapping[str, Any]) -> str | None:
     """Format prep/cook/total times if available."""
     prep_time = recipe.get("prepTime", "")
     cook_time = recipe.get("cookTime", "")
@@ -146,7 +158,7 @@ def _format_times(recipe: dict) -> str | None:
     return ", ".join(times)
 
 
-def format_recipe(recipe: dict) -> str | None:
+def format_recipe(recipe: Mapping[str, Any]) -> str | None:
     """Format an OpenRecipes entry into training text."""
     name = recipe.get("name", "").strip()
     if not name:

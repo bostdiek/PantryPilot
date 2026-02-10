@@ -5,7 +5,7 @@ This script downloads the Food.com Recipes and Interactions dataset (CC0 license
 from Kaggle for use in domain-adaptive pre-training.
 
 Prerequisites:
-    1. Install kaggle: pip install kaggle
+    1. Install dependencies: uv sync --group dapt
     2. Configure Kaggle API key at ~/.kaggle/kaggle.json
        See: https://www.kaggle.com/docs/api#authentication
 """

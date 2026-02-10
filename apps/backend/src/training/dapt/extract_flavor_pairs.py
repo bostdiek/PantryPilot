@@ -16,16 +16,13 @@ import logging
 import sys
 from ast import literal_eval
 from collections import Counter
+from collections.abc import Iterator
 from itertools import combinations
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pandas as pd
 from tqdm import tqdm
 
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -122,9 +119,9 @@ def format_pairing_knowledge(
 
 
 def generate_category_knowledge(
-    recipes_df: pd.DataFrame, pairs: Counter[tuple[str, str]]
+    recipes_df: pd.DataFrame,
 ) -> Iterator[dict[str, str]]:
-    """Generate category-based pairing knowledge."""
+    """Generate category-based pairing knowledge from recipe tags."""
     # Group recipes by tag categories
     category_ingredients: dict[str, Counter[str]] = {}
 
@@ -239,7 +236,7 @@ def main() -> int:
     def generate_all() -> Iterator[dict[str, str]]:
         yield from format_pairing_knowledge(pairs, args.min_count)
         if args.include_categories:
-            yield from generate_category_knowledge(recipes, pairs)
+            yield from generate_category_knowledge(recipes)
 
     count = write_jsonl(generate_all(), args.output)
     logger.info(f"Wrote {count:,} knowledge entries to {args.output}")

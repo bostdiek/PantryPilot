@@ -7,7 +7,7 @@ and registers it as a Data Asset in Azure ML workspace.
 Prerequisites:
     1. Azure CLI logged in: `az login`
     2. Azure ML extension: `az extension add -n ml`
-    3. azure-ai-ml package: `pip install azure-ai-ml azure-identity`
+    3. Install dependencies: `uv sync --group dapt`
 """
 
 from __future__ import annotations
@@ -16,6 +16,11 @@ import argparse
 import logging
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    from azure.ai.ml import MLClient
 
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -31,7 +36,7 @@ def get_ml_client(
     subscription_id: str | None = None,
     resource_group: str | None = None,
     workspace_name: str | None = None,
-):
+) -> MLClient:
     """Get Azure ML client with authentication."""
     try:
         from azure.ai.ml import MLClient
@@ -39,8 +44,8 @@ def get_ml_client(
     except ImportError:
         logger.error(
             "Azure ML SDK not installed. Install with:\n"
-            "  pip install azure-ai-ml azure-identity\n"
-            "Or in the backend: uv add --group azure azure-ai-ml azure-identity"
+            "  uv sync --group dapt\n"
+            "Or add manually: uv add --group dapt azure-ai-ml azure-identity"
         )
         raise
 
@@ -68,7 +73,7 @@ def get_ml_client(
 
 
 def upload_corpus(
-    ml_client,
+    ml_client: MLClient,
     corpus_path: Path,
     asset_name: str,
     asset_version: str,
@@ -112,10 +117,10 @@ def upload_corpus(
     logger.info(f"Successfully registered: {registered}")
     logger.info(f"Asset path: {created_asset.path}")
 
-    return created_asset.path
+    return str(created_asset.path)
 
 
-def verify_upload(ml_client, asset_name: str, asset_version: str) -> bool:
+def verify_upload(ml_client: MLClient, asset_name: str, asset_version: str) -> bool:
     """Verify the data asset exists and is accessible."""
     try:
         asset = ml_client.data.get(name=asset_name, version=asset_version)

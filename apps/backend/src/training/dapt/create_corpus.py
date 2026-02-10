@@ -19,14 +19,12 @@ import json
 import logging
 import random
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Any
 
 from tqdm import tqdm
 
-
-if TYPE_CHECKING:
-    from collections.abc import Iterator
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,8 +32,8 @@ logger = logging.getLogger(__name__)
 # Default data directory
 DEFAULT_DATA_DIR = Path("./data")
 
-# Expected input files
-INPUT_FILES = {
+# Expected input files (can be string filenames or Path objects for overrides)
+INPUT_FILES: dict[str, str | Path] = {
     "foodcom_recipes": "foodcom_corpus.jsonl",
     "foodcom_reviews": "foodcom_reviews.jsonl",
     "openrecipes": "openrecipes_corpus.jsonl",
@@ -43,7 +41,7 @@ INPUT_FILES = {
 }
 
 
-def read_jsonl(file_path: Path) -> Iterator[dict]:
+def read_jsonl(file_path: Path) -> Iterator[dict[str, Any]]:
     """Read JSONL file and yield records."""
     if not file_path.exists():
         logger.warning(f"File not found: {file_path}")
@@ -83,11 +81,17 @@ def create_corpus(
 ) -> dict[str, int]:
     """Create combined corpus from all sources."""
     # Collect all records
-    all_records: list[dict] = []
+    all_records: list[dict[str, Any]] = []
     source_counts: dict[str, int] = {}
 
     for source_name, filename in INPUT_FILES.items():
-        file_path = data_dir / filename
+        # Handle both Path and str types for filename
+        if isinstance(filename, Path):
+            # Absolute path override - use directly
+            file_path = filename
+        else:
+            # String filename - join with data_dir
+            file_path = data_dir / filename
         if not file_path.exists():
             logger.warning(f"Source not found, skipping: {source_name}")
             continue
@@ -207,17 +211,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Update INPUT_FILES with any overrides
+    # Update INPUT_FILES with any overrides (resolve to absolute paths)
     global INPUT_FILES
     INPUT_FILES = INPUT_FILES.copy()
     if args.foodcom_recipes:
-        INPUT_FILES["foodcom_recipes"] = str(args.foodcom_recipes)
+        # Resolve to absolute Path so it is not incorrectly joined with data_dir
+        INPUT_FILES["foodcom_recipes"] = args.foodcom_recipes.resolve()
     if args.foodcom_reviews:
-        INPUT_FILES["foodcom_reviews"] = str(args.foodcom_reviews)
+        # Resolve to absolute Path so it is not incorrectly joined with data_dir
+        INPUT_FILES["foodcom_reviews"] = args.foodcom_reviews.resolve()
     if args.openrecipes:
-        INPUT_FILES["openrecipes"] = str(args.openrecipes)
+        # Resolve to absolute Path so it is not incorrectly joined with data_dir
+        INPUT_FILES["openrecipes"] = args.openrecipes.resolve()
     if args.flavor_pairs:
-        INPUT_FILES["flavor_pairs"] = str(args.flavor_pairs)
+        # Resolve to absolute Path so it is not incorrectly joined with data_dir
+        INPUT_FILES["flavor_pairs"] = args.flavor_pairs.resolve()
 
     # Create corpus
     source_counts = create_corpus(
