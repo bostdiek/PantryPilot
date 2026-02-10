@@ -35,25 +35,28 @@ Key dependencies:
 
 ## Base Models
 
-Registered models in Azure ML Model Registry:
+Models will be loaded directly from HuggingFace during training:
 - **Qwen/Qwen2.5-0.5B-Instruct** (primary training base - 0.5B params)
 - **Qwen/Qwen2.5-0.5B** (base model for DAPT)
-- **Function Gemma 270M** (tiny function-calling model - 270M params)
-- **Gemma-2-2B Function Calling** (function-calling specialized - 2B params)
-- **Liquid AI LFM-2.5-1.2B-Instruct** (alternative with longer context - 1.2B params)
+- **unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit** (4-bit quantized)
+- **LiquidAI/LFM2.5-1.2B-Instruct** (alternative with longer context - 1.2B params)
+- **unsloth/functiongemma-270m-it** (tiny function-calling model - 270M params)
+
+Models are referenced by HuggingFace ID in training scripts and loaded on-demand using Unsloth.
 
 ## Setup Scripts
 
 - `environments/unsloth-env.yml` - Training environment definition
 - `setup_environment.py` - Script to register environment in Azure ML
-- `register_models.py` - Script to register HuggingFace models in Azure ML
+- `register_models.py` - (Optional) Script to cache model metadata
+- `list_models.py` - Utility to list registered models
 
 ## Usage
 
 ```bash
 # Set up training environment
-uv run python training/setup_environment.py
-
-# Register base models
-uv run python training/register_models.py
+cd /path/to/PantryPilot/apps/backend
+uv run --with azure-ai-ml --with azure-identity python ../../training/setup_environment.py
 ```
+
+Training scripts will load models directly from HuggingFace using the environment.
