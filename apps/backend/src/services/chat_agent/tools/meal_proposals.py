@@ -34,13 +34,15 @@ async def tool_propose_meal_for_day(
     to the user. Creates an interactive proposal card with Accept/Reject
     buttons but does NOT automatically add to meal plan.
 
+    The meal proposal card is automatically displayed to the user with
+    Accept/Reject buttons - you don't need to include it in your response
+    blocks.
+
     WORKFLOW: During weekly meal planning, after analyzing history and
     getting user agreement on a high-level plan, use this tool for each
-    day to propose specific meals. The user can accept (adds to plan) or
-    reject (you can propose alternatives).
+    day to propose specific meals. The user can accept or reject.
 
-    IMPORTANT: Only propose ONE option per day at a time. This keeps the
-    mobile experience clean and focused.
+    IMPORTANT: Only propose ONE option per day at a time.
 
     Args:
         date: ISO date string (YYYY-MM-DD) for the meal
@@ -57,9 +59,8 @@ async def tool_propose_meal_for_day(
         notes: Optional context or reasoning for the proposal
 
     Returns:
-        Meal proposal block data for chat rendering. Includes interactive
-        Accept/Reject buttons. Accepting existing recipes adds directly to
-        plan; accepting new recipes redirects to recipe creation flow first.
+        Dict with status, message, and meal_proposal data. The meal_proposal
+        is automatically rendered to the user.
     """
     # Build proposal block based on recipe type
     proposal_block: dict[str, Any] = {

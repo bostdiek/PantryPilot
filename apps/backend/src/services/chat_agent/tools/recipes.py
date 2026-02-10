@@ -52,8 +52,34 @@ def _build_hybrid_result(
     sort_by: SortBy,
     rrf_k: int,
     fallback_used: bool = False,
+    include_full_recipe: bool = False,
 ) -> dict[str, Any]:
     """Build the response dict for hybrid search results."""
+    recipes_list = []
+    for item in items:
+        recipe_data = {
+            "id": str(item["recipe"].id),
+            "title": item["recipe"].name,
+            "description": item["recipe"].user_notes,  # Using user_notes as description
+            "prep_time_minutes": int(item["recipe"].prep_time_minutes or 0),
+            "cook_time_minutes": int(item["recipe"].cook_time_minutes or 0),
+            "detail_path": f"/recipes/{item['recipe'].id}",
+            "edit_path": f"/recipes/{item['recipe'].id}/edit",
+            "times_cooked": item["times_cooked"],
+            "relevance_score": round(
+                _rrf_score(
+                    text_rank=item["text_rank"],
+                    vector_rank=item["vector_rank"],
+                    k=rrf_k,
+                ),
+                4,
+            ),
+        }
+        # Only include full recipe if requested (token optimization)
+        if include_full_recipe:
+            recipe_data["full_recipe"] = full_payload_by_id.get(str(item["recipe"].id))
+        recipes_list.append(recipe_data)
+
     return {
         "status": "ok",
         "query": query,
@@ -68,25 +94,7 @@ def _build_hybrid_result(
         "fallback_used": fallback_used,
         "sort_by": sort_by,
         "total_results": len(items),
-        "recipes": [
-            {
-                "id": str(item["recipe"].id),
-                "title": item["recipe"].name,
-                "detail_path": f"/recipes/{item['recipe'].id}",
-                "edit_path": f"/recipes/{item['recipe'].id}/edit",
-                "full_recipe": full_payload_by_id.get(str(item["recipe"].id)),
-                "times_cooked": item["times_cooked"],
-                "relevance_score": round(
-                    _rrf_score(
-                        text_rank=item["text_rank"],
-                        vector_rank=item["vector_rank"],
-                        k=rrf_k,
-                    ),
-                    4,
-                ),
-            }
-            for item in items
-        ],
+        "recipes": recipes_list,
     }
 
 
@@ -99,8 +107,26 @@ def _build_metadata_result(
     max_cook_time: int | None,
     min_times_cooked: int | None,
     sort_by: SortBy,
+    include_full_recipe: bool = False,
 ) -> dict[str, Any]:
     """Build the response dict for metadata-only search results."""
+    recipes_list = []
+    for recipe, times_cooked in rows:
+        recipe_data = {
+            "id": str(recipe.id),
+            "title": recipe.name,
+            "description": recipe.user_notes,  # Using user_notes as description
+            "prep_time_minutes": int(recipe.prep_time_minutes or 0),
+            "cook_time_minutes": int(recipe.cook_time_minutes or 0),
+            "detail_path": f"/recipes/{recipe.id}",
+            "edit_path": f"/recipes/{recipe.id}/edit",
+            "times_cooked": times_cooked,
+        }
+        # Only include full recipe if requested (token optimization)
+        if include_full_recipe:
+            recipe_data["full_recipe"] = full_payload_by_id.get(str(recipe.id))
+        recipes_list.append(recipe_data)
+
     return {
         "status": "ok",
         "query": None,
@@ -115,17 +141,7 @@ def _build_metadata_result(
         "fallback_used": False,
         "sort_by": sort_by,
         "total_results": len(rows),
-        "recipes": [
-            {
-                "id": str(recipe.id),
-                "title": recipe.name,
-                "detail_path": f"/recipes/{recipe.id}",
-                "edit_path": f"/recipes/{recipe.id}/edit",
-                "full_recipe": full_payload_by_id.get(str(recipe.id)),
-                "times_cooked": times_cooked,
-            }
-            for recipe, times_cooked in rows
-        ],
+        "recipes": recipes_list,
     }
 
 
@@ -435,11 +451,16 @@ async def tool_search_recipes(
     max_cook_time: int | None = None,
     min_times_cooked: int | None = None,
     sort_by: SortBy = "relevance",
+    include_full_recipe: bool = False,
 ) -> dict[str, Any]:
     """Search user's saved recipes using semantic search and/or metadata filters.
 
     This tool searches through the user's persisted recipe collection.
     Use it to find recipes they've already saved, not for new suggestions.
+
+    By default, returns compact recipe summaries (id, title, description, times)
+    to reduce token usage. Set include_full_recipe=True only when you need
+    complete ingredient lists and instructions.
 
     Examples:
     - "Find my chicken recipes" → query="chicken"
@@ -455,6 +476,7 @@ async def tool_search_recipes(
         max_cook_time: Maximum total cooking time in minutes
         min_times_cooked: Minimum number of times you've cooked this recipe
         sort_by: How to order results
+        include_full_recipe: Include complete ingredients/instructions (default: False)
 
     Returns:
         Matching recipes ranked by relevance/filters with metadata
@@ -494,10 +516,13 @@ async def tool_search_recipes(
             rrf_k=rrf_k,
         )
 
-        full_payload_by_id = await _load_full_recipes(
-            ctx=ctx,
-            recipes=[item["recipe"] for item in items],
-        )
+        # Only load full recipes if requested (token optimization)
+        full_payload_by_id = {}
+        if include_full_recipe:
+            full_payload_by_id = await _load_full_recipes(
+                ctx=ctx,
+                recipes=[item["recipe"] for item in items],
+            )
 
         return _build_hybrid_result(
             items=items,
@@ -509,6 +534,7 @@ async def tool_search_recipes(
             min_times_cooked=min_times_cooked,
             sort_by=sort_by,
             rrf_k=rrf_k,
+            include_full_recipe=include_full_recipe,
         )
 
     # Case 2: No query - use metadata filters only
@@ -575,10 +601,13 @@ async def tool_search_recipes(
                 rrf_k=rrf_k,
             )
 
-            full_payload_by_id = await _load_full_recipes(
-                ctx=ctx,
-                recipes=[item["recipe"] for item in items],
-            )
+            # Only load full recipes if requested (token optimization)
+            full_payload_by_id = {}
+            if include_full_recipe:
+                full_payload_by_id = await _load_full_recipes(
+                    ctx=ctx,
+                    recipes=[item["recipe"] for item in items],
+                )
 
             return _build_hybrid_result(
                 items=items,
@@ -591,12 +620,16 @@ async def tool_search_recipes(
                 sort_by=sort_by,
                 rrf_k=rrf_k,
                 fallback_used=True,
+                include_full_recipe=include_full_recipe,
             )
 
-    full_payload_by_id = await _load_full_recipes(
-        ctx=ctx,
-        recipes=[recipe for recipe, _times_cooked in rows],
-    )
+    # Only load full recipes if requested (token optimization)
+    full_payload_by_id = {}
+    if include_full_recipe:
+        full_payload_by_id = await _load_full_recipes(
+            ctx=ctx,
+            recipes=[recipe for recipe, _times_cooked in rows],
+        )
 
     return _build_metadata_result(
         rows=rows,
@@ -606,4 +639,5 @@ async def tool_search_recipes(
         max_cook_time=max_cook_time,
         min_times_cooked=min_times_cooked,
         sort_by=sort_by,
+        include_full_recipe=include_full_recipe,
     )

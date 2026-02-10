@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 
@@ -44,20 +42,14 @@ class TimelineDayMeals(BaseModel):
 
 
 class MealPlanHistoryResponse(BaseModel):
-    """Complete meal plan history with multiple analytical views."""
+    """Optimized meal history focused on summary stats and recent patterns."""
 
     status: str = Field(default="ok")
     days_analyzed: int = Field(description="Number of days included in analysis")
     total_meals: int = Field(description="Total meal count across all days")
-    meals_by_day_of_week: dict[str, list[dict[str, Any]]] = Field(
-        description=(
-            "Meals grouped by day name (Monday-Sunday) "
-            "to detect weekly patterns like Taco Tuesday"
-        )
-    )
     chronological_timeline: list[TimelineDayMeals] = Field(
         description=(
-            "Date-ordered list showing what was planned each day - "
+            "Date-ordered list showing what was planned each day (last 14 days) - "
             "useful for analyzing sequences and leftover patterns"
         )
     )
@@ -65,6 +57,10 @@ class MealPlanHistoryResponse(BaseModel):
         description="Total times eating out during this period"
     )
     leftover_count: int = Field(description="Total leftover meals during this period")
+    most_common_recipes: list[tuple[str, int]] = Field(
+        default_factory=list,
+        description="Top recipes by frequency [(recipe_name, count), ...]",
+    )
     cuisine_counts: dict[str, int] = Field(
         description=(
             "Frequency of each cuisine type (Italian: 5, Mexican: 3, etc.) "

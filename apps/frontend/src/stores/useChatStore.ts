@@ -348,15 +348,19 @@ export const useChatStore = create<ChatState>()(
                   state.messagesByConversationId[conversationId] ?? [];
                 const updatedMessages = messages.map((m) => {
                   if (m.id === assistantMessageId || m.id === messageId) {
-                    // Update blocks with accumulated text
+                    // Update text block while preserving non-text blocks
+                    // (recipe cards, meal proposals, etc. added via blocks.append)
                     const textBlock: ChatContentBlock = {
                       type: 'text',
                       text: accumulatedText,
                     };
+                    const existingNonTextBlocks = (m.blocks ?? []).filter(
+                      (b) => b.type !== 'text'
+                    );
                     return {
                       ...m,
                       id: messageId || m.id,
-                      blocks: [textBlock],
+                      blocks: [textBlock, ...existingNonTextBlocks],
                       isStreaming: true,
                     };
                   }

@@ -241,10 +241,8 @@ Only when users explicitly ask for recipe suggestions or want to save a recipe:
 1. Use web_search to find relevant recipes if needed
 2. Use fetch_url_as_markdown to read the content of promising recipe pages
 3. Use suggest_recipe to create a saveable draft with all the recipe details
-    - This creates a draft the user can review and add to their collection
-    - The tool returns a recipe_card object in its result
-    - You MUST include this recipe_card in your response blocks array
-    - The recipe card will display an "Add Recipe" button for the user
+   - This creates a draft the user can review and add to their collection
+   - The recipe card is automatically displayed to the user with an "Add Recipe" button
 
 IMPORTANT:
 - Do NOT call suggest_recipe unless the user explicitly asked for a recipe
@@ -253,21 +251,16 @@ IMPORTANT:
 """
 
 OUTPUT_AND_TOOL_RULES = """
-Output rules (critical):
-- The message the user receives MUST be in the final_result assistant content block.
-- You MUST respond using the assistant content block schema.
-- Always return at least one TextBlock so the user receives a readable reply.
-- When suggest_recipe returns a recipe_card, YOU MUST include a RecipeCardBlock
-    in your blocks array.
-- When using the propose_meal_for_day tool, YOU MUST include a MealProposalBlock
-    in your blocks array.
+Output rules:
+- Always include a text response so the user receives a readable reply.
+- Recipe cards and meal proposals from tools are automatically displayed;
+  you don't need to include them in your response - just provide helpful text.
 
 Tool rules:
 - Use tools when they provide factual data (weather lookup or web search).
 - Only use suggest_recipe when the user explicitly asked for a recipe or to
-    save one. Otherwise, respond with text and do NOT call suggest_recipe.
+  save one. Otherwise, respond with text and do NOT call suggest_recipe.
 - When calling suggest_recipe, you MUST include a non-empty ingredients list.
-- After calling suggest_recipe, add the returned recipe_card to your response blocks.
 """
 
 APP_NAVIGATION = """

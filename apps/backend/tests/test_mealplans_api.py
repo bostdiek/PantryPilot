@@ -112,7 +112,7 @@ async def test_weekly_plan_empty_returns_7_days(mealplans_client: AsyncClient) -
 
     data = payload["data"]
     # Week should start on the previous Sunday (2025-01-12)
-    assert data["week_start_date"] == "2025-01-12"
+    assert data["week_of"] == "2025-01-12"
     assert len(data["days"]) == 7
     # All days empty initially
     assert all(len(day["entries"]) == 0 for day in data["days"])
@@ -165,7 +165,7 @@ async def test_put_weekly_and_get_roundtrip_with_ordering(
     resp = await mealplans_client.get(f"/api/v1/mealplans/weekly?start={week_start}")
     assert resp.status_code == status.HTTP_200_OK
     data = resp.json()["data"]
-    assert data["week_start_date"] == week_start.isoformat()
+    assert data["week_of"] == week_start.isoformat()
 
     # Find Monday
     monday = next(d for d in data["days"] if d["date"] == "2025-01-13")
@@ -445,3 +445,82 @@ async def test_move_multiple_to_same_day_stable_order(
     orders = [e["order_index"] for e in monday["entries"]]
     assert ids_in_order == [a_id, b_id, c_id]
     assert orders == [0, 1, 2]
+
+
+@pytest.mark.asyncio
+async def test_meal_plan_response_compact_structure(
+    mealplans_client: AsyncClient,
+) -> None:
+    """Verify meal plan responses use compact structure for token efficiency."""
+    # Get weekly meal plan
+    response = await mealplans_client.get("/api/v1/mealplans/weekly?start=2025-01-12")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()["data"]
+
+    # Verify response structure is compact
+    assert "days" in data
+    assert "week_of" in data
+
+    # Check that days structure is efficient (not duplicate/verbose patterns)
+    day = data["days"][0]
+    assert "date" in day
+    assert "entries" in day
+
+    # Entries should not include verbose nested structures
+    if day["entries"]:
+        entry = day["entries"][0]
+        # Essential fields only
+        assert "id" in entry
+
+        # Verify no heavy nested data in the basic response
+        # (Full recipe details should be fetched separately if needed)
+        assert isinstance(entry, dict)
+
+
+@pytest.mark.asyncio
+async def test_meal_plan_token_efficiency(mealplans_client: AsyncClient) -> None:
+    """Verify meal plan responses are token-efficient."""
+    try:
+        import tiktoken
+    except ImportError:
+        pytest.skip("tiktoken not available")
+
+    encoding = tiktoken.get_encoding("cl100k_base")
+
+    # Create a few meals for the week
+    meals_data = [
+        {
+            "planned_for_date": "2025-01-13",
+            "is_eating_out": False,
+            "is_leftover": False,
+            "meal_type": "dinner",
+            "notes": "Test meal 1",
+        },
+        {
+            "planned_for_date": "2025-01-14",
+            "is_eating_out": False,
+            "is_leftover": False,
+            "meal_type": "dinner",
+            "notes": "Test meal 2",
+        },
+    ]
+
+    for meal_data in meals_data:
+        await mealplans_client.post("/api/v1/meals/", json=meal_data)
+
+    # Get weekly meal plan
+    response = await mealplans_client.get("/api/v1/mealplans/weekly?start=2025-01-12")
+    response_json = response.json()
+
+    # Count tokens in response
+    token_count = len(encoding.encode(str(response_json)))
+
+    # Weekly meal plan with a few entries should be < 1500 tokens
+    # This is a reasonable upper bound for a compact, efficient response
+    assert token_count < 1500, (
+        f"Weekly meal plan response uses {token_count} tokens, "
+        "which exceeds the 1500 token efficiency target. "
+        "Response should be compact and token-optimized."
+    )

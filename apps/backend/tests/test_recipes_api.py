@@ -100,3 +100,96 @@ async def test_create_recipe(async_client: AsyncClient) -> None:
         i for i in response_data["ingredients"] if i["name"] == "Test Ingredient 2"
     )
     assert ingredient_2["is_optional"] is True
+
+
+@pytest.mark.asyncio
+async def test_search_recipes_compact_default(async_client: AsyncClient) -> None:
+    """Test that search returns compact results by default for token efficiency."""
+    # Search for recipes (default should be compact)
+    response = await async_client.get("/api/v1/recipes/?query=test")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_wrapper = response.json()
+    assert response_wrapper["success"] is True
+    assert "data" in response_wrapper
+
+    data = response_wrapper["data"]
+
+    # Verify it's a compact response
+    assert "items" in data
+    assert "limit" in data
+    assert "offset" in data
+    assert "total" in data
+
+    # If there are results, verify they have compact fields only
+    if data["items"]:
+        item = data["items"][0]
+        # Compact fields should be present
+        assert "id" in item
+        assert "title" in item
+
+        # Full recipe fields should NOT be present in compact mode
+        assert "ingredients" not in item or item.get("ingredients") is None
+        assert "instructions" not in item or item.get("instructions") is None
+
+
+@pytest.mark.asyncio
+async def test_search_recipes_full_when_requested(async_client: AsyncClient) -> None:
+    """Test that include_full_recipe=true returns complete recipe data."""
+    # Search with full recipe requested
+    response = await async_client.get(
+        "/api/v1/recipes/?query=test&include_full_recipe=true"
+    )
+
+    assert response.status_code == status.HTTP_200_OK
+
+    response_wrapper = response.json()
+    assert response_wrapper["success"] is True
+
+    data = response_wrapper["data"]
+    assert "items" in data
+
+    # If there are results, verify they have full recipe details
+    if data["items"]:
+        item = data["items"][0]
+        # Full recipe fields should be present
+        assert "id" in item
+        assert "title" in item
+        # When full recipe is true, ingredients and instructions should be included
+        # (Note: May be empty arrays but fields should exist)
+        assert "ingredients" in item
+        assert "instructions" in item
+
+
+@pytest.mark.asyncio
+async def test_search_recipes_token_efficiency(async_client: AsyncClient) -> None:
+    """Verify compact search uses significantly fewer tokens than full search."""
+    try:
+        import tiktoken
+    except ImportError:
+        pytest.skip("tiktoken not available")
+
+    encoding = tiktoken.get_encoding("cl100k_base")
+
+    # Get compact results
+    compact_response = await async_client.get("/api/v1/recipes/?limit=10")
+    compact_json = compact_response.json()
+    compact_tokens = len(encoding.encode(str(compact_json)))
+
+    # Get full results
+    full_response = await async_client.get(
+        "/api/v1/recipes/?limit=10&include_full_recipe=true"
+    )
+    full_json = full_response.json()
+    full_tokens = len(encoding.encode(str(full_json)))
+
+    # Compact should use significantly fewer tokens
+    # We expect at least 30% reduction when recipes exist
+    if compact_json["data"]["items"]:
+        token_reduction_pct = ((full_tokens - compact_tokens) / full_tokens) * 100
+        assert token_reduction_pct >= 30, (
+            f"Compact search should reduce tokens by at least 30%, "
+            f"but only reduced by {token_reduction_pct:.1f}% "
+            f"(compact: {compact_tokens}, full: {full_tokens})"
+        )

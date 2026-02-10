@@ -87,6 +87,11 @@ class WeeklyMealPlanOut(BaseModel):
     """Weekly container starting on Sunday with seven DayPlan entries."""
 
     week_start_date: Annotated[
-        date, Field(description="Sunday start date for the week")
+        date,
+        Field(
+            serialization_alias="week_of", description="Sunday start date for the week"
+        ),
     ]
     days: list[DayPlanOut]
+
+    model_config = ConfigDict(populate_by_name=True)
