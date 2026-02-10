@@ -56,6 +56,11 @@ dapt = [
     "azure-ai-ml>=1.22.0",
     "azure-identity>=1.19.0",
 ]
+training = [
+    "azure-ai-ml>=1.22.0",
+    "azure-identity>=1.19.0",
+    "transformers>=4.45.0",
+]
 
 [tool.ruff]
 line-length = 88

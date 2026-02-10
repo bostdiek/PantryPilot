@@ -1,0 +1,27 @@
+name: unsloth-training
+channels:
+  - conda-forge
+  - nvidia
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+    # Core training frameworks
+    - unsloth[colab-new]>=2024.1
+    - trl>=0.14.0
+    - transformers>=4.45.0
+    - datasets>=2.14.0
+    - accelerate>=0.26.0
+    - bitsandbytes>=0.43.0
+
+    # Experiment tracking
+    - mlflow>=2.10.0
+    - azure-ai-ml>=1.12.0
+
+    # Data processing
+    - pandas>=2.0.0
+    - numpy>=1.24.0
+
+    # Utilities
+    - tqdm>=4.65.0
+    - pyyaml>=6.0
