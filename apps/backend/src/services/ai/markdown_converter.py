@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class RecipeMarkdownConverter(BaseConverter):
     """Custom Markdown converter optimized for recipe content."""
 
-    MAX_MARKDOWN_LENGTH = 8_000  # ~8KB (~2K tokens) for training efficiency
+    MAX_MARKDOWN_LENGTH = 12_000  # ~12KB (~3K tokens) - allows complex recipes
 
     def __init__(self, **options: Any) -> None:
         options.setdefault("heading_style", ATX)  # Use # style headers
@@ -70,7 +70,7 @@ class MarkdownConversionService:
     Can be used with custom converters if needed.
     """
 
-    MAX_MARKDOWN_LENGTH = 8_000  # Kept for backwards compatibility
+    MAX_MARKDOWN_LENGTH = 12_000  # Matches RecipeMarkdownConverter default
 
     def __init__(self, converter: BaseConverter | None = None) -> None:
         self.converter = converter or RecipeMarkdownConverter()

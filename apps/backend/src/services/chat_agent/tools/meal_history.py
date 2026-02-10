@@ -26,13 +26,15 @@ async def tool_get_meal_plan_history(
     - Leftover usage patterns
     - Most frequently cooked recipes
     - Cuisine variety and preferences
+    - Meal rotation patterns to help users avoid ruts
 
     Args:
         days: Number of past days to retrieve (default: 28, max: 90)
+              Timeline shows up to 30 days for monthly pattern analysis
 
     Returns:
-        Structured meal history with chronological timeline, day-of-week
-        patterns, cuisine counts, and eating out/leftover statistics
+        Structured meal history with chronological timeline (up to 30 days),
+        top recipes, cuisine counts, and eating out/leftover statistics
     """
     days = max(1, min(days, 90))  # Clamp to 1-90
     start_date = date.today() - timedelta(days=days)
@@ -72,14 +74,13 @@ async def tool_get_meal_plan_history(
             cuisine_counts[cuisine] = cuisine_counts.get(cuisine, 0) + 1
 
     # Build chronological timeline for sequence analysis
-    # (limit to last 14 days for token efficiency)
-    timeline_days = min(14, days)
-    timeline_start_date = date.today() - timedelta(days=timeline_days)
+    # Show full requested period (up to 30 days) for pattern analysis
+    timeline_start_date = date.today() - timedelta(days=min(days, 30))
 
     # Group meals by date
     meals_by_date: dict[str, list[str]] = defaultdict(list)
     for meal in sorted(meals, key=lambda m: (m.planned_for_date, m.order_index)):
-        # Only include meals from last 14 days in timeline
+        # Only include meals within timeline window (up to 30 days for monthly patterns)
         if meal.planned_for_date < timeline_start_date:
             continue
 

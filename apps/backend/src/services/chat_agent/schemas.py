@@ -49,8 +49,9 @@ class MealPlanHistoryResponse(BaseModel):
     total_meals: int = Field(description="Total meal count across all days")
     chronological_timeline: list[TimelineDayMeals] = Field(
         description=(
-            "Date-ordered list showing what was planned each day (last 14 days) - "
-            "useful for analyzing sequences and leftover patterns"
+            "Date-ordered list showing what was planned each day (up to 30 days) - "
+            "useful for analyzing patterns, sequences, and helping users "
+            "avoid meal ruts"
         )
     )
     eating_out_count: int = Field(

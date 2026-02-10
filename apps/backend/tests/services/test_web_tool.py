@@ -80,16 +80,16 @@ class TestWebToolTokenOptimization:
         self, markdown_converter: RecipeMarkdownConverter
     ) -> None:
         """Mock large HTML response and verify truncation to MAX_MARKDOWN_LENGTH."""
-        # Create very large HTML content (> 8KB)
+        # Create very large HTML content (> 12KB)
         large_html = "<html><body>" + "<p>Test content. </p>" * 1000 + "</body></html>"
 
         result = markdown_converter.convert(large_html)
 
-        # Verify content is truncated to 8000 characters
-        assert len(result) <= 8000, f"Content length {len(result)} exceeds 8000"
+        # Verify content is truncated to 12000 characters
+        assert len(result) <= 12000, f"Content length {len(result)} exceeds 12000"
 
         # Verify truncation message is present if content was truncated
-        if len(result) == 8000:
+        if len(result) == 12000:
             assert "..." in result or result.endswith("\n")
 
     @pytest.mark.asyncio
@@ -97,7 +97,7 @@ class TestWebToolTokenOptimization:
         self, encoding: tiktoken.Encoding
     ) -> None:
         """Fetch sample recipe page and verify tokens < threshold."""
-        # Simulate fetched markdown content (8KB max after optimization)
+        # Simulate fetched markdown content (12KB max after optimization)
         sample_content = """
         # Chicken Tacos Recipe
 
@@ -119,7 +119,7 @@ class TestWebToolTokenOptimization:
         token_count = len(encoding.encode(sample_content))
 
         # Verify tokens are well below SSE event size limit
-        # 8KB of text typically = ~2000 tokens (4 chars/token average)
+        # 12KB of text typically = ~3000 tokens (4 chars/token average)
         # SSE event limit is ~16KB, so we should be well under
         assert token_count < 4000, (
             f"Token count {token_count} exceeds target. "
