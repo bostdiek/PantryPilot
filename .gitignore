@@ -231,3 +231,8 @@ __marimo__/
 # Bicep build output (ARM templates)
 *.bicep.json
 infra/**/*.json
+
+# Training data and ML artifacts (large files, should not be committed)
+apps/backend/data/
+*.jsonl
+!apps/backend/tests/**/*.jsonl

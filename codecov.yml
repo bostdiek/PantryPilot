@@ -30,5 +30,6 @@ ignore:
   - "apps/backend/src/main.py"  # App initialization with env-specific middleware
   - "apps/backend/src/dependencies/db.py"  # Database connection setup
   - "apps/backend/src/core/config.py"  # Configuration loading
+  - "apps/backend/src/training/dapt/**"  # DAPT corpus prep scripts (not app code)
   - "**/__init__.py"
   - "**/tests/**"

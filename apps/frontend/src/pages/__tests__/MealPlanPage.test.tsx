@@ -236,6 +236,11 @@ describe('MealPlanPage', () => {
   it('opens recipe preview when clicking on recipe name', async () => {
     const user = userEvent.setup();
 
+    // Mock loadWeek to prevent re-fetching on mount (avoids API errors)
+    const loadWeekSpy = vi
+      .spyOn(useMealPlanStore.getState(), 'loadWeek')
+      .mockResolvedValue(undefined);
+
     // Setup a recipe entry instead of the default planned item
     useMealPlanStore.setState({
       currentWeek: {
@@ -259,6 +264,8 @@ describe('MealPlanPage', () => {
           },
         ],
       },
+      isLoading: false,
+      error: null,
     } as any);
 
     render(<MealPlanPage />);
