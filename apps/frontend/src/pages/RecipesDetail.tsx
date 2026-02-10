@@ -277,7 +277,7 @@ const RecipesDetail: FC = () => {
                 Ingredients
               </h2>
               <ul className="list-disc space-y-2 pl-5 marker:text-orange-600">
-                {recipe.ingredients.map((ingredient, index) => (
+                {(recipe.ingredients || []).map((ingredient, index) => (
                   <li
                     key={ingredient.id || index}
                     className="rounded-lg p-3 transition-colors hover:bg-gray-50"
@@ -319,7 +319,7 @@ const RecipesDetail: FC = () => {
                 Instructions
               </h2>
               <ol className="space-y-4" role="list">
-                {recipe.instructions.map((step, index) => (
+                {(recipe.instructions || []).map((step, index) => (
                   <li
                     key={index}
                     className="flex gap-4 rounded-lg border border-gray-200 p-4 transition-colors hover:border-orange-200"
