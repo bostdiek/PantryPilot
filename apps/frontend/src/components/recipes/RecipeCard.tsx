@@ -54,12 +54,14 @@ export function RecipeCard({
   };
 
   // Format difficulty for display
-  const formatDifficulty = (difficulty: string) => {
+  const formatDifficulty = (difficulty?: string) => {
+    if (!difficulty) return 'Unknown';
     return difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
   };
 
   // Format category for display
-  const formatCategory = (category: string) => {
+  const formatCategory = (category?: string) => {
+    if (!category) return 'Uncategorized';
     return category.charAt(0).toUpperCase() + category.slice(1);
   };
 
@@ -160,7 +162,7 @@ export function RecipeCard({
             </div>
 
             {/* Ingredients preview */}
-            {recipe.ingredients.length > 0 && (
+            {recipe.ingredients && recipe.ingredients.length > 0 && (
               <div className="mt-3 border-t border-gray-100 pt-3">
                 <div className="text-xs text-gray-500">
                   <span className="font-medium">

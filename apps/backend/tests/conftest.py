@@ -83,6 +83,10 @@ class _FakeResult:
     def scalars(self):
         return self
 
+    def scalar(self):
+        """Return None for scalar queries (e.g., count)."""
+        return None
+
     def first(self):  # pragma: no cover - trivial
         return None
 
@@ -146,6 +150,7 @@ async def _override_get_db_factory() -> AsyncGenerator[_FakeSession, None]:
 async def _override_get_current_user_factory():  # pragma: no cover - simple helper
     class _DummyUser:
         id = uuid.uuid4()
+        is_admin = False
 
     return _DummyUser()
 

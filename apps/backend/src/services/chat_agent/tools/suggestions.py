@@ -34,9 +34,12 @@ async def tool_suggest_recipe(
     a recipe they might like. Creates a draft that the user can review
     and add to their collection.
 
+    The recipe card is automatically displayed to the user with an "Add Recipe"
+    button - you don't need to include it in your response blocks.
+
     WORKFLOW: After using fetch_url_as_markdown to read a recipe page,
     extract the recipe details and call this tool to create a saveable
-    draft. The user will see a recipe card with an "Add Recipe" button.
+    draft.
 
     Args:
         title: Recipe title
@@ -55,8 +58,8 @@ async def tool_suggest_recipe(
         source_url: Original recipe URL if from external source
 
     Returns:
-        Recipe card data with deep-link for user approval. The card
-        includes an "Add Recipe" button that opens a pre-filled form.
+        Dict with status, message, and recipe_card data. The recipe_card
+        is automatically rendered to the user.
     """
     user = ctx.deps.user
 

@@ -863,6 +863,44 @@ def _truncate_large_fields_for_sse(
     return sse_safe_result
 
 
+def _extract_interactive_blocks_from_tool_result(
+    result: dict[str, object] | None,
+) -> list[dict[str, Any]]:
+    """Extract interactive content blocks from tool results.
+
+    Interactive blocks (recipe cards, meal proposals) require user acceptance
+    and are automatically included in the final response. This extracts them
+    from tool results for SSE streaming and database persistence.
+
+    Args:
+        result: The tool result dictionary, or None
+
+    Returns:
+        List of content block dicts (e.g., recipe_card, meal_proposal)
+    """
+    if not isinstance(result, dict):
+        return []
+
+    blocks: list[dict[str, Any]] = []
+
+    # Extract recipe_card from suggest_recipe tool
+    if "recipe_card" in result:
+        recipe_card = result["recipe_card"]
+        if isinstance(recipe_card, dict) and recipe_card.get("type") == "recipe_card":
+            blocks.append(recipe_card)
+
+    # Extract meal_proposal from propose_meal_for_day tool
+    if "meal_proposal" in result:
+        meal_proposal = result["meal_proposal"]
+        if (
+            isinstance(meal_proposal, dict)
+            and meal_proposal.get("type") == "meal_proposal"
+        ):
+            blocks.append(meal_proposal)
+
+    return blocks
+
+
 async def _handle_agent_stream_event(
     event: object,
     *,
@@ -991,23 +1029,21 @@ async def _handle_agent_stream_event(
             ).to_sse()
         )
 
-        # Extract and emit recipe_card blocks from tool results (e.g., suggest_recipe)
-        emitted_blocks: list[dict[str, Any]] = []
-        if isinstance(persisted_result, dict) and "recipe_card" in persisted_result:
-            recipe_card = persisted_result["recipe_card"]
-            if (
-                isinstance(recipe_card, dict)
-                and recipe_card.get("type") == "recipe_card"
-            ):
-                emitted_blocks.append(recipe_card)
-                sse_events.append(
-                    ChatSseEvent(
-                        event="blocks.append",
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                        data={"blocks": [recipe_card]},
-                    ).to_sse()
-                )
+        # Extract and emit interactive blocks from tool results.
+        # These blocks require user acceptance (recipe cards, meal proposals) and
+        # are automatically included in the final response - the agent does not
+        # need to manually add them to its output blocks.
+        emitted_blocks = _extract_interactive_blocks_from_tool_result(persisted_result)
+
+        for block in emitted_blocks:
+            sse_events.append(
+                ChatSseEvent(
+                    event="blocks.append",
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    data={"blocks": [block]},
+                ).to_sse()
+            )
 
         return (sse_events, None, emitted_blocks)
 
