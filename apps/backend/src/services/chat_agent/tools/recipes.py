@@ -63,7 +63,7 @@ def _build_hybrid_result(
             "description": item["recipe"].user_notes,  # Using user_notes as description
             "prep_time_minutes": int(item["recipe"].prep_time_minutes or 0),
             "cook_time_minutes": int(item["recipe"].cook_time_minutes or 0),
-            "category": item["recipe"].category,
+            "category": item["recipe"].course_type,
             "difficulty": item["recipe"].difficulty,
             "detail_path": f"/recipes/{item['recipe'].id}",
             "edit_path": f"/recipes/{item['recipe'].id}/edit",
@@ -120,7 +120,7 @@ def _build_metadata_result(
             "description": recipe.user_notes,  # Using user_notes as description
             "prep_time_minutes": int(recipe.prep_time_minutes or 0),
             "cook_time_minutes": int(recipe.cook_time_minutes or 0),
-            "category": recipe.category,
+            "category": recipe.course_type,
             "difficulty": recipe.difficulty,
             "detail_path": f"/recipes/{recipe.id}",
             "edit_path": f"/recipes/{recipe.id}/edit",

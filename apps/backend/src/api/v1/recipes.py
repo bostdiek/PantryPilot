@@ -624,16 +624,17 @@ async def list_recipes(
     category: RecipeCategory | None = None,
     limit: int = 20,
     offset: int = 0,
-    include_full_recipe: bool = False,
+    include_full_recipe: bool = True,
 ) -> ApiResponse[RecipeSearchResponse | RecipeCompactSearchResponse]:
     """Return recipes with filters applied and paginated results.
 
     Notes:
-    - difficulty is accepted for future compatibility but not applied because
-      there is no difficulty column in the current schema.
+    - difficulty, when provided, filters recipes by their Recipe.difficulty value.
     - query matches recipe name and user_notes (as a proxy for description).
     - include_full_recipe controls token usage: False returns only summary fields,
       True returns full recipe with all ingredients and instructions.
+
+    Use include_full_recipe=false for token-optimized listings (agent use case).
     """
     limit = max(1, min(limit, 50))
     offset = max(0, offset)

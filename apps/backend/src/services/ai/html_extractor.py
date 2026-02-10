@@ -364,15 +364,17 @@ class HTMLExtractionService:
         Args:
             soup: BeautifulSoup object to clean
         """
-        for selector in self.BOILERPLATE_SELECTORS:
-            try:
-                for element in soup.select(selector):
-                    element.decompose()
-            except Exception as e:
-                # Log and continue if selector fails
-                logger.debug(
-                    f"Failed to remove boilerplate with selector {selector}: {e}"
-                )
+        # Combine selectors so the DOM is only traversed once
+        combined_selector = ",".join(self.BOILERPLATE_SELECTORS)
+        try:
+            for element in soup.select(combined_selector):
+                element.decompose()
+        except Exception as e:
+            # Log and continue if selector processing fails
+            logger.debug(
+                "Failed to remove boilerplate elements with combined selectors: %s",
+                e,
+            )
 
     def _clean_attributes(self, soup: BeautifulSoup) -> None:
         """Remove unwanted attributes from all tags.

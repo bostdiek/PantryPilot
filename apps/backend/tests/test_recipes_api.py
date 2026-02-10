@@ -172,17 +172,25 @@ async def test_search_recipes_token_efficiency(async_client: AsyncClient) -> Non
 
     encoding = tiktoken.get_encoding("cl100k_base")
 
+    import json
+
     # Get compact results
-    compact_response = await async_client.get("/api/v1/recipes/?limit=10")
+    compact_response = await async_client.get(
+        "/api/v1/recipes/?limit=10&include_full_recipe=false"
+    )
     compact_json = compact_response.json()
-    compact_tokens = len(encoding.encode(str(compact_json)))
+    compact_tokens = len(
+        encoding.encode(json.dumps(compact_json, separators=(",", ":"), sort_keys=True))
+    )
 
     # Get full results
     full_response = await async_client.get(
         "/api/v1/recipes/?limit=10&include_full_recipe=true"
     )
     full_json = full_response.json()
-    full_tokens = len(encoding.encode(str(full_json)))
+    full_tokens = len(
+        encoding.encode(json.dumps(full_json, separators=(",", ":"), sort_keys=True))
+    )
 
     # Compact should use significantly fewer tokens
     # We expect at least 30% reduction when recipes exist

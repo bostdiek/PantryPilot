@@ -510,12 +510,15 @@ async def test_meal_plan_token_efficiency(mealplans_client: AsyncClient) -> None
     for meal_data in meals_data:
         await mealplans_client.post("/api/v1/meals/", json=meal_data)
 
+    import json
+
     # Get weekly meal plan
     response = await mealplans_client.get("/api/v1/mealplans/weekly?start=2025-01-12")
     response_json = response.json()
 
-    # Count tokens in response
-    token_count = len(encoding.encode(str(response_json)))
+    # Count tokens in response using proper JSON serialization
+    json_str = json.dumps(response_json, separators=(",", ":"), sort_keys=True)
+    token_count = len(encoding.encode(json_str))
 
     # Weekly meal plan with a few entries should be < 1500 tokens
     # This is a reasonable upper bound for a compact, efficient response

@@ -32,7 +32,7 @@ class TestWebToolTokenOptimization:
     async def test_fetch_url_removes_boilerplate(
         self, html_extractor: HTMLExtractionService
     ) -> None:
-        """Verify MarkdownExtractionService strips navigation/scripts/social."""
+        """Verify HTMLExtractionService strips navigation/scripts/social."""
         html_content = """
         <html>
             <head><title>Test Recipe</title></head>

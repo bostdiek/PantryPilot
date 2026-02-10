@@ -77,20 +77,17 @@ class MarkdownConversionService:
 
     def convert(self, html: str) -> str:
         """Convert HTML string to clean Markdown."""
-        # RecipeMarkdownConverter already does cleaning in convert()
-        return self.converter.convert(html)
+        raw_markdown = self.converter.convert(html)
+        # Always apply cleaning to ensure consistent output regardless of converter
+        return self._clean_markdown(raw_markdown)
 
     def convert_soup(self, soup: BeautifulSoup) -> str:
         """Convert BeautifulSoup object to clean Markdown."""
         # For soup, we need to call parent class method which doesn't have cleaning
         # So we apply cleaning here
         raw_markdown = self.converter.convert_soup(soup)
-
-        # If using RecipeMarkdownConverter, apply its cleaning logic
-        if isinstance(self.converter, RecipeMarkdownConverter):
-            return self.converter._clean_markdown(raw_markdown)
-
-        return raw_markdown
+        # Always apply cleaning to ensure consistent output regardless of converter
+        return self._clean_markdown(raw_markdown)
 
     def _clean_markdown(self, markdown: str) -> str:
         """Post-process Markdown for LLM consumption.
