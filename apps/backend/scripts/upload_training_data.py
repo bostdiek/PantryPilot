@@ -121,7 +121,8 @@ def upload_data_asset(
         raise FileNotFoundError(f"Data file not found: {file_path}")
 
     file_size_mb = file_path.stat().st_size / (1024 * 1024)
-    line_count = sum(1 for _ in file_path.open())
+    with file_path.open(encoding="utf-8") as f:
+        line_count = sum(1 for _ in f)
 
     logger.info(f"Uploading {file_path} ({file_size_mb:.2f} MB, {line_count} samples)")
 

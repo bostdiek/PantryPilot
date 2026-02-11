@@ -439,8 +439,14 @@ async def main() -> int:
     args = parser.parse_args()
 
     # Parse date and user_id arguments
-    min_date = _parse_date(args.min_date)
-    max_date = _parse_date(args.max_date)
+    try:
+        min_date = _parse_date(args.min_date)
+        max_date = _parse_date(args.max_date)
+    except ValueError:
+        logger.error(
+            "Invalid date format for --min-date/--max-date. Expected YYYY-MM-DD."
+        )
+        return 1
 
     try:
         user_id = _parse_user_id(args.user_id)
@@ -480,6 +486,7 @@ async def main() -> int:
             days_back=args.days,
             min_date=min_date,
             max_date=max_date,
+            include_simulated=not args.exclude_simulated,
             user_id=user_id,
             full_tool_outputs=args.full_tool_outputs,
         )
