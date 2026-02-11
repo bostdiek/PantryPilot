@@ -148,6 +148,9 @@ env/
 venv/
 ENV/
 env.bak/
+
+# Azure ML workspace configuration (subscription-specific)
+config.json
 venv.bak/
 
 # Docker environment files (keep .env.example)

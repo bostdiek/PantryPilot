@@ -87,6 +87,13 @@ python_files = "test_*.py"
 pythonpath = [".", "src"]
 addopts = "--cov=src --cov-report=term --cov-report=html"
 
+[tool.coverage.run]
+omit = [
+    "src/training/dapt/*",
+    "src/training/seed_database.py",
+    "src/training/generate_conversations.py",
+]
+
 [tool.mypy]
 python_version = "3.12"
 check_untyped_defs = true
