@@ -1,6 +1,7 @@
 """Quick script to list all models in Azure ML workspace."""
 
 import json
+import sys
 from pathlib import Path
 
 from azure.ai.ml import MLClient
@@ -8,6 +9,9 @@ from azure.identity import DefaultAzureCredential
 
 # Load config
 config_path = Path(__file__).parent.parent / "config.json"
+if not config_path.is_file():
+    print(f"Error: config.json not found at {config_path}.", file=sys.stderr)
+    raise SystemExit(1)
 with open(config_path) as f:
     config = json.load(f)
 

@@ -143,11 +143,8 @@ def register_model(
         # Move files to clean directory
         for file in temp_path.glob("*"):
             if file.is_file():
-                # Sanitize filename for Azure
-                safe_name = file.name.replace(".", "_")
-                if safe_name != file.name:
-                    logger.info(f"  Renaming {file.name} → {safe_name}")
-                (azure_path / safe_name).write_bytes(file.read_bytes())
+                # Preserve original filenames so HuggingFace loaders can find expected files
+                (azure_path / file.name).write_bytes(file.read_bytes())
             elif file.name != "model":
                 # Copy directories recursively
                 import shutil
