@@ -88,7 +88,7 @@ def register_environment(ml_client: MLClient) -> None:
         name="unsloth-training",
         description="Training environment with Unsloth, TRL, and MLflow for SLM fine-tuning",
         conda_file=str(env_path),
-        image="mcr.microsoft.com/azureml/curated/acpt-pytorch-2.0-cuda11.7:latest",
+        image="mcr.microsoft.com/azureml/curated/acpt-pytorch-2.2-cuda12.1:latest",
     )
 
     try:
