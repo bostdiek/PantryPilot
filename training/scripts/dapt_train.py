@@ -12,9 +12,16 @@ Workflow:
 Corpus format (JSONL):
     {"text": "# Chocolate Chip Cookies\\n\\nCategory: desserts ..."}
 
+Supported base models for DAPT:
+    - unsloth/Qwen3-0.6B-Base-unsloth-bnb-4bit   (default, 0.6B params)
+    - unsloth/Qwen3-1.7B-Base-unsloth-bnb-4bit   (1.7B params)
+
+    DAPT uses BASE models (not instruct-tuned) since we are continuing
+    pre-training before SFT.  The pipeline is: Base → DAPT → SFT → GRPO.
+
 Usage:
     python dapt_train.py \
-        --base_model unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit \
+        --base_model unsloth/Qwen3-0.6B-Base-unsloth-bnb-4bit \
         --training_data dapt-culinary-corpus:1 \
         --output_dir ./outputs/dapt \
         --max_seq_length 2048 \
@@ -22,7 +29,7 @@ Usage:
 
     # With streaming for very large corpora:
     python dapt_train.py \
-        --base_model unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit \
+        --base_model unsloth/Qwen3-1.7B-Base-unsloth-bnb-4bit \
         --training_data dapt-culinary-corpus:1 \
         --output_dir ./outputs/dapt \
         --streaming
@@ -30,6 +37,11 @@ Usage:
 
 import argparse
 import os
+
+# Disable Unsloth's padding-free auto-enable BEFORE importing unsloth.
+# V100 GPUs lack Flash Attention 2, and Unsloth's padding-free mode
+# causes SDPA tensor size mismatches on the FA2-less fallback path.
+os.environ["UNSLOTH_DISABLE_AUTO_PADDING_FREE"] = "1"
 
 import mlflow
 import torch
@@ -157,6 +169,15 @@ def main(args: argparse.Namespace) -> None:
             split="train",
             streaming=True,
         )
+
+        # Workaround: Unsloth's SFTTrainer._prepare_dataset accesses
+        # dataset._ex_iterable.batch_size, but ArrowExamplesIterable
+        # (used for local JSONL files) lacks that attribute.
+        if hasattr(dataset, "_ex_iterable") and not hasattr(
+            dataset._ex_iterable, "batch_size"
+        ):
+            dataset._ex_iterable.batch_size = 1000
+
         # Count is unknown in streaming mode
         dataset_size = "streaming (size unknown)"
         print(f"✅ Loaded dataset in streaming mode from {data_path}")
@@ -168,17 +189,36 @@ def main(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------------
     # 4. Log hyperparameters
     # ------------------------------------------------------------------
-    # Log custom metadata as tags (NOT params) to avoid exceeding Azure ML's
-    # 200-parameter limit.  SFTTrainer already logs all SFTConfig fields as
-    # MLflow params via report_to="mlflow".
-    mlflow.set_tags(
+    # Azure ML limits MLflow to 200 logged parameters.  The HuggingFace
+    # MLflowCallback logs every SFTConfig field (~230 params), which exceeds
+    # this limit and causes a RestException.  We therefore set
+    # report_to="none" and log only the essential hyperparameters manually.
+    mlflow.log_params(
         {
             "base_model": args.base_model,
-            "lora_r": str(args.lora_r),
-            "lora_alpha": str(args.lora_alpha),
-            "max_seq_length": str(args.max_seq_length),
+            "max_seq_length": args.max_seq_length,
+            "batch_size": args.batch_size,
+            "gradient_accumulation_steps": args.gradient_accumulation_steps,
+            "learning_rate": args.learning_rate,
+            "num_epochs": args.num_epochs,
+            "warmup_steps": args.warmup_steps,
+            "lora_r": args.lora_r,
+            "lora_alpha": args.lora_alpha,
+            "target_modules": ",".join(target_modules),
+            "load_in_4bit": load_4bit,
+            "optim": "adamw_8bit",
+            "lr_scheduler_type": "cosine",
+            "weight_decay": 0.01,
+            "seed": args.seed,
+            "logging_steps": args.logging_steps,
+            "save_steps": args.save_steps,
+            "streaming": args.streaming,
+            "max_steps": args.max_steps if args.streaming else -1,
+        }
+    )
+    mlflow.set_tags(
+        {
             "dataset_size": str(dataset_size),
-            "streaming": str(args.streaming),
             "stage": "dapt",
         }
     )
@@ -193,7 +233,7 @@ def main(args: argparse.Namespace) -> None:
 
     training_args = SFTConfig(
         output_dir=args.output_dir,
-        report_to="mlflow",
+        report_to="none",  # Disable built-in MLflow callback (Azure ML 200-param limit)
         run_name=args.run_name,
         # Batching
         per_device_train_batch_size=args.batch_size,
@@ -253,14 +293,18 @@ def main(args: argparse.Namespace) -> None:
     print(f"💾 Saving LoRA adapters to {lora_dir}...")
     model.save_pretrained(lora_dir)
 
-    # Log artifacts to MLflow
-    print("\n📦 Logging model artifacts to MLflow...")
-    mlflow.log_artifacts(args.output_dir, artifact_path="model")
+    # Azure ML automatically uploads everything under ./outputs/ as job
+    # artifacts, so we do NOT call mlflow.log_artifacts() — doing so triggers
+    # a TypeError in azureml-mlflow due to an incompatible tracking_uri kwarg.
+
+    # Log final metrics before ending the run
+    run_id = mlflow.active_run().info.run_id
 
     mlflow.end_run()
 
     print("\n✅ DAPT training complete!")
     print(f"📁 Checkpoint saved to: {args.output_dir}")
+    print(f"📊 MLflow run: {run_id}")
     print("   → Use this checkpoint as --base_model for sft_train.py")
 
 
@@ -273,8 +317,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--base_model",
         type=str,
-        default="unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit",
-        help="HuggingFace model ID or local path",
+        default="unsloth/Qwen3-0.6B-Base-unsloth-bnb-4bit",
+        help="HuggingFace base model ID or local path (use base models, not instruct)",
     )
     parser.add_argument(
         "--max_seq_length",
@@ -398,4 +442,12 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
+
+    # Validate arguments
+    if args.max_seq_length not in [2048, 4096, 8192, 16384, 32768]:
+        print(
+            f"⚠️ Warning: max_seq_length={args.max_seq_length} is unusual. "
+            f"Recommended: 2048, 4096, 8192"
+        )
+
     main(args)

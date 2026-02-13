@@ -23,6 +23,11 @@ import subprocess
 import sys
 from typing import Any
 
+# Disable Unsloth's padding-free auto-enable BEFORE importing unsloth.
+# V100 GPUs lack Flash Attention 2, and Unsloth's padding-free mode
+# causes SDPA tensor size mismatches on the FA2-less fallback path.
+os.environ["UNSLOTH_DISABLE_AUTO_PADDING_FREE"] = "1"
+
 import mlflow
 import torch
 
