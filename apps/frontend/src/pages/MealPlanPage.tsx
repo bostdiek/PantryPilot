@@ -776,7 +776,7 @@ const MealPlanPage: FC = () => {
           onWeekChange={handleWeekChange}
           onMarkCooked={handleMarkCooked}
           onRecipeClick={handleRecipeClick}
-          onRemoveEntry={handleRemoveFromDay}
+          onRemoveEntry={(entryId) => removeEntry(entryId)}
           onAddLeftover={(date) =>
             addEntry({ plannedForDate: date, isLeftover: true })
           }

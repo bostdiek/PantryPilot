@@ -38,14 +38,7 @@ export interface MobileMealPlanViewProps {
    */
   onWeekChange?: (direction: 'prev' | 'next' | 'today') => void;
 
-  /**
-   * Callback when an entry should be edited
-   */
-  onEditEntry?: (entryId: string) => void;
-
-  /**
-   * Callback when a recipe should be added to an entry
-   */
+  /**\n   * Callback when a recipe should be added to an entry\n   */
   onAddRecipeToEntry?: (entryId: string) => void;
 
   /**
@@ -96,7 +89,6 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
   todayDate,
   currentWeekStart,
   onWeekChange,
-  onEditEntry,
   onAddRecipeToEntry,
   onMarkCooked,
   onRecipeClick,
@@ -121,16 +113,23 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
     setAddDialogTarget(null);
   };
 
-  // Organize days into today and upcoming
-  const { todayData, upcomingDays } = useMemo(() => {
+  // Organize days into past, today, and upcoming
+  const { pastDays, todayData, upcomingDays } = useMemo(() => {
     if (!currentWeek) {
-      return { todayData: null, upcomingDays: [] };
+      return { pastDays: [], todayData: null, upcomingDays: [] };
     }
 
     const today = currentWeek.days.find((day) => day.date === todayDate);
+    const past = currentWeek.days.filter((day) => day.date < todayDate);
     const upcoming = currentWeek.days.filter((day) => day.date > todayDate);
 
     return {
+      pastDays: past.map((day) => ({
+        date: day.date,
+        dayOfWeek: day.dayOfWeek,
+        entries: day.entries,
+        isToday: false,
+      })),
       todayData: today
         ? {
             date: today.date,
@@ -205,11 +204,10 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
               key={entry.id}
               entry={entry}
               recipe={getRecipeForEntry(entry)}
-              onEdit={() => onEditEntry?.(entry.id)}
               onAddRecipe={() => onAddRecipeToEntry?.(entry.id)}
               onMarkCooked={() => onMarkCooked?.(entry.id)}
               onRecipeClick={() => onRecipeClick?.(entry.id, dayData.date)}
-              _onRemove={() => onRemoveEntry?.(entry.id)}
+              onRemove={() => onRemoveEntry?.(entry.id)}
             />
           ))
         )}
@@ -257,6 +255,53 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
           >
             <ChevronRightIcon className="h-5 w-5" />
           </button>
+        </div>
+      )}
+
+      {/* Past days - collapsible */}
+      {pastDays.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Earlier This Week
+          </h3>
+          {pastDays.map((day) => (
+            <Disclosure
+              key={day.date}
+              defaultOpen={false}
+              title={
+                <div className="flex w-full items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium">{day.dayOfWeek}</span>
+                    <span className="text-sm text-gray-600">
+                      {formatShortDate(day.date)}
+                    </span>
+                    <Badge variant="secondary">
+                      {day.entries.length}{' '}
+                      {day.entries.length === 1 ? 'meal' : 'meals'}
+                    </Badge>
+                  </div>
+                </div>
+              }
+              className="rounded-md border border-gray-200 bg-white"
+              buttonClassName="w-full justify-between p-4 hover:bg-gray-50 bg-white"
+              panelClassName="px-4 pb-4"
+              iconSvg={ChevronDownIcon}
+            >
+              <div className="mt-2 space-y-2">
+                {renderDayMeals(day)}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  onClick={() => handleOpenAddDialog(day.date, day.dayOfWeek)}
+                  className="mt-3 min-h-[44px]"
+                  aria-label={`Add meal to ${day.dayOfWeek}`}
+                >
+                  + Add to {day.dayOfWeek}
+                </Button>
+              </div>
+            </Disclosure>
+          ))}
         </div>
       )}
 
@@ -328,13 +373,6 @@ export const MobileMealPlanView: FC<MobileMealPlanViewProps> = ({
               </div>
             </Disclosure>
           ))}
-        </div>
-      )}
-
-      {/* Past days message (if today is not Sunday) */}
-      {todayData && currentWeek.days.some((day) => day.date < todayDate) && (
-        <div className="rounded-lg bg-gray-50 p-4 text-center text-sm text-gray-500">
-          Past days are hidden on mobile. Use desktop view to see the full week.
         </div>
       )}
 

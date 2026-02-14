@@ -50,7 +50,7 @@ function toSnakeEntryPatch(p: MealEntryPatch): any {
 
 function toCamelWeekly(data: any): WeeklyMealPlan {
   return {
-    weekStartDate: data.week_start_date,
+    weekStartDate: data.week_of ?? data.week_start_date,
     days: (data.days || []).map((d: any) => ({
       dayOfWeek: d.day_of_week,
       date: d.date,
