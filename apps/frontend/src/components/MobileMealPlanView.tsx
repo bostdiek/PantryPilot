@@ -38,7 +38,9 @@ export interface MobileMealPlanViewProps {
    */
   onWeekChange?: (direction: 'prev' | 'next' | 'today') => void;
 
-  /**\n   * Callback when a recipe should be added to an entry\n   */
+  /**
+   * Callback when a recipe should be added to an entry
+   */
   onAddRecipeToEntry?: (entryId: string) => void;
 
   /**
