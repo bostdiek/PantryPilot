@@ -102,18 +102,22 @@ describe('MobileMealCard', () => {
     expect(onMarkCooked).toHaveBeenCalledOnce();
   });
 
-  it('calls onEdit when edit button is clicked', async () => {
+  it('calls onRemove when remove button is clicked', async () => {
     const user = userEvent.setup();
-    const onEdit = vi.fn();
+    const onRemove = vi.fn();
 
     render(
-      <MobileMealCard entry={mockEntry} recipe={mockRecipe} onEdit={onEdit} />
+      <MobileMealCard
+        entry={mockEntry}
+        recipe={mockRecipe}
+        onRemove={onRemove}
+      />
     );
 
-    const editButton = screen.getByRole('button', { name: /Edit/i });
-    await user.click(editButton);
+    const removeButton = screen.getByRole('button', { name: /Remove/i });
+    await user.click(removeButton);
 
-    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onRemove).toHaveBeenCalledOnce();
   });
 
   it('calls onRecipeClick when recipe title is clicked', async () => {

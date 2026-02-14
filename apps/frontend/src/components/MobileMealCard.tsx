@@ -4,7 +4,7 @@ import type { Recipe } from '../types/Recipe';
 import { Button } from './ui/Button';
 import { Card } from './ui/Card';
 import { Icon } from './ui/Icon';
-import PencilIcon from './ui/icons/pencil.svg?react';
+import XIcon from './ui/icons/x.svg?react';
 
 export interface MobileMealCardProps {
   /**
@@ -16,11 +16,6 @@ export interface MobileMealCardProps {
    * Recipe data for the meal entry (if it has a recipe)
    */
   recipe?: Recipe | null;
-
-  /**
-   * Callback when the meal should be edited
-   */
-  onEdit?: () => void;
 
   /**
    * Callback when a recipe should be added to this meal
@@ -38,9 +33,9 @@ export interface MobileMealCardProps {
   onRecipeClick?: () => void;
 
   /**
-   * Callback when the meal should be removed (not yet implemented in UI)
+   * Callback when the meal should be removed
    */
-  _onRemove?: () => void;
+  onRemove?: () => void;
 }
 
 /**
@@ -55,10 +50,10 @@ export interface MobileMealCardProps {
 export const MobileMealCard: FC<MobileMealCardProps> = ({
   entry,
   recipe,
-  onEdit,
   onAddRecipe,
   onMarkCooked,
   onRecipeClick,
+  onRemove,
 }) => {
   // Determine label based on entry type
   const getLabel = () => {
@@ -151,20 +146,16 @@ export const MobileMealCard: FC<MobileMealCardProps> = ({
               </Button>
             )}
 
-            {onEdit && (
+            {onRemove && (
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onEdit}
-                className="p-2"
-                aria-label={`Edit ${label}`}
-                title="Edit"
+                onClick={onRemove}
+                className="p-2 text-red-600 hover:bg-red-50"
+                aria-label={`Remove ${label}`}
+                title="Remove"
               >
-                <Icon
-                  svg={PencilIcon}
-                  className="h-4 w-4 text-gray-600"
-                  aria-hidden="true"
-                />
+                <Icon svg={XIcon} className="h-4 w-4" aria-hidden="true" />
               </Button>
             )}
           </div>
