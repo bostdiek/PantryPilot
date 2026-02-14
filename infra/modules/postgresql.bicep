@@ -76,6 +76,7 @@ resource postgreSQLServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-
 }
 
 // Enable required PostgreSQL extensions
+// Note: This must complete before other configuration changes to avoid ServerIsBusy errors
 resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-06-01-preview' = {
   parent: postgreSQLServer
   name: 'azure.extensions'
@@ -86,9 +87,11 @@ resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configura
 }
 
 // Create the PantryPilot database
+// Depends on extensions to serialize operations and avoid ServerIsBusy errors
 resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-01-preview' = {
   parent: postgreSQLServer
   name: 'pantrypilot'
+  dependsOn: [postgresExtensions]
   properties: {
     charset: 'UTF8'
     collation: 'en_US.UTF8'
@@ -96,9 +99,11 @@ resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases
 }
 
 // Allow Azure services to connect
+// Depends on database to serialize operations and avoid ServerIsBusy errors
 resource postgreSQLFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = {
   parent: postgreSQLServer
   name: 'AllowAzureServices'
+  dependsOn: [postgreSQLDatabase]
   properties: {
     startIpAddress: '0.0.0.0'
     endIpAddress: '0.0.0.0'
@@ -106,10 +111,12 @@ resource postgreSQLFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firew
 }
 
 // Additional firewall rules for specific IP ranges
+// Depends on the base firewall rule to serialize operations
 resource additionalFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = [
   for (ipRange, index) in allowedIpRanges: {
     parent: postgreSQLServer
     name: 'AllowedRange${index}'
+    dependsOn: [postgreSQLFirewallRule]
     properties: {
       startIpAddress: ipRange.startIp
       endIpAddress: ipRange.endIp

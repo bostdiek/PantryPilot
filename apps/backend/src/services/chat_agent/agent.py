@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from functools import lru_cache
 from typing import Any
@@ -9,12 +10,12 @@ from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient, HTTPStatusError
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.providers.google import GoogleProvider
+from pydantic_ai.models import Model
 from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from schemas.chat_content import AssistantMessage, TextBlock
+from services.ai.model_factory import get_chat_model
 from services.chat_agent.deps import ChatAgentDeps
 from services.chat_agent.tools import (
     tool_fetch_url_as_markdown,
@@ -26,6 +27,15 @@ from services.chat_agent.tools import (
     tool_update_user_memory,
     tool_web_search,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+# pydantic-ai tool-call retries (argument validation / ModelRetry). Note this is
+# distinct from HTTP transport retries and from the agent's result validation retries.
+# A value of 4 allows up to 5 total attempts (initial + 4 retries).
+_TOOL_CALL_RETRIES = 4
 
 
 MEAL_PLANNING_WORKFLOW = """
@@ -167,7 +177,9 @@ MEMORY_INSTRUCTIONS = """
 MEMORY MANAGEMENT (IMPORTANT - BE PROACTIVE):
 You have a personal memory document for each user that persists across conversations.
 Use the update_user_memory tool IMMEDIATELY when you learn anything useful about
-the user.
+the user, but only things that you need to remember in future conversations;
+if it only pertains to the current chat, do NOT update memory.
+You don't need to use the memory for eating trends, as you can look those up.
 
 ⚠️ CRITICAL: Call update_user_memory in the SAME response where you learn new info.
 Don't wait for users to ask you to remember - BE PROACTIVE and save automatically.
@@ -214,42 +226,41 @@ MEMORY STRUCTURE:
 ```
 
 MANDATORY BEHAVIOR:
-1. When a user shares personal info → CALL update_user_memory in your response
+1. If the user shares personal info → CALL update_user_memory ONCE with all updates
 2. Include ALL existing memory content + new info (you're replacing, not appending)
-3. After updating, briefly acknowledge: "I'll remember that! 📝" or similar
-4. Even if unsure, err on the side of saving - users prefer you remember too much
-   than too little
+3. After a SINGLE memory update, ENSURE you call final_result to respond to the user
+4. NEVER call update_user_memory multiple times in one response
+5. ALWAYS include a text response acknowledging the memory update: "Got it! 📝"
+
+CRITICAL: Update memory at most ONCE per turn, then ALWAYS respond to the user.
+Do NOT repeatedly refine or update memory - make your best judgment and move on.
 """
 RECIPE_DISCOVERY = """
 RECIPE DISCOVERY WORKFLOW:
-When users ask for recipe suggestions or want to save a recipe from a website:
+Only when users explicitly ask for recipe suggestions or want to save a recipe:
 1. Use web_search to find relevant recipes if needed
 2. Use fetch_url_as_markdown to read the content of promising recipe pages
 3. Use suggest_recipe to create a saveable draft with all the recipe details
    - This creates a draft the user can review and add to their collection
-   - The tool returns a recipe_card object in its result
-   - You MUST include this recipe_card in your response blocks array
-   - The recipe card will display an "Add Recipe" button for the user
+   - The recipe card is automatically displayed to the user with an "Add Recipe" button
 
-IMPORTANT: When you find a recipe the user wants, ALWAYS use suggest_recipe
-to create a draft. After calling suggest_recipe, include the recipe_card
-from the tool result in your blocks array so the user can see and interact
-with it.
+IMPORTANT:
+- Do NOT call suggest_recipe unless the user explicitly asked for a recipe
+  recommendation or to save a recipe.
+- If the user asks for general info (no recipes), respond with text only.
 """
 
 OUTPUT_AND_TOOL_RULES = """
-Output rules (critical):
-- You MUST respond using the assistant content block schema.
-- Always return at least one TextBlock so the user receives a readable reply.
-- When suggest_recipe returns a recipe_card, YOU MUST include a RecipeCardBlock
-    in your blocks array.
-- When using the propose_meal_for_day tool, YOU MUST include a MealProposalBlock
-    in your blocks array.
+Output rules:
+- Always include a text response so the user receives a readable reply.
+- Recipe cards and meal proposals from tools are automatically displayed;
+  you don't need to include them in your response - just provide helpful text.
 
 Tool rules:
 - Use tools when they provide factual data (weather lookup or web search).
-- Use suggest_recipe when recommending recipes to create actionable drafts.
-- After calling suggest_recipe, add the returned recipe_card to your response blocks.
+- Only use suggest_recipe when the user explicitly asked for a recipe or to
+  save one. Otherwise, respond with text and do NOT call suggest_recipe.
+- When calling suggest_recipe, you MUST include a non-empty ingredients list.
 """
 
 APP_NAVIGATION = """
@@ -300,7 +311,7 @@ CHAT_SYSTEM_PROMPT = (
 def _create_resilient_http_client() -> AsyncClient:
     """Create an HTTP client with exponential backoff retries for transient errors.
 
-    Handles Gemini API overload (503), rate limits (429), and gateway errors.
+    Handles API overload (503), rate limits (429), and gateway errors.
     Uses exponential backoff with a fallback strategy that respects Retry-After headers.
     """
 
@@ -324,6 +335,15 @@ def _create_resilient_http_client() -> AsyncClient:
     return AsyncClient(transport=transport, timeout=120)
 
 
+def _create_model() -> Model:
+    """Create LLM model based on configuration using centralized model factory.
+
+    Uses resilient HTTP client with retry logic for transient errors.
+    """
+    http_client = _create_resilient_http_client()
+    return get_chat_model(http_client=http_client)
+
+
 @lru_cache
 def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     """Create and cache the chat assistant agent.
@@ -335,19 +355,18 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     because it is evaluated as a structured task-specific extractor rather
     than a general chat assistant.
 
-    Includes retry logic for transient Gemini API errors (503 overload, etc.)
+    Supports both Azure OpenAI and Google Gemini based on USE_AZURE_OPENAI setting.
+    Includes retry logic for transient API errors (503 overload, etc.)
     with exponential backoff up to 5 attempts.
     """
-    # Create HTTP client with retry logic for transient API errors
-    http_client = _create_resilient_http_client()
-    provider = GoogleProvider(http_client=http_client)
-    model = GoogleModel("gemini-2.5-flash", provider=provider)
+    model = _create_model()
 
     agent: Agent[ChatAgentDeps, AssistantMessage] = Agent(
         model,
         instructions=CHAT_SYSTEM_PROMPT,
         output_type=AssistantMessage,
         name="Nibble",
+        retries=4,
     )
 
     # Add dynamic instructions with current date/time context
@@ -446,14 +465,24 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         return "\n\n" + "\n".join(sections)
 
     # Register tools using extracted implementations
-    agent.tool(name="get_meal_plan_history")(tool_get_meal_plan_history)
-    agent.tool(name="search_recipes")(tool_search_recipes)
-    agent.tool(name="get_daily_weather")(tool_get_daily_weather)
-    agent.tool(name="web_search")(tool_web_search)
-    agent.tool(name="fetch_url_as_markdown")(tool_fetch_url_as_markdown)
-    agent.tool(name="suggest_recipe")(tool_suggest_recipe)
-    agent.tool(name="propose_meal_for_day")(tool_propose_meal_for_day)
-    agent.tool(name="update_user_memory")(tool_update_user_memory)
+    agent.tool(name="get_meal_plan_history", retries=_TOOL_CALL_RETRIES)(
+        tool_get_meal_plan_history
+    )
+    agent.tool(name="search_recipes", retries=_TOOL_CALL_RETRIES)(tool_search_recipes)
+    agent.tool(name="get_daily_weather", retries=_TOOL_CALL_RETRIES)(
+        tool_get_daily_weather
+    )
+    agent.tool(name="web_search", retries=_TOOL_CALL_RETRIES)(tool_web_search)
+    agent.tool(name="fetch_url_as_markdown", retries=_TOOL_CALL_RETRIES)(
+        tool_fetch_url_as_markdown
+    )
+    agent.tool(name="suggest_recipe", retries=_TOOL_CALL_RETRIES)(tool_suggest_recipe)
+    agent.tool(name="propose_meal_for_day", retries=_TOOL_CALL_RETRIES)(
+        tool_propose_meal_for_day
+    )
+    agent.tool(name="update_user_memory", retries=_TOOL_CALL_RETRIES)(
+        tool_update_user_memory
+    )
 
     return agent
 

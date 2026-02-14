@@ -151,7 +151,8 @@ describe('MobileMealPlanView', () => {
 
     // Wednesday should be collapsible
     expect(screen.getByText('Wednesday')).toBeInTheDocument();
-    expect(screen.getByText('0 meals')).toBeInTheDocument();
+    // Multiple days may have 0 meals (past days + upcoming)
+    expect(screen.getAllByText('0 meals').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows meal count badges for each day', () => {
@@ -167,7 +168,8 @@ describe('MobileMealPlanView', () => {
 
     // Check that badges show correct meal counts
     expect(screen.getByText('2 meals')).toBeInTheDocument(); // Tuesday
-    expect(screen.getByText('0 meals')).toBeInTheDocument(); // Wednesday
+    // Multiple days may have 0 meals (past days + upcoming)
+    expect(screen.getAllByText('0 meals').length).toBeGreaterThanOrEqual(1); // Wednesday + past days
   });
 
   it('expands collapsible day sections when clicked', async () => {

@@ -316,7 +316,7 @@ class TestGenerateRecipeEmbedding:
                 return_value=mock_embed_client,
             ),
         ):
-            context, embedding = await generate_recipe_embedding(recipe)  # type: ignore[arg-type]
+            context, embedding, model_name = await generate_recipe_embedding(recipe)  # type: ignore[arg-type]
 
         # Verify context was generated
         assert context == "A spicy Mexican dish perfect for taco night."
@@ -325,6 +325,10 @@ class TestGenerateRecipeEmbedding:
         assert len(embedding) == 768
         magnitude = np.linalg.norm(embedding)
         assert abs(magnitude - 1.0) < 1e-6
+
+        # Verify model name is returned
+        assert model_name is not None
+        assert isinstance(model_name, str)
 
     @pytest.mark.asyncio
     async def test_generate_recipe_embedding_combines_context_and_text(self) -> None:
@@ -399,3 +403,108 @@ class TestEmbeddingNormalization:
         ratio_1_to_0 = normalized[1] / normalized[0]
         expected_ratio = 2.0 / 1.0
         assert abs(ratio_1_to_0 - expected_ratio) < 1e-6
+
+
+class TestAzureProviderSupport:
+    """Tests for Azure OpenAI embedding provider."""
+
+    @pytest.mark.asyncio
+    async def test_uses_azure_when_configured(self) -> None:
+        """Test uses Azure OpenAI when LLM_PROVIDER is azure_openai."""
+        from services.embedding_service import generate_embedding
+
+        # Mock Azure response
+        mock_embedding_obj = MagicMock()
+        mock_embedding_obj.embedding = list(np.random.randn(768))
+
+        mock_response = MagicMock()
+        mock_response.data = [mock_embedding_obj]
+
+        mock_client = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch(
+                "services.embedding_service._is_azure_provider",
+                return_value=True,
+            ),
+            patch("services.embedding_service.get_settings") as mock_settings,
+            patch(
+                "services.embedding_service.get_embedding_client",
+                return_value=mock_client,
+            ),
+        ):
+            mock_settings.return_value.EMBEDDING_MODEL = "text-embedding-3-small"
+
+            result = await generate_embedding("Test text for Azure")
+
+            # Verify Azure client was used
+            mock_client.embeddings.create.assert_called_once()
+            call_kwargs = mock_client.embeddings.create.call_args.kwargs
+            assert call_kwargs["model"] == "text-embedding-3-small"
+            assert call_kwargs["input"] == "Test text for Azure"
+            assert call_kwargs["dimensions"] == 768
+
+            # Verify normalized vector returned
+            assert len(result) == 768
+            magnitude = np.linalg.norm(result)
+            assert abs(magnitude - 1.0) < 1e-6
+
+    @pytest.mark.asyncio
+    async def test_azure_raises_on_empty_response(self) -> None:
+        """Test Azure path raises ValueError when response has no data."""
+        from services.embedding_service import generate_embedding
+
+        mock_response = MagicMock()
+        mock_response.data = []
+
+        mock_client = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch(
+                "services.embedding_service._is_azure_provider",
+                return_value=True,
+            ),
+            patch("services.embedding_service.get_settings") as mock_settings,
+            patch(
+                "services.embedding_service.get_embedding_client",
+                return_value=mock_client,
+            ),
+            pytest.raises(ValueError, match="No embeddings returned from Azure API"),
+        ):
+            mock_settings.return_value.EMBEDDING_MODEL = "text-embedding-3-small"
+            await generate_embedding("Test text")
+
+    @pytest.mark.asyncio
+    async def test_azure_query_embedding_uses_same_endpoint(self) -> None:
+        """Test Azure uses same embedding endpoint for both document and query."""
+        from services.embedding_service import generate_query_embedding
+
+        mock_embedding_obj = MagicMock()
+        mock_embedding_obj.embedding = list(np.random.randn(768))
+
+        mock_response = MagicMock()
+        mock_response.data = [mock_embedding_obj]
+
+        mock_client = AsyncMock()
+        mock_client.embeddings.create = AsyncMock(return_value=mock_response)
+
+        with (
+            patch(
+                "services.embedding_service._is_azure_provider",
+                return_value=True,
+            ),
+            patch("services.embedding_service.get_settings") as mock_settings,
+            patch(
+                "services.embedding_service.get_embedding_client",
+                return_value=mock_client,
+            ),
+        ):
+            mock_settings.return_value.EMBEDDING_MODEL = "text-embedding-3-small"
+
+            result = await generate_query_embedding("pasta recipes")
+
+            # Verify the same create method is used (no task type distinction in Azure)
+            mock_client.embeddings.create.assert_called_once()
+            assert len(result) == 768

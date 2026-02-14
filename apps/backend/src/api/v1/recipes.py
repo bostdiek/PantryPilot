@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Annotated, Any
 from uuid import UUID as UUIDType
@@ -32,10 +33,12 @@ from schemas.api import ApiResponse
 from schemas.recipes import (
     IngredientIn,
     RecipeCategory,
+    RecipeCompactSearchResponse,
     RecipeCreate,
     RecipeDifficulty,
     RecipeOut,
     RecipeSearchResponse,
+    RecipeSearchResult,
     RecipeUpdate,
 )
 from services.deduplication_service import check_recipe_duplicate
@@ -210,10 +213,12 @@ async def create_recipe(
 
         # Generate embeddings for semantic search (non-blocking)
         try:
-            context, embedding = await generate_recipe_embedding(new_recipe)
+            context, embedding, model_name = await generate_recipe_embedding(new_recipe)
             new_recipe.search_context = context
             new_recipe.search_context_generated_at = datetime.now(UTC)
             new_recipe.embedding = embedding
+            new_recipe.embedding_model = model_name
+            new_recipe.embedding_generated_at = datetime.now(UTC)
         except Exception as e:
             logger.warning(
                 f"Failed to generate embedding for recipe {new_recipe.id}: {e}"
@@ -236,7 +241,7 @@ async def create_recipe(
             "instructions": new_recipe.instructions,
             # recipe_data.difficulty is already an enum
             "difficulty": recipe_data.difficulty,
-            "category": RecipeCategory(new_recipe.course_type),
+            "category": RecipeCategory(str(new_recipe.course_type)),
             "ethnicity": new_recipe.ethnicity,
             "oven_temperature_f": new_recipe.oven_temperature_f,
             "user_notes": new_recipe.user_notes,
@@ -319,10 +324,10 @@ def _recipe_to_response(
         # Provide defaults for enums when the DB value is missing so Pydantic
         # always receives an allowed enum value.
         "difficulty": RecipeDifficulty(
-            recipe.difficulty or RecipeDifficulty.MEDIUM.value
+            str(recipe.difficulty or RecipeDifficulty.MEDIUM.value)
         ),
         "category": (
-            RecipeCategory(recipe.course_type)
+            RecipeCategory(str(recipe.course_type))
             if recipe.course_type
             else RecipeCategory.LUNCH
         ),
@@ -517,40 +522,14 @@ def _apply_scalar_updates(recipe: Recipe, recipe_data: RecipeUpdate) -> None:
             setattr(recipe, attr, val)
 
 
-@router.get(
-    "/",
-    response_model=ApiResponse[RecipeSearchResponse],
-    summary="Search recipes with optional filters and pagination",
-    description=(
-        "Return recipes with filters applied and paginated results. "
-        "Users can only see their own recipes unless they are an admin. "
-        "Requires authentication."
-    ),
-    responses={
-        200: {"description": "Recipes retrieved successfully"},
-        401: {"description": "Authentication required"},
-    },
-)
-async def list_recipes(
-    db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
-    query: str | None = None,
-    difficulty: RecipeDifficulty | None = None,
-    max_total_time: int | None = None,
-    category: RecipeCategory | None = None,
-    limit: int = 20,
-    offset: int = 0,
-) -> ApiResponse[RecipeSearchResponse]:
-    """Return recipes with filters applied and paginated results.
-
-    Notes:
-    - difficulty is accepted for future compatibility but not applied because
-      there is no difficulty column in the current schema.
-    - query matches recipe name and user_notes (as a proxy for description).
-    """
-    limit = max(1, min(limit, 50))
-    offset = max(0, offset)
-
+def _build_recipe_filters(
+    current_user: User,
+    query: str | None,
+    max_total_time: int | None,
+    category: RecipeCategory | None,
+    difficulty: RecipeDifficulty | None,
+) -> list[Any]:
+    """Build filter conditions for recipe search."""
     filters = []
 
     # Filter by user ownership (admin can see all recipes)
@@ -575,40 +554,128 @@ async def list_recipes(
     if difficulty is not None:
         filters.append(Recipe.difficulty == difficulty.value)
 
+    return filters
+
+
+def _build_compact_response(
+    recipes: Sequence[Recipe], limit: int, offset: int, total: int
+) -> ApiResponse[RecipeSearchResponse | RecipeCompactSearchResponse]:
+    """Build compact recipe search response for token efficiency."""
+    compact_items: list[RecipeSearchResult] = []
+    for r in recipes:
+        compact_items.append(
+            RecipeSearchResult(
+                id=r.id,  # type: ignore[arg-type]
+                title=r.name,  # type: ignore[arg-type]
+                description=r.user_notes,  # type: ignore[arg-type]
+                cook_time_minutes=r.cook_time_minutes or 0,  # type: ignore[arg-type]
+                prep_time_minutes=r.prep_time_minutes or 0,  # type: ignore[arg-type]
+            )
+        )
+    return ApiResponse(
+        success=True,
+        data=RecipeCompactSearchResponse(
+            items=compact_items, limit=limit, offset=offset, total=total
+        ),
+        message="Recipes retrieved successfully",
+    )
+
+
+def _build_full_response(
+    recipes: Sequence[Recipe], limit: int, offset: int, total: int
+) -> ApiResponse[RecipeSearchResponse | RecipeCompactSearchResponse]:
+    """Build full recipe search response with all details."""
+    full_items: list[RecipeOut] = []
+    for r in recipes:
+        ingredients = list(r.recipeingredients or [])
+        full_items.append(_recipe_to_response(r, ingredients))
+
+    return ApiResponse(
+        success=True,
+        data=RecipeSearchResponse(
+            items=full_items, limit=limit, offset=offset, total=total
+        ),
+        message="Recipes retrieved successfully",
+    )
+
+
+@router.get(
+    "/",
+    response_model=ApiResponse[RecipeSearchResponse | RecipeCompactSearchResponse],
+    summary="Search recipes with optional filters and pagination",
+    description=(
+        "Return recipes with filters applied and paginated results. "
+        "Users can only see their own recipes unless they are an admin. "
+        "Requires authentication. "
+        "Use include_full_recipe=true to get full recipe details "
+        "including ingredients/instructions."
+    ),
+    responses={
+        200: {"description": "Recipes retrieved successfully"},
+        401: {"description": "Authentication required"},
+    },
+)
+async def list_recipes(
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    query: str | None = None,
+    difficulty: RecipeDifficulty | None = None,
+    max_total_time: int | None = None,
+    category: RecipeCategory | None = None,
+    limit: int = 20,
+    offset: int = 0,
+    include_full_recipe: bool = True,
+) -> ApiResponse[RecipeSearchResponse | RecipeCompactSearchResponse]:
+    """Return recipes with filters applied and paginated results.
+
+    Notes:
+    - difficulty, when provided, filters recipes by their Recipe.difficulty value.
+    - query matches recipe name and user_notes (as a proxy for description).
+    - include_full_recipe controls token usage: False returns only summary fields,
+      True returns full recipe with all ingredients and instructions.
+
+    Use include_full_recipe=false for token-optimized listings (agent use case).
+    """
+    limit = max(1, min(limit, 50))
+    offset = max(0, offset)
+
+    # Build filters
+    filters = _build_recipe_filters(
+        current_user=current_user,
+        query=query,
+        max_total_time=max_total_time,
+        category=category,
+        difficulty=difficulty,
+    )
+
     base_q = select(Recipe)
     if filters:
         base_q = base_q.where(and_(*filters))
 
-    # Total count (optional)
+    # Total count
     total_stmt = select(func.count()).select_from(Recipe)
     if filters:
         total_stmt = total_stmt.where(and_(*filters))
     total_res = await db.execute(total_stmt)
     total = int(total_res.scalar() or 0)
 
-    # Fetch items with ingredients eager-loaded
-    stmt = (
-        base_q.options(
+    # Build query - only eager-load ingredients if full recipe requested
+    stmt = base_q.limit(limit).offset(offset)
+    if include_full_recipe:
+        stmt = stmt.options(
             selectinload(Recipe.recipeingredients).selectinload(
                 RecipeIngredient.ingredient
             )
         )
-        .limit(limit)
-        .offset(offset)
-    )
+
     result = await db.execute(stmt)
     recipes = result.scalars().all()
 
-    items: list[RecipeOut] = []
-    for r in recipes:
-        ingredients = list(r.recipeingredients or [])
-        items.append(_recipe_to_response(r, ingredients))
+    # Return compact or full response based on flag
+    if not include_full_recipe:
+        return _build_compact_response(recipes, limit, offset, total)
 
-    return ApiResponse(
-        success=True,
-        data=RecipeSearchResponse(items=items, limit=limit, offset=offset, total=total),
-        message="Recipes retrieved successfully",
-    )
+    return _build_full_response(recipes, limit, offset, total)
 
 
 @router.get(
@@ -708,10 +775,12 @@ async def update_recipe(
             ]
         ):
             try:
-                context, embedding = await generate_recipe_embedding(recipe)
+                context, embedding, model_name = await generate_recipe_embedding(recipe)
                 recipe.search_context = context
                 recipe.search_context_generated_at = datetime.now(UTC)
                 recipe.embedding = embedding
+                recipe.embedding_model = model_name
+                recipe.embedding_generated_at = datetime.now(UTC)
             except Exception as e:
                 logger.warning(
                     f"Failed to regenerate embedding for recipe {recipe.id}: {e}"

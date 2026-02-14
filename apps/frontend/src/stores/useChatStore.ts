@@ -86,34 +86,22 @@ function capMessages(messages: Message[]): Message[] {
 /**
  * Formats a snake_case tool name into a friendly display string.
  * e.g., "search_recipes" -> "Searching recipes..."
- *       "get_user_preferences" -> "Getting user preferences..."
+ *       "get_meal_plan_history" -> "Analyzing meal history..."
  */
-function formatToolName(toolName: string): string {
-  // Map of known tool names to friendly descriptions
+export function formatToolName(toolName: string): string {
   const toolNameMap: Record<string, string> = {
+    get_meal_plan_history: 'Analyzing meal history...',
     search_recipes: 'Searching recipes...',
-    get_recipe: 'Fetching recipe details...',
-    get_recipes: 'Fetching recipes...',
+    get_daily_weather: 'Checking forecast...',
     web_search: 'Searching the web...',
-    get_user_preferences: 'Checking your preferences...',
-    get_meal_plan: 'Loading meal plan...',
-    create_meal_plan: 'Creating meal plan...',
-    add_to_meal_plan: 'Adding to meal plan...',
-    get_grocery_list: 'Generating grocery list...',
+    fetch_url_as_markdown: 'Reading web page...',
+    suggest_recipe: 'Creating recipe draft...',
+    propose_meal_for_day: 'Proposing meal...',
+    update_user_memory: 'Updating memory...',
+    final_result: 'Finalizing response...',
   };
 
-  if (toolNameMap[toolName]) {
-    return toolNameMap[toolName];
-  }
-
-  // Fallback: convert snake_case to sentence case with "..."
-  const words = toolName.split('_');
-  const firstWord = words[0];
-  const rest = words.slice(1).join(' ');
-  // Capitalize first letter and add -ing suffix if it looks like a verb
-  const capitalized =
-    firstWord.charAt(0).toUpperCase() + firstWord.slice(1) + 'ing';
-  return `${capitalized} ${rest}...`.trim();
+  return toolNameMap[toolName] || `Using ${toolName}...`;
 }
 
 export const useChatStore = create<ChatState>()(
@@ -360,15 +348,19 @@ export const useChatStore = create<ChatState>()(
                   state.messagesByConversationId[conversationId] ?? [];
                 const updatedMessages = messages.map((m) => {
                   if (m.id === assistantMessageId || m.id === messageId) {
-                    // Update blocks with accumulated text
+                    // Update text block while preserving non-text blocks
+                    // (recipe cards, meal proposals, etc. added via blocks.append)
                     const textBlock: ChatContentBlock = {
                       type: 'text',
                       text: accumulatedText,
                     };
+                    const existingNonTextBlocks = (m.blocks ?? []).filter(
+                      (b) => b.type !== 'text'
+                    );
                     return {
                       ...m,
                       id: messageId || m.id,
-                      blocks: [textBlock],
+                      blocks: [textBlock, ...existingNonTextBlocks],
                       isStreaming: true,
                     };
                   }

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -11,6 +13,7 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from pydantic_ai import AgentRunResultEvent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -18,12 +21,17 @@ from pydantic_ai.messages import (
     ModelMessage,
     ModelRequest,
     ModelResponse,
+    SystemPromptPart,
     TextPart,
+    ToolCallPart,
+    ToolReturnPart,
     UserPromptPart,
 )
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from core.config import get_settings
 from core.observability import get_tracer
 from core.ratelimit import check_rate_limit
 from crud.user_preferences import UserPreferencesCRUD
@@ -44,8 +52,240 @@ from schemas.chat_streaming import (
     MessageSummary,
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
-from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
+from services.chat_agent import (
+    CHAT_SYSTEM_PROMPT,
+    ChatAgentDeps,
+    get_chat_agent,
+    normalize_agent_output,
+)
+from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
+
+
+# -----------------------------------------------------------------------------
+# Training Data Capture Helpers
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class TrainingDataContext:
+    """Context needed for building training data from an agent run."""
+
+    agent_result: object
+    tool_calls_by_id: dict[str, _ToolCallStart]
+    raw_output: object
+
+
+def _process_model_request_for_training(
+    msg: ModelRequest,
+    seen_user_msgs: set[str],
+) -> list[dict[str, Any]]:
+    """Process ModelRequest parts into training message format."""
+    messages: list[dict[str, Any]] = []
+    for part in msg.parts:
+        if isinstance(part, SystemPromptPart):
+            # Skip - we add CHAT_SYSTEM_PROMPT manually
+            continue
+        elif isinstance(part, UserPromptPart):
+            # Deduplicate user messages (history + current)
+            content_str = (
+                part.content if isinstance(part.content, str) else str(part.content)
+            )
+            if content_str not in seen_user_msgs:
+                seen_user_msgs.add(content_str)
+                messages.append({"role": "user", "content": content_str})
+        elif isinstance(part, ToolReturnPart):
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": part.tool_call_id,
+                    "content": part.model_response_str(),
+                }
+            )
+    return messages
+
+
+def _process_model_response_for_training(msg: ModelResponse) -> dict[str, Any] | None:
+    """Process ModelResponse into a single training assistant message."""
+    text_parts: list[str] = []
+    tool_calls_list: list[dict[str, Any]] = []
+
+    for resp_part in msg.parts:
+        if isinstance(resp_part, TextPart) and resp_part.content:
+            text_parts.append(resp_part.content)
+        elif isinstance(resp_part, ToolCallPart):
+            tool_calls_list.append(
+                {
+                    "id": resp_part.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": resp_part.tool_name,
+                        "arguments": json.dumps(resp_part.args_as_dict()),
+                    },
+                }
+            )
+
+    if not text_parts and not tool_calls_list:
+        return None
+
+    assistant_msg: dict[str, Any] = {"role": "assistant"}
+    if text_parts:
+        assistant_msg["content"] = " ".join(text_parts)
+    if tool_calls_list:
+        assistant_msg["tool_calls"] = tool_calls_list
+    return assistant_msg
+
+
+def _build_training_prompt_data(
+    agent_result: object,
+) -> list[dict[str, Any]]:
+    """Build ChatML-format prompt data from agent result.
+
+    Extracts messages from PydanticAI's all_messages() and converts to
+    training-ready format with system prompt prepended.
+
+    Args:
+        agent_result: The result from agent.run() with all_messages() method
+
+    Returns:
+        List of message dicts in ChatML format
+    """
+    # NOTE: PydanticAI's `instructions` param is NOT in all_messages()
+    # so we manually prepend CHAT_SYSTEM_PROMPT for training data.
+    history_data: list[dict[str, Any]] = [
+        {"role": "system", "content": CHAT_SYSTEM_PROMPT}
+    ]
+
+    all_msgs = (
+        agent_result.all_messages() if hasattr(agent_result, "all_messages") else []
+    )
+
+    # Track seen user messages to avoid duplicates from history
+    seen_user_msgs: set[str] = set()
+
+    for msg in all_msgs:
+        if isinstance(msg, ModelRequest):
+            request_msgs = _process_model_request_for_training(msg, seen_user_msgs)
+            history_data.extend(request_msgs)
+        elif isinstance(msg, ModelResponse):
+            assistant_msg = _process_model_response_for_training(msg)
+            if assistant_msg:
+                history_data.append(assistant_msg)
+
+    return history_data
+
+
+def _serialize_raw_output_for_training(raw_output: object) -> str:
+    """Safely serialize raw LLM output for training data.
+
+    Handles various output types with fallback serialization on failure.
+
+    Args:
+        raw_output: The raw output from the agent
+
+    Returns:
+        JSON string representation of the output
+    """
+    try:
+        if hasattr(raw_output, "model_dump"):
+            return json.dumps(raw_output.model_dump())
+        elif isinstance(raw_output, dict):
+            return json.dumps(raw_output)
+        else:
+            return str(raw_output)
+    except (TypeError, ValueError) as exc:
+        logger.warning("Failed to serialize raw output for training: %s", exc)
+        # Fallback: convert to string representation
+        return str(raw_output)
+
+
+def _get_tokens_from_usage(usage: object) -> tuple[int | None, int | None]:
+    """Extract prompt and completion tokens from a usage object or dict."""
+    if isinstance(usage, dict):
+        prompt = usage.get("prompt_tokens")
+        if prompt is None:
+            prompt = usage.get("input_tokens")
+
+        completion = usage.get("completion_tokens")
+        if completion is None:
+            completion = usage.get("output_tokens")
+    else:
+        prompt = getattr(usage, "prompt_tokens", None)
+        if prompt is None:
+            prompt = getattr(usage, "input_tokens", None)
+
+        completion = getattr(usage, "completion_tokens", None)
+        if completion is None:
+            completion = getattr(usage, "output_tokens", None)
+    return (prompt, completion)
+
+
+def _sum_usage_from_messages(agent_result: object) -> tuple[int, int]:
+    """Sum token usage from all ModelResponse messages."""
+    from pydantic_ai.messages import ModelResponse
+
+    all_msgs = (
+        agent_result.all_messages() if hasattr(agent_result, "all_messages") else []
+    )
+    total_input = 0
+    total_output = 0
+    for msg in all_msgs:
+        if isinstance(msg, ModelResponse) and hasattr(msg, "usage") and msg.usage:
+            input_t, output_t = _get_tokens_from_usage(msg.usage)
+            if input_t is not None:
+                total_input += input_t
+            if output_t is not None:
+                total_output += output_t
+    return (total_input, total_output)
+
+
+def _extract_usage_metrics(
+    agent_result: object | None,
+) -> tuple[int | None, int | None, int | None]:
+    """Extract token usage metrics from agent result.
+
+    For streaming runs (especially Azure OpenAI), tries multiple approaches:
+    1. Check agent_result.usage directly
+    2. Sum usage from all ModelResponse messages in all_messages()
+    3. Return None if unavailable
+    """
+    if agent_result is None:
+        return (None, None, None)
+
+    # Try direct usage access first
+    usage = getattr(agent_result, "usage", None)
+    if usage is not None:
+        prompt_tokens, completion_tokens = _get_tokens_from_usage(usage)
+        if prompt_tokens is not None or completion_tokens is not None:
+            return (prompt_tokens, completion_tokens, None)
+
+    # Fallback: sum usage from all ModelResponse messages (streaming)
+    try:
+        total_input, total_output = _sum_usage_from_messages(agent_result)
+        if total_input > 0 or total_output > 0:
+            return (
+                total_input if total_input > 0 else None,
+                total_output if total_output > 0 else None,
+                None,
+            )
+    except Exception as exc:
+        logger.debug(f"Failed to extract usage from all_messages: {exc}")
+
+    return (None, None, None)
+
+
+def _extract_model_metadata(agent_result: object | None) -> tuple[str, str | None]:
+    """Resolve model name/version for training samples."""
+    if agent_result is not None:
+        model_name = getattr(agent_result, "model_name", None)
+        model_version = getattr(agent_result, "model_version", None)
+        if model_name:
+            return (str(model_name), str(model_version) if model_version else None)
+
+    settings = get_settings()
+    provider = settings.LLM_PROVIDER
+    model_name = settings.CHAT_MODEL
+    return (f"{provider}:{model_name}", None)
 
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -383,11 +623,10 @@ def _convert_db_messages_to_pydantic_ai(
     result: list[ModelMessage] = []
 
     for msg in messages:
-        text_content = _extract_text_from_blocks(msg.content_blocks)
-        if not text_content:
-            continue
-
         if msg.role == "user":
+            text_content = _extract_text_from_blocks(msg.content_blocks)
+            if not text_content:
+                continue
             result.append(
                 ModelRequest(
                     parts=[
@@ -399,14 +638,52 @@ def _convert_db_messages_to_pydantic_ai(
                 )
             )
         elif msg.role == "assistant":
-            result.append(
-                ModelResponse(
-                    parts=[TextPart(content=text_content)],
-                    model_name="historical",
-                    timestamp=msg.created_at,
-                )
+            parts: list[TextPart | ToolCallPart] = []
+            text_content = _extract_text_from_blocks(msg.content_blocks)
+            if text_content:
+                parts.append(TextPart(content=text_content))
+
+            tool_calls: list[ChatToolCall] = sorted(
+                getattr(msg, "tool_calls", []),
+                key=lambda tool_call: tool_call.started_at,
             )
-        # Skip system and tool roles for now
+            for tool_call in tool_calls:
+                tool_call_id = tool_call.call_metadata.get(
+                    "tool_call_id",
+                    str(tool_call.id),
+                )
+                parts.append(
+                    ToolCallPart(
+                        tool_name=tool_call.tool_name,
+                        args=tool_call.arguments,
+                        tool_call_id=tool_call_id,
+                    )
+                )
+
+            if parts:
+                result.append(
+                    ModelResponse(
+                        parts=parts,
+                        model_name="historical",
+                        timestamp=msg.created_at,
+                    )
+                )
+
+            if tool_calls:
+                return_parts = [
+                    ToolReturnPart(
+                        tool_name=tool_call.tool_name,
+                        content=tool_call.result or {},
+                        tool_call_id=tool_call.call_metadata.get(
+                            "tool_call_id", str(tool_call.id)
+                        ),
+                        timestamp=tool_call.finished_at or tool_call.started_at,
+                    )
+                    for tool_call in tool_calls
+                    if tool_call.status == "success"
+                ]
+                if return_parts:
+                    result.append(ModelRequest(parts=return_parts))
 
     return result
 
@@ -421,6 +698,7 @@ async def _load_conversation_history(
     """Load previous messages from a conversation for multi-turn context."""
     query = (
         select(ChatMessage)
+        .options(selectinload(ChatMessage.tool_calls))
         .where(
             ChatMessage.conversation_id == conversation_id,
             ChatMessage.user_id == user_id,
@@ -585,6 +863,44 @@ def _truncate_large_fields_for_sse(
     return sse_safe_result
 
 
+def _extract_interactive_blocks_from_tool_result(
+    result: dict[str, object] | None,
+) -> list[dict[str, Any]]:
+    """Extract interactive content blocks from tool results.
+
+    Interactive blocks (recipe cards, meal proposals) require user acceptance
+    and are automatically included in the final response. This extracts them
+    from tool results for SSE streaming and database persistence.
+
+    Args:
+        result: The tool result dictionary, or None
+
+    Returns:
+        List of content block dicts (e.g., recipe_card, meal_proposal)
+    """
+    if not isinstance(result, dict):
+        return []
+
+    blocks: list[dict[str, Any]] = []
+
+    # Extract recipe_card from suggest_recipe tool
+    if "recipe_card" in result:
+        recipe_card = result["recipe_card"]
+        if isinstance(recipe_card, dict) and recipe_card.get("type") == "recipe_card":
+            blocks.append(recipe_card)
+
+    # Extract meal_proposal from propose_meal_for_day tool
+    if "meal_proposal" in result:
+        meal_proposal = result["meal_proposal"]
+        if (
+            isinstance(meal_proposal, dict)
+            and meal_proposal.get("type") == "meal_proposal"
+        ):
+            blocks.append(meal_proposal)
+
+    return blocks
+
+
 async def _handle_agent_stream_event(
     event: object,
     *,
@@ -654,6 +970,18 @@ async def _handle_agent_stream_event(
             persisted_result: dict[str, object] | None = result_content
         elif result_content is None:
             persisted_result = None
+        elif isinstance(result_content, BaseModel):
+            # Handle Pydantic models (e.g., MealPlanHistoryResponse)
+            # by converting to dict
+            try:
+                persisted_result = result_content.model_dump(mode="json")
+            except (TypeError, ValueError) as e:
+                logger.warning(
+                    "Failed to serialize BaseModel %s: %s",
+                    type(result_content).__name__,
+                    e,
+                )
+                persisted_result = {"error": "serialization_failed"}
         else:
             logger.warning(
                 "Tool result content had unexpected type %s; coercing to string",
@@ -701,32 +1029,27 @@ async def _handle_agent_stream_event(
             ).to_sse()
         )
 
-        # Extract and emit recipe_card blocks from tool results (e.g., suggest_recipe)
-        emitted_blocks: list[dict[str, Any]] = []
-        if isinstance(persisted_result, dict) and "recipe_card" in persisted_result:
-            recipe_card = persisted_result["recipe_card"]
-            if (
-                isinstance(recipe_card, dict)
-                and recipe_card.get("type") == "recipe_card"
-            ):
-                emitted_blocks.append(recipe_card)
-                sse_events.append(
-                    ChatSseEvent(
-                        event="blocks.append",
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                        data={"blocks": [recipe_card]},
-                    ).to_sse()
-                )
+        # Extract and emit interactive blocks from tool results.
+        # These blocks require user acceptance (recipe cards, meal proposals) and
+        # are automatically included in the final response - the agent does not
+        # need to manually add them to its output blocks.
+        emitted_blocks = _extract_interactive_blocks_from_tool_result(persisted_result)
+
+        for block in emitted_blocks:
+            sse_events.append(
+                ChatSseEvent(
+                    event="blocks.append",
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    data={"blocks": [block]},
+                ).to_sse()
+            )
 
         return (sse_events, None, emitted_blocks)
 
     if isinstance(event, AgentRunResultEvent):
         result = event.result
-        if hasattr(result, "output"):
-            return ([], result.output, [])
-        if hasattr(result, "data"):
-            return ([], result.data, [])
+        # Return the full result object so callers can access new_messages()
         return ([], result, [])
 
     return ([], None, [])
@@ -911,10 +1234,14 @@ async def stream_chat_message(  # noqa: C901
             data={"status": "thinking"},
         ).to_sse()
         try:
+            run_started_at = time.monotonic()
             tool_calls_by_id: dict[str, _ToolCallStart] = {}
             # Counter for tool call ordering (use list for mutability in nested scope)
             tool_call_order: list[int] = [0]
+            # Track memory update calls to detect excessive updates
+            memory_update_count: int = 0
             raw_output: object | None = None
+            agent_result: object | None = None  # Avoid NameError if stream ends early
             # Track blocks emitted from tool results (e.g., recipe cards)
             tool_emitted_blocks: list[dict[str, Any]] = []
 
@@ -958,12 +1285,33 @@ async def stream_chat_message(  # noqa: C901
                     tool_calls_by_id=tool_calls_by_id,
                     tool_call_order=tool_call_order,
                 )
+
+                # Track memory updates and warn if excessive
+                if isinstance(agent_event, FunctionToolCallEvent):
+                    tool_name = _extract_tool_name(agent_event.part)
+                    if tool_name == "update_user_memory":
+                        memory_update_count += 1
+                        if memory_update_count > 2:
+                            logger.warning(
+                                f"Excessive memory updates detected "
+                                f"(count={memory_update_count}) in conversation "
+                                f"{conversation_id} - possible agent loop"
+                            )
+
                 for sse_line in sse_events:
                     yield sse_line
                 if emitted_blocks:
                     tool_emitted_blocks.extend(emitted_blocks)
                 if result is not None:
-                    raw_output = result
+                    agent_result = result  # Full result object with new_messages()
+
+            # Extract output for normalization
+            if hasattr(agent_result, "output"):
+                raw_output = agent_result.output
+            elif hasattr(agent_result, "data"):
+                raw_output = agent_result.data
+            else:
+                raw_output = agent_result
 
             message = normalize_agent_output(raw_output)
             for block in message.blocks:
@@ -995,6 +1343,50 @@ async def stream_chat_message(  # noqa: C901
 
             # Update conversation activity timestamp
             await _update_conversation_activity(db, conversation_id=conversation_id)
+
+            # Capture training sample before commit so flush() joins the
+            # same transaction — avoids nested-transaction conflicts with
+            # asyncpg
+            try:
+                # Build tool calls data from completed tool calls
+                tool_calls_data = None
+                if tool_calls_by_id:
+                    tool_calls_data = {
+                        call_id: {
+                            "tool_name": tc.tool_name,
+                            "arguments": tc.arguments,
+                        }
+                        for call_id, tc in tool_calls_by_id.items()
+                    }
+
+                # Build training data using helper functions
+                history_data = _build_training_prompt_data(agent_result)
+                raw_output_for_training = _serialize_raw_output_for_training(raw_output)
+
+                prompt_tokens, completion_tokens, _ = _extract_usage_metrics(
+                    agent_result
+                )
+                model_name, model_version = _extract_model_metadata(agent_result)
+                latency_ms = int((time.monotonic() - run_started_at) * 1000)
+
+                await capture_training_sample(
+                    db,
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    user_id=current_user.id,
+                    raw_prompt=json.dumps(history_data),
+                    raw_response=raw_output_for_training,
+                    tool_calls=tool_calls_data,
+                    model_name=model_name,
+                    model_version=model_version,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    latency_ms=latency_ms,
+                    user=current_user,  # Pass user for synthetic detection
+                )
+            except Exception as capture_exc:
+                logger.warning("Failed to capture training sample: %s", capture_exc)
+
             await db.commit()
 
             yield ChatSseEvent(

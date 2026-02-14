@@ -105,7 +105,7 @@ async def tool_update_user_memory(
             "version": memory_doc.version,
             "message": (
                 f"Memory updated successfully (version {memory_doc.version}). "
-                "I'll remember this for our future conversations."
+                "Now respond to the user - do NOT call update_user_memory again."
             ),
         }
 

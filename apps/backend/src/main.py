@@ -1,4 +1,6 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from urllib.parse import urlparse
 
 from fastapi import FastAPI
@@ -15,6 +17,7 @@ from core.error_handler import (
     setup_logging,
 )
 from core.middleware import CorrelationIdMiddleware
+from core.scheduler import scheduler_lifespan
 
 
 settings = get_settings()
@@ -44,12 +47,20 @@ def validate_cors_origins(origins: list[str]) -> list[str]:
     return validated_origins
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan with background scheduler."""
+    async with scheduler_lifespan():
+        yield
+
+
 app = FastAPI(
     title="SmartMealPlanner API",
     description="A smart pantry management system",
     version="0.1.0",
     docs_url=None,
     redoc_url=None,
+    lifespan=lifespan,
 )
 
 # Add proxy headers middleware for Azure Container Apps / reverse proxy support

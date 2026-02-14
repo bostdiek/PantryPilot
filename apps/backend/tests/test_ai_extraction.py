@@ -426,8 +426,13 @@ async def test_create_recipe_agent():
 
     from services.ai.agents import create_recipe_agent
 
-    # Mock the Agent class since we don't want to create real AI agents in tests
-    with patch("services.ai.agents.Agent") as mock_agent_class:
+    # Mock the Agent class and model factory since we don't want to create real
+    # AI agents or validate API keys in tests
+    mock_model = Mock()
+    with (
+        patch("services.ai.agents.Agent") as mock_agent_class,
+        patch("services.ai.agents.get_text_model", return_value=mock_model),
+    ):
         mock_agent = Mock()
         mock_agent_class.return_value = mock_agent
 

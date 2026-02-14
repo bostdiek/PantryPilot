@@ -12,14 +12,13 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "asyncpg>=0.29.0",
     "greenlet>=3.0.0",
-    "python-jose[cryptography]>=3.5.0",
+    "pyjwt[crypto]>=2.10.0",
     "argon2-cffi>=25.1.0",
     "pydantic-settings>=2.10.1",
-    "types-python-jose>=3.5.0.20250531",
+    "protobuf>=6.32.0",
     "httpx>=0.28.1",
     "beautifulsoup4>=4.14.0",
     "pydantic-ai>=1.42.0",
-    "google-generativeai>=0.8.5",
     "openai>=1.109.1",
     "pillow>=11.3.0",
     "azure-communication-email>=1.1.0",
@@ -31,6 +30,7 @@ dependencies = [
     "pgvector>=0.4.2",
     "numpy>=2.4.1",
     "google-genai>=1.57.0",
+    "apscheduler>=3.11.2",
 ]
 
 [dependency-groups]
@@ -46,6 +46,15 @@ dev = [
     "python-json-logger>=2.0.4",
     "detect-secrets>=1.5.0",
     "pydantic-ai-slim[web]>=1.42.0",
+    "pip-audit>=2.10.0",
+    "tiktoken>=0.8.0",
+]
+dapt = [
+    "pandas>=2.2.0",
+    "tqdm>=4.66.0",
+    "kaggle>=1.6.0",
+    "azure-ai-ml>=1.22.0",
+    "azure-identity>=1.19.0",
 ]
 
 [tool.ruff]

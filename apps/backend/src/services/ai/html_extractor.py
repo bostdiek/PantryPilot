@@ -29,6 +29,33 @@ class HTMLExtractionService:
         "main",
     ]
 
+    # Boilerplate selectors to remove for token reduction
+    BOILERPLATE_SELECTORS = [
+        ".related-posts",
+        ".related-recipes",
+        ".you-might-also-like",
+        ".author-bio",
+        ".author-info",
+        ".about-author",
+        ".comments",
+        ".comment-section",
+        "#comments",
+        ".social-share",
+        ".share-buttons",
+        ".social-buttons",
+        "[class*='related']",
+        "[class*='sidebar']",
+        "[class*='social']",
+        "[class*='nav']",  # Navigation elements
+        ".advertisement",
+        ".ad-container",
+        "[class*='ad-']",
+        ".newsletter-signup",
+        ".email-signup",
+        ".print-recipe",
+        ".recipe-card-print",
+    ]
+
     # Tags to remove completely
     UNWANTED_TAGS = {
         "script",
@@ -284,6 +311,9 @@ class HTMLExtractionService:
         for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
             comment.extract()
 
+        # Remove boilerplate elements to reduce token count
+        self._remove_boilerplate(soup)
+
         # Try to find recipe-specific content
         recipe_content = self._extract_recipe_content(soup)
 
@@ -327,6 +357,24 @@ class HTMLExtractionService:
                     return None
 
         return None
+
+    def _remove_boilerplate(self, soup: BeautifulSoup) -> None:
+        """Remove boilerplate elements like ads, related posts, social buttons.
+
+        Args:
+            soup: BeautifulSoup object to clean
+        """
+        # Combine selectors so the DOM is only traversed once
+        combined_selector = ",".join(self.BOILERPLATE_SELECTORS)
+        try:
+            for element in soup.select(combined_selector):
+                element.decompose()
+        except Exception as e:
+            # Log and continue if selector processing fails
+            logger.debug(
+                "Failed to remove boilerplate elements with combined selectors: %s",
+                e,
+            )
 
     def _clean_attributes(self, soup: BeautifulSoup) -> None:
         """Remove unwanted attributes from all tags.

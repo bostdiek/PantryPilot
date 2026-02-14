@@ -50,7 +50,7 @@ async def enforce_chat_message_retention(
 
     ttl_delete = sa.delete(ChatMessage).where(sa.and_(*ttl_filters))
     ttl_result = await db.execute(ttl_delete)
-    deleted_total += int(ttl_result.rowcount or 0)
+    deleted_total += int(ttl_result.rowcount or 0)  # type: ignore[attr-defined]
 
     # Size cap enforcement using a window function (Postgres):
     # keep newest N messages per conversation.
@@ -80,7 +80,7 @@ async def enforce_chat_message_retention(
 
     cap_delete = sa.delete(ChatMessage).where(ChatMessage.id.in_(ids_to_delete))
     cap_result = await db.execute(cap_delete)
-    deleted_total += int(cap_result.rowcount or 0)
+    deleted_total += int(cap_result.rowcount or 0)  # type: ignore[attr-defined]
 
     if deleted_total:
         await db.commit()
