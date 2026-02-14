@@ -6,6 +6,7 @@ unused-import warnings for the explicit re-exports.
 """
 
 from .ai_drafts import AIDraft  # noqa: F401
+from .ai_training_samples import AITrainingSample  # noqa: F401
 from .chat_conversations import ChatConversation  # noqa: F401
 from .chat_messages import ChatMessage  # noqa: F401
 from .chat_pending_actions import ChatPendingAction  # noqa: F401

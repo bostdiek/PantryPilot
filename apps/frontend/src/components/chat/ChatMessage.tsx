@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import type { ChatContentBlock } from '../../types/Chat';
+import type { ChatContentBlock, UserFeedback } from '../../types/Chat';
 
 import {
   ActionBlock,
@@ -10,6 +10,7 @@ import {
   TextBlock,
   UnknownBlock,
 } from './blocks';
+import { FeedbackButtons } from './FeedbackButtons';
 
 /** Message type that supports both legacy content and new blocks format */
 export interface ChatMessageData {
@@ -25,6 +26,8 @@ export interface ChatMessageData {
   isStreaming?: boolean;
   /** Current status text to show during streaming (e.g., "Searching recipes...") */
   statusText?: string;
+  /** User feedback on assistant response for training data quality */
+  userFeedback?: UserFeedback;
 }
 
 interface ChatMessageProps {
@@ -33,6 +36,11 @@ interface ChatMessageProps {
   onAcceptAction?: (actionId: string) => Promise<void>;
   /** Callback when an action is canceled */
   onCancelAction?: (actionId: string) => Promise<void>;
+  /** Callback when user submits feedback on an assistant message */
+  onFeedbackSubmitted?: (
+    messageId: string,
+    feedback: 'positive' | 'negative'
+  ) => void;
 }
 
 /**
@@ -73,8 +81,11 @@ export function ChatMessage({
   message,
   onAcceptAction,
   onCancelAction,
+  onFeedbackSubmitted,
 }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const isAssistant = message.role === 'assistant';
+  const showFeedback = isAssistant && !message.isStreaming;
 
   const formattedTime = useMemo(() => {
     return new Intl.DateTimeFormat(undefined, {
@@ -152,12 +163,21 @@ export function ChatMessage({
           <div
             className={
               isUser
-                ? 'text-primary-100 mt-1 text-xs'
-                : 'mt-1 text-xs text-gray-500'
+                ? 'text-primary-100 mt-1 flex items-center justify-end text-xs'
+                : 'mt-1 flex items-center justify-between text-xs text-gray-500'
             }
           >
-            <span className="sr-only">{speaker} at </span>
-            {formattedTime}
+            <span>
+              <span className="sr-only">{speaker} at </span>
+              {formattedTime}
+            </span>
+            {showFeedback && (
+              <FeedbackButtons
+                messageId={message.id}
+                initialFeedback={message.userFeedback}
+                onFeedbackSubmitted={onFeedbackSubmitted}
+              />
+            )}
           </div>
         </div>
       </article>

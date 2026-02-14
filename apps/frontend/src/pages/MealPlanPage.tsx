@@ -51,10 +51,11 @@ import { useMealPlanStore } from '../stores/useMealPlanStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { DayOption } from '../types/DayOption';
 import type { Recipe, RecipeCategory, RecipeDifficulty } from '../types/Recipe';
-
-function toYyyyMmDd(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
+import {
+  addDaysToDateString,
+  getLocalStartOfSundayWeek,
+  toLocalYyyyMmDd,
+} from '../utils/dateUtils';
 
 const MealPlanPage: FC = () => {
   const {
@@ -74,34 +75,15 @@ const MealPlanPage: FC = () => {
     useMealPlanStore.getState().markCooked(entryId);
   }, []);
 
-  // Week helpers
-  function startOfSundayWeek(d: Date): Date {
-    const day = new Date(d);
-    const dow = day.getUTCDay();
-    const start = new Date(
-      Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate())
-    );
-    start.setUTCDate(start.getUTCDate() - dow);
-    return start;
-  }
-  function fmtYmd(d: Date): string {
-    return d.toISOString().slice(0, 10);
-  }
-  function addDays(ymd: string, days: number): string {
-    const [y, m, d] = ymd.split('-').map((n) => Number(n));
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    dt.setUTCDate(dt.getUTCDate() + days);
-    return fmtYmd(dt);
-  }
-
-  // Load week on mount
+  // Load week on mount or reload if the current week doesn't match browser's local week
   useEffect(() => {
-    if (!currentWeek) {
-      const start = fmtYmd(startOfSundayWeek(today));
-      void loadWeek(start);
+    const localWeekStart = toLocalYyyyMmDd(getLocalStartOfSundayWeek(today));
+
+    // Load if we don't have a week, or if the current week doesn't match the local week
+    if (!currentWeek || currentWeek.weekStartDate !== localWeekStart) {
+      void loadWeek(localWeekStart);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentWeek, loadWeek, today]);
 
   // Horizontal scroll helpers to reveal the full day card in view
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -114,7 +96,7 @@ const MealPlanPage: FC = () => {
     } else {
       map.set(date, el);
       // Auto-scroll to today once per loaded week when today's card mounts
-      const todayStr = toYyyyMmDd(today);
+      const todayStr = toLocalYyyyMmDd(today);
       if (
         currentWeek &&
         date === todayStr &&
@@ -314,19 +296,20 @@ const MealPlanPage: FC = () => {
   // Week navigation handler (shared between desktop buttons and mobile navigation)
   function handleWeekChange(direction: 'prev' | 'next' | 'today') {
     const start =
-      currentWeek?.weekStartDate ?? fmtYmd(startOfSundayWeek(today));
+      currentWeek?.weekStartDate ??
+      toLocalYyyyMmDd(getLocalStartOfSundayWeek(today));
 
     if (direction === 'prev') {
-      void loadWeek(addDays(start, -7));
+      void loadWeek(addDaysToDateString(start, -7));
     } else if (direction === 'next') {
-      void loadWeek(addDays(start, 7));
+      void loadWeek(addDaysToDateString(start, 7));
     } else if (direction === 'today') {
-      const todayStart = fmtYmd(startOfSundayWeek(today));
+      const todayStart = toLocalYyyyMmDd(getLocalStartOfSundayWeek(today));
       if (currentWeek?.weekStartDate !== todayStart) {
         void loadWeek(todayStart);
       }
       // Scroll to today after render
-      setTimeout(() => scrollToDay(toYyyyMmDd(today)), 0);
+      setTimeout(() => scrollToDay(toLocalYyyyMmDd(today)), 0);
     }
   }
 
@@ -749,7 +732,7 @@ const MealPlanPage: FC = () => {
                 </span>
                 {' — '}
                 <span className="font-semibold">
-                  {addDays(currentWeek.weekStartDate, 6)}
+                  {addDaysToDateString(currentWeek.weekStartDate, 6)}
                 </span>
               </>
             ) : (
@@ -788,12 +771,12 @@ const MealPlanPage: FC = () => {
         <MobileMealPlanView
           currentWeek={currentWeek}
           recipes={recipes}
-          todayDate={toYyyyMmDd(today)}
+          todayDate={toLocalYyyyMmDd(today)}
           currentWeekStart={currentWeek?.weekStartDate}
           onWeekChange={handleWeekChange}
           onMarkCooked={handleMarkCooked}
           onRecipeClick={handleRecipeClick}
-          onRemoveEntry={handleRemoveFromDay}
+          onRemoveEntry={(entryId) => removeEntry(entryId)}
           onAddLeftover={(date) =>
             addEntry({ plannedForDate: date, isLeftover: true })
           }
@@ -815,7 +798,7 @@ const MealPlanPage: FC = () => {
             <div className="hidden overflow-x-auto md:block" ref={scrollRef}>
               <div className="flex gap-4 pb-2">
                 {currentWeek.days.map((day) => {
-                  const isToday = day.date === toYyyyMmDd(today);
+                  const isToday = day.date === toLocalYyyyMmDd(today);
                   return (
                     <div
                       key={day.date}
@@ -1062,7 +1045,7 @@ const MealPlanPage: FC = () => {
             (day): DayOption => ({
               dayOfWeek: day.dayOfWeek,
               date: day.date,
-              isToday: day.date === toYyyyMmDd(today),
+              isToday: day.date === toLocalYyyyMmDd(today),
             })
           ) || []
         }

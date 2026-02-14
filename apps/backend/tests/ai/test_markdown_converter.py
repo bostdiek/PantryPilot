@@ -21,7 +21,7 @@ class TestRecipeMarkdownConverter:
         assert converter is not None
 
     def test_convert_img_with_alt_and_src(self):
-        """Test image conversion with alt text and src."""
+        """Test image conversion strips images for token optimization."""
         converter = RecipeMarkdownConverter()
 
         # Create a mock element with get method
@@ -31,7 +31,8 @@ class TestRecipeMarkdownConverter:
                 return attrs.get(attr, default)
 
         result = converter.convert_img(MockElement(), "", set())
-        assert result == "![Delicious Pasta](https://example.com/img.jpg)\n\n"
+        # Images are stripped entirely for token optimization
+        assert result == ""
 
     def test_convert_img_without_alt(self):
         """Test image conversion without alt text returns empty string."""

@@ -1,14 +1,16 @@
-"""Generate contextual prefixes for recipe embeddings using Gemini Flash-Lite."""
+"""Generate contextual prefixes for recipe embeddings using LLM.
+
+Supports Azure OpenAI or Gemini Flash-Lite based on configuration.
+Uses centralized model factory for provider selection.
+"""
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-from google import genai
-from google.genai import types
+from typing import TYPE_CHECKING, Any
 
 from core.config import get_settings
+from services.ai.model_factory import REASONING_MODELS
 
 
 if TYPE_CHECKING:
@@ -16,8 +18,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Use cheapest/fastest model for context generation
-CONTEXT_MODEL = "gemini-2.0-flash-lite"
 CONTEXT_MAX_TOKENS = 150  # ~2-3 sentences
 
 
@@ -41,19 +41,71 @@ Recipe:
 Context (1-3 sentences only):"""
 
 
+def _is_azure_provider() -> bool:
+    """Check if Azure OpenAI should be used based on configuration."""
+    settings = get_settings()
+    return settings.LLM_PROVIDER == "azure_openai"
+
+
+def _is_reasoning_model(model_name: str) -> bool:
+    """Check if a model is an Azure OpenAI reasoning model.
+
+    Reasoning models (gpt-5-*, o1-*, o3-*) don't support max_tokens or temperature.
+    They use max_completion_tokens instead.
+
+    Args:
+        model_name: The model deployment name to check.
+
+    Returns:
+        True if the model is a reasoning model, False otherwise.
+    """
+    # Check against explicit set for known reasoning models
+    if model_name in REASONING_MODELS:
+        return True
+
+    # Check for common prefixes/patterns
+    reasoning_prefixes = ("gpt-5-", "o1-", "o3-")
+    return model_name.startswith(reasoning_prefixes)
+
+
 class RecipeContextGenerator:
     """Generates contextual prefixes for recipe embeddings.
 
     Following Anthropic's Contextual Retrieval methodology, we prepend
     a short LLM-generated context to each recipe before embedding.
     This improves semantic search by 35% according to Anthropic's research.
+
+    Supports both Azure OpenAI and Gemini based on configuration.
     """
 
     def __init__(self, api_key: str | None = None):
         """Initialize with optional API key override."""
-        settings = get_settings()
-        self._client = genai.Client(api_key=api_key or settings.GEMINI_API_KEY)
-        self._model = CONTEXT_MODEL
+        self._settings = get_settings()
+        self._api_key = api_key
+        self._use_azure = _is_azure_provider()
+        self._client = None  # Lazy initialization
+
+    def _get_gemini_client(self) -> Any:
+        """Get Gemini client (lazy initialization)."""
+        from google import genai
+
+        return genai.Client(api_key=self._api_key or self._settings.GEMINI_API_KEY)
+
+    def _get_azure_client(self) -> Any:
+        """Get Azure OpenAI client (lazy initialization)."""
+        from openai import AsyncAzureOpenAI
+
+        api_key = self._settings.AZURE_OPENAI_API_KEY
+        if not api_key:
+            raise ValueError(
+                "AZURE_OPENAI_API_KEY must be set to use the Azure OpenAI provider."
+            )
+
+        return AsyncAzureOpenAI(
+            azure_endpoint=self._settings.AZURE_OPENAI_ENDPOINT or "",
+            api_key=api_key,
+            api_version=self._settings.AZURE_OPENAI_API_VERSION,
+        )
 
     def _format_recipe_content(self, recipe: Recipe) -> str:
         """Format recipe into text for context generation."""
@@ -111,31 +163,76 @@ class RecipeContextGenerator:
     async def generate_context(self, recipe: Recipe) -> str:
         """Generate contextual prefix for a recipe.
 
+        Uses Azure OpenAI if configured, otherwise falls back to Gemini.
+
         Returns:
             A 1-3 sentence context string to prepend before embedding.
         """
         recipe_content = self._format_recipe_content(recipe)
         prompt = RECIPE_CONTEXT_PROMPT.format(recipe_content=recipe_content)
+        recipe_name = str(recipe.name)
 
         try:
-            response = await self._client.aio.models.generate_content(
-                model=self._model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    max_output_tokens=CONTEXT_MAX_TOKENS,
-                    temperature=0.3,  # Low temp for consistent output
-                ),
-            )
-            if response.text is None:
-                logger.warning(f"Empty response for '{recipe.name}'")
-                return self._generate_fallback_context(recipe)
-            context = response.text.strip()
-            logger.debug(f"Generated context for '{recipe.name}': {context[:80]}...")
-            return context
+            if self._use_azure and self._settings.AZURE_OPENAI_ENDPOINT:
+                context = await self._generate_with_azure(prompt, recipe_name)
+            else:
+                context = await self._generate_with_gemini(prompt, recipe_name)
+
+            if context:
+                logger.debug(
+                    f"Generated context for '{recipe_name}': {context[:80]}..."
+                )
+                return context
+            return self._generate_fallback_context(recipe)
 
         except Exception as e:
-            logger.warning(f"Failed to generate context for '{recipe.name}': {e}")
+            logger.warning(f"Failed to generate context for '{recipe_name}': {e}")
             return self._generate_fallback_context(recipe)
+
+    async def _generate_with_azure(self, prompt: str, recipe_name: str) -> str | None:
+        """Generate context using Azure OpenAI."""
+        client = self._get_azure_client()
+        model_name = self._settings.TEXT_MODEL
+
+        # Reasoning models (gpt-5-*, o1-*, o3-*) use max_completion_tokens
+        # Standard models use max_tokens
+        if _is_reasoning_model(model_name):
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=CONTEXT_MAX_TOKENS,
+            )
+        else:
+            response = await client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=CONTEXT_MAX_TOKENS,
+                temperature=0.3,
+            )
+        if response.choices and response.choices[0].message.content:
+            content: str = response.choices[0].message.content
+            return content.strip()
+        logger.warning(f"Empty Azure response for '{recipe_name}'")
+        return None
+
+    async def _generate_with_gemini(self, prompt: str, recipe_name: str) -> str | None:
+        """Generate context using Gemini."""
+        from google.genai import types
+
+        client = self._get_gemini_client()
+        response = await client.aio.models.generate_content(
+            model=self._settings.TEXT_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=CONTEXT_MAX_TOKENS,
+                temperature=0.3,
+            ),
+        )
+        if response.text:
+            text: str = response.text
+            return text.strip()
+        logger.warning(f"Empty Gemini response for '{recipe_name}'")
+        return None
 
     def _generate_fallback_context(self, recipe: Recipe) -> str:
         """Generate basic context from metadata (no LLM call)."""

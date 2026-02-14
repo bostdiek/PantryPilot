@@ -130,6 +130,75 @@ Registered in `main.py` (order matters):
 
 ---
 
+## LLM Configuration
+
+PantryPilot supports two LLM providers for all AI features:
+
+### Azure OpenAI (Recommended for Production)
+
+Azure OpenAI provides enterprise-grade reliability and data privacy for production deployments.
+
+```bash
+# Enable Azure OpenAI for all AI features
+LLM_PROVIDER=azure_openai
+
+# Azure OpenAI resource endpoint
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+
+# API key from Azure Portal or Key Vault
+AZURE_OPENAI_API_KEY=your-api-key
+
+# Model deployments (must match Azure deployment names)
+CHAT_MODEL=gpt-4o-mini                    # Chat, recipe extraction, titles
+MULTIMODAL_MODEL=gpt-4o                   # Image-based recipe extraction
+TEXT_MODEL=gpt-4o-mini                    # Text-only generation
+EMBEDDING_MODEL=text-embedding-3-small    # Semantic search
+
+# API version (optional, defaults to 2024-10-01-preview)
+AZURE_OPENAI_API_VERSION=2024-10-01-preview
+```
+
+**Required Azure OpenAI Deployments:**
+- `gpt-4o-mini` or similar: Chat agent, URL recipe extraction, title generation
+- `gpt-4o` or multimodal model: Image-based recipe extraction
+- `text-embedding-3-small`: Semantic search embeddings (configured for 768 dimensions)
+
+**Setup via Bicep:**
+The project includes Bicep infrastructure for Azure OpenAI. Set `deployAzureOpenAI=true` in your parameters file to provision all required model deployments automatically.
+
+### Google Gemini (Development Default)
+
+Gemini is the default provider for local development due to simpler setup.
+
+```bash
+# Use Gemini (default when LLM_PROVIDER is unset or =gemini)
+LLM_PROVIDER=gemini
+GEMINI_API_KEY=your-gemini-api-key
+
+# Model names (optional, defaults to Gemini models)
+CHAT_MODEL=gemini-2.5-flash
+MULTIMODAL_MODEL=gemini-2.5-flash-lite
+TEXT_MODEL=gemini-2.5-flash-lite
+EMBEDDING_MODEL=gemini-embedding-001
+```
+
+### AI Features Coverage
+
+When `LLM_PROVIDER=azure_openai`, the following features use Azure OpenAI:
+
+| Feature | Configuration Variable | Default (Gemini) |
+|---------|----------------------|------------------|
+| Chat Agent | `CHAT_MODEL` | gemini-2.5-flash |
+| Recipe Extraction (URL) | `CHAT_MODEL` | gemini-2.5-flash |
+| Recipe Extraction (Image) | `MULTIMODAL_MODEL` | gemini-2.5-flash-lite |
+| Title Generation | `TEXT_MODEL` | gemini-2.5-flash-lite |
+| Context Generation | `TEXT_MODEL` | gemini-2.5-flash-lite |
+| Semantic Search | `EMBEDDING_MODEL` | gemini-embedding-001 |
+
+All providers support tool calling and structured outputs.
+
+---
+
 ## Agent Playground (Dev Only)
 
 Use the PydanticAI Web UI to iterate on the chat assistant locally:

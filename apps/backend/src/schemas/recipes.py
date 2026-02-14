@@ -1,12 +1,12 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Annotated, Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class RecipeDifficulty(str, Enum):
+class RecipeDifficulty(StrEnum):
     """Difficulty level of the recipe."""
 
     EASY = "easy"
@@ -14,7 +14,7 @@ class RecipeDifficulty(str, Enum):
     HARD = "hard"
 
 
-class RecipeCategory(str, Enum):
+class RecipeCategory(StrEnum):
     """Recipe category type."""
 
     BREAKFAST = "breakfast"
@@ -216,10 +216,35 @@ class RecipeOut(RecipeBase):
     model_config = ConfigDict(extra="forbid")
 
 
+class RecipeSearchResult(BaseModel):
+    """Compact search result for token-optimized recipe searches."""
+
+    id: Annotated[UUID, Field(description="Unique identifier for the recipe")]
+    title: Annotated[str, Field(description="Recipe title")]
+    description: str | None = Field(default=None, description="Recipe description")
+    cook_time_minutes: Annotated[
+        int, Field(ge=0, description="Cooking time in minutes")
+    ]
+    prep_time_minutes: Annotated[
+        int, Field(ge=0, description="Preparation time in minutes")
+    ]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RecipeSearchResponse(BaseModel):
     """Offset-based search response for recipes."""
 
     items: list[RecipeOut]
+    limit: int
+    offset: int
+    total: int | None = None
+
+
+class RecipeCompactSearchResponse(BaseModel):
+    """Offset-based search response with compact recipe results for token efficiency."""
+
+    items: list[RecipeSearchResult]
     limit: int
     offset: int
     total: int | None = None

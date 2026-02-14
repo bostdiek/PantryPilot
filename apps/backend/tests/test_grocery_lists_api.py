@@ -66,6 +66,8 @@ async def grocery_client() -> AsyncIterator[tuple[AsyncClient, AsyncSession]]:
                 embedding TEXT,
                 search_context TEXT,
                 search_context_generated_at TIMESTAMP,
+                embedding_model VARCHAR(100),
+                embedding_generated_at TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )

@@ -41,6 +41,20 @@ export default function AssistantPage() {
     void loadConversations();
   }, [loadConversations]);
 
+  // Poll conversations to pick up title updates
+  // Use 30s in development, 60s in production to reduce API calls
+  useEffect(() => {
+    if (!hasHydrated) return;
+
+    const pollInterval = import.meta.env.MODE === 'development' ? 30000 : 60000; // 30s dev, 60s prod
+
+    const intervalId = setInterval(() => {
+      void loadConversations();
+    }, pollInterval);
+
+    return () => clearInterval(intervalId);
+  }, [hasHydrated, loadConversations]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!hasHydrated) return;
