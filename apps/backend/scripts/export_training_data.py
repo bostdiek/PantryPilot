@@ -44,7 +44,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from dependencies.db import AsyncSessionLocal
 from models.ai_training_samples import AITrainingSample
@@ -57,110 +57,86 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _normalize_prompt_payload(raw_prompt: str) -> tuple[list[dict], list[dict]]:
-    """Normalize raw_prompt payload across legacy and current formats.
+def _parse_raw_prompt(
+    raw_prompt: str,
+) -> tuple[list[dict], list[dict]]:
+    """Parse raw_prompt JSON into messages and tool definitions.
 
-    Legacy format stores a JSON list of message dicts.
-    Current format stores a JSON object with:
-    - messages: list[dict]
-    - tools: list[dict]
+    Supports both the current storage format::
+
+        {"messages": [...], "tools": [...]}
+
+    and legacy format where the root JSON is a list of message dicts.
+
+    Expects the current storage format::
+
+        {"messages": [...], "tools": [...]}
+
+    where ``messages`` are in OpenAI/ChatML format (``role``/``content``)
+    and ``tools`` contains OpenAI-format function definitions extracted
+    from the live pydantic-ai agent at capture time.
 
     Returns:
-        Tuple of (messages, tools).
+        Tuple of (messages list, tool definitions list).
     """
-    fallback = [{"role": "user", "content": raw_prompt}]
-
     try:
-        payload = json.loads(raw_prompt)
+        prompt_data = json.loads(raw_prompt)
     except json.JSONDecodeError:
-        return fallback, []
+        logger.warning("Failed to parse raw_prompt as JSON — skipping sample")
+        return [], []
 
-    if isinstance(payload, list):
-        messages = [msg for msg in payload if isinstance(msg, dict)]
-        return messages or fallback, []
+    if isinstance(prompt_data, list):
+        messages = [msg for msg in prompt_data if isinstance(msg, dict)]
+        if messages:
+            logger.warning("raw_prompt uses legacy list format; exporting without tools")
+        return messages, []
 
-    if isinstance(payload, dict):
-        raw_messages = payload.get("messages", [])
-        raw_tools = payload.get("tools", [])
+    if not isinstance(prompt_data, dict):
+        logger.warning("raw_prompt is not a dict (legacy format) — skipping sample")
+        return [], []
 
-        messages = [msg for msg in raw_messages if isinstance(msg, dict)]
-        tools = [tool for tool in raw_tools if isinstance(tool, dict)]
-        return messages or fallback, tools
+    raw_messages = prompt_data.get("messages", [])
+    raw_tools = prompt_data.get("tools", [])
 
-    return fallback, []
+    messages = [msg for msg in raw_messages if isinstance(msg, dict)]
+    tools = [tool for tool in raw_tools if isinstance(tool, dict)]
+    return messages, tools
 
 
-def _sample_to_chatml(sample: AITrainingSample) -> dict:
-    """Convert a training sample to ChatML format.
+def _sample_to_chatml(sample: AITrainingSample) -> dict | None:
+    """Convert a training sample to the native API format for SFT.
 
-    Includes tool calls in the conversation using the function calling format
-    compatible with fine-tuning (OpenAI-style tool_calls).
+    Output mirrors the structure pydantic-ai sends to the LLM:
 
-    The raw_prompt now contains properly structured messages with:
-    - system: System prompt
-    - user: User messages
-    - assistant: Assistant responses (may include tool_calls array)
-    - tool: Tool return values with tool_call_id
+    * ``messages`` — list of OpenAI-format message dicts (``role``/``content``
+      with ``tool_calls`` on assistant messages and ``tool_call_id`` on tool
+      messages).
+    * ``tools`` — list of OpenAI-format function definitions.
+    * ``metadata`` — provenance info (sample id, model, feedback, etc.).
+
+    Returns *None* for samples that cannot be parsed (e.g. legacy format
+    without tool definitions).
     """
-    prompt_data, tool_defs = _normalize_prompt_payload(sample.raw_prompt)
+    messages, tool_definitions = _parse_raw_prompt(sample.raw_prompt)
 
-    # Check if the prompt already has a system message
-    has_system = any(msg.get("role") == "system" for msg in prompt_data)
+    if not messages:
+        return None
 
-    conversations = []
-
-    # Add system message if not already present
-    if not has_system:
-        conversations.append(
-            {
-                "from": "system",
-                "value": (
-                    "You are PantryPilot, an AI assistant that helps families "
-                    "plan meals, manage recipes, and create grocery lists."
-                ),
-            }
-        )
-
-    # Add conversation history from prompt
-    # The prompt now contains properly grouped messages including tool_calls
-    for msg in prompt_data:
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        tool_calls = msg.get("tool_calls")
-
-        if role == "system":
-            conversations.append({"from": "system", "value": content})
-        elif role == "user":
-            conversations.append({"from": "user", "value": content})
-        elif role == "assistant":
-            # Assistant messages may have content, tool_calls, or both
-            assistant_entry: dict = {"from": "assistant", "value": content or ""}
-            if tool_calls:
-                assistant_entry["tool_calls"] = tool_calls
-            conversations.append(assistant_entry)
-        elif role == "tool":
-            # Tool return messages
-            conversations.append(
-                {
-                    "from": "tool",
-                    "tool_call_id": msg.get("tool_call_id", ""),
-                    "value": content,
-                }
-            )
-
-    return {
-        "conversations": conversations,
+    result: dict = {
+        "messages": messages,
+        "tools": tool_definitions,
         "metadata": {
             "sample_id": str(sample.id),
             "model_name": sample.model_name,
             "feedback": sample.user_feedback,
             "is_simulated": sample.is_simulated,
             "has_tool_calls": sample.tool_calls is not None,
-            "has_tools": len(tool_defs) > 0,
-            "tool_count": len(tool_defs),
+            "has_tools": len(tool_definitions) > 0,
+            "tool_count": len(tool_definitions),
         },
-        **({"tools": tool_defs} if tool_defs else {}),
     }
+
+    return result
 
 
 def _build_sample_query(
@@ -170,8 +146,18 @@ def _build_sample_query(
     max_date: datetime | None = None,
     include_simulated: bool = True,
     user_id: uuid.UUID | None = None,
+    all_turns: bool = False,
 ):
     """Build SQLAlchemy query with common filters.
+
+    By default only the **last sample per conversation** is returned.
+    Each training sample already contains the full conversation up to
+    that point so earlier samples are strict subsets of later ones.  For
+    SFT we only need the final (most-complete) sample per conversation
+    to avoid wasting tokens on repeated prefixes.
+
+    Set *all_turns* to ``True`` to export every per-turn snapshot
+    instead (useful for debugging or per-turn analysis).
 
     Args:
         feedback_filter: Filter by feedback type
@@ -180,6 +166,8 @@ def _build_sample_query(
         max_date: Maximum created_at date (exclusive)
         include_simulated: Whether to include synthetic data samples
         user_id: Filter to specific user UUID
+        all_turns: If True export every sample; if False (default) keep
+            only the latest sample per conversation
 
     Returns:
         SQLAlchemy select statement
@@ -210,6 +198,21 @@ def _build_sample_query(
     if user_id:
         stmt = stmt.where(AITrainingSample.user_id == user_id)
 
+    # Keep only the latest (most-complete) sample per conversation.
+    if not all_turns:
+        latest_per_conv = (
+            select(
+                func.max(AITrainingSample.created_at).label("max_created"),
+            )
+            .where(AITrainingSample.conversation_id.is_not(None))
+            .group_by(AITrainingSample.conversation_id)
+            .subquery()
+        )
+        stmt = stmt.join(
+            latest_per_conv,
+            AITrainingSample.created_at == latest_per_conv.c.max_created,
+        )
+
     return stmt
 
 
@@ -222,6 +225,7 @@ async def export_to_chatml(
     include_simulated: bool = True,
     user_id: uuid.UUID | None = None,
     full_tool_outputs: bool = False,
+    all_turns: bool = False,
 ) -> int:
     """Export training samples to ChatML JSONL format.
 
@@ -240,6 +244,8 @@ async def export_to_chatml(
             long context training (8K-16K). Default False uses token-optimized
             outputs. Note: Stored samples already contain full outputs;
             this flag indicates intent for long context experiments.
+        all_turns: If True export every per-turn snapshot; if False
+            (default) keep only the last sample per conversation.
 
     Returns:
         Number of samples exported
@@ -255,20 +261,28 @@ async def export_to_chatml(
             max_date=max_date,
             include_simulated=include_simulated,
             user_id=user_id,
+            all_turns=all_turns,
         )
         result = await db.execute(stmt)
         samples = result.scalars().all()
 
         # Export to ChatML JSONL format
         count = 0
+        skipped = 0
         with open(output_file, "w") as f:
             for sample in samples:
                 chatml_record = _sample_to_chatml(sample)
+                if chatml_record is None:
+                    skipped += 1
+                    continue
                 # Add metadata flag for long context experiments
                 if full_tool_outputs:
                     chatml_record["metadata"]["full_tool_outputs"] = True
                 f.write(json.dumps(chatml_record) + "\n")
                 count += 1
+
+        if skipped:
+            logger.warning("Skipped %d samples with unparseable/legacy format", skipped)
 
         return count
 
@@ -285,6 +299,7 @@ async def export_with_split(
     user_id: uuid.UUID | None = None,
     full_tool_outputs: bool = False,
     seed: int = 42,
+    all_turns: bool = False,
 ) -> tuple[int, int]:
     """Export training samples with train/validation split.
 
@@ -300,6 +315,8 @@ async def export_with_split(
         user_id: Filter to specific user UUID
         full_tool_outputs: Preserve complete tool responses for long context
         seed: Random seed for reproducible splits
+        all_turns: If True export every per-turn snapshot; if False
+            (default) keep only the last sample per conversation.
 
     Returns:
         Tuple of (train_count, val_count)
@@ -315,6 +332,7 @@ async def export_with_split(
             max_date=max_date,
             include_simulated=include_simulated,
             user_id=user_id,
+            all_turns=all_turns,
         )
         result = await db.execute(stmt)
         samples = list(result.scalars().all())
@@ -336,6 +354,8 @@ async def export_with_split(
     with open(train_file, "w") as f:
         for sample in train_samples:
             record = _sample_to_chatml(sample)
+            if record is None:
+                continue
             if full_tool_outputs:
                 record["metadata"]["full_tool_outputs"] = True
             f.write(json.dumps(record) + "\n")
@@ -344,6 +364,8 @@ async def export_with_split(
     with open(val_file, "w") as f:
         for sample in val_samples:
             record = _sample_to_chatml(sample)
+            if record is None:
+                continue
             if full_tool_outputs:
                 record["metadata"]["full_tool_outputs"] = True
             f.write(json.dumps(record) + "\n")
@@ -399,6 +421,10 @@ def _log_export_config(
     logger.info("  Include simulated: %s", not args.exclude_simulated)
     if args.full_tool_outputs:
         logger.info("  Full tool outputs: enabled (long context mode)")
+    if args.all_turns:
+        logger.info("  All turns: exporting every per-turn snapshot")
+    else:
+        logger.info("  Dedup: keeping only the last sample per conversation")
 
 
 def _create_parser() -> argparse.ArgumentParser:
@@ -463,6 +489,15 @@ def _create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Preserve complete tool responses for long context training (8K-16K)",
     )
+    parser.add_argument(
+        "--all-turns",
+        action="store_true",
+        help=(
+            "Export every per-turn snapshot instead of only the last "
+            "(most-complete) sample per conversation. Default keeps one "
+            "sample per conversation for efficient SFT."
+        ),
+    )
     return parser
 
 
@@ -503,6 +538,7 @@ async def main() -> int:
             user_id=user_id,
             full_tool_outputs=args.full_tool_outputs,
             seed=args.seed,
+            all_turns=args.all_turns,
         )
         logger.info(
             "Exported %d training samples to %s, %d validation samples to %s",
@@ -522,6 +558,7 @@ async def main() -> int:
             include_simulated=not args.exclude_simulated,
             user_id=user_id,
             full_tool_outputs=args.full_tool_outputs,
+            all_turns=args.all_turns,
         )
         logger.info("Exported %d training samples to %s", count, args.output)
 

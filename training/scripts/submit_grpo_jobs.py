@@ -220,7 +220,7 @@ def submit_grpo_job(
 
     # Prompts: data asset input or local file bundled with code
     if prompts_ref:
-        prompts_arg = "${inputs.prompts_data}"
+        prompts_arg = "${{inputs.prompts_data}}"
     else:
         prompts_arg = "data/grpo_prompts.json"
 

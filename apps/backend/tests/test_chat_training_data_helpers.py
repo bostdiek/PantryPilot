@@ -179,20 +179,30 @@ class TestProcessModelResponseForTraining:
 class TestBuildTrainingPromptData:
     """Tests for _build_training_prompt_data."""
 
-    def test_prepends_system_prompt(self) -> None:
-        """Test that helper returns structured prompt payload."""
+    def test_extracts_system_instructions(self) -> None:
+        """Test that system prompt is extracted from ModelRequest.instructions."""
         from api.v1.chat import _build_training_prompt_data
 
+        # Create a ModelRequest with instructions (as pydantic-ai does)
+        user_part = UserPromptPart(content="Hello", timestamp=None)
+        request = ModelRequest(parts=[user_part], instructions="You are Nibble.")
+
         mock_result = MagicMock()
-        mock_result.all_messages.return_value = []
+        mock_result.all_messages.return_value = [request]
 
         result = _build_training_prompt_data(mock_result)
 
+        # Result is a dict with "messages" and "tools" keys
         assert isinstance(result, dict)
         assert "messages" in result
         assert "tools" in result
-        assert result["messages"] == []
-        assert result["tools"] == []
+        messages = result["messages"]
+        # First message should be the system prompt from instructions
+        assert messages[0]["role"] == "system"
+        assert messages[0]["content"] == "You are Nibble."
+        # Second should be the user message
+        assert messages[1]["role"] == "user"
+        assert messages[1]["content"] == "Hello"
 
     def test_handles_missing_all_messages(self) -> None:
         """Test handles objects without all_messages method."""
@@ -202,8 +212,10 @@ class TestBuildTrainingPromptData:
 
         result = _build_training_prompt_data(mock_result)
 
-        assert isinstance(result, dict)
-        assert result["messages"] == []
+        # No messages available → empty list
+        messages = result["messages"]
+        assert len(messages) == 0
+        # No agent passed → empty tools
         assert result["tools"] == []
 
 

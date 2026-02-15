@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -139,39 +140,104 @@ def format_conversations(examples: dict[str, Any], tokenizer: Any) -> dict[str, 
     """
     Format conversation data using ChatML template.
 
-    Our training data uses ShareGPT-style keys ("from"/"value") but
-    ``tokenizer.apply_chat_template`` expects OpenAI-style keys
-    ("role"/"content").  This function converts on the fly.
+    Training data is stored in the native OpenAI/pydantic-ai API format
+    (``role``/``content`` keys) so no key conversion is needed.
+
+    Each example has:
+
+    * ``messages`` \u2014 list of message dicts with ``role``, ``content``,
+      optional ``tool_calls`` (assistant) and ``tool_call_id`` (tool).
+    * ``tools`` \u2014 list of OpenAI-format function definitions.
+
+    Tool definitions are injected into the system message text so the
+    model learns tool-use syntax with the exact parameter schemas it will
+    see at inference time.  We inject into the system message rather than
+    using ``apply_chat_template(tools=...)`` because the plain ChatML
+    Jinja2 template silently ignores the ``tools`` parameter.
 
     Args:
-        examples: Batch of examples with 'conversations' field
+        examples: Batch of examples with 'messages' and 'tools' fields
         tokenizer: Tokenizer with chat template applied
 
     Returns:
         Dictionary with 'text' field containing formatted conversations
     """
     formatted_texts: list[str] = []
-    for conv in examples["conversations"]:
-        # Convert from ShareGPT ("from"/"value") → OpenAI ("role"/"content")
+    tools_batch = examples.get("tools")
+    for idx, conv in enumerate(examples["messages"]):
+        # Get tool definitions for this example
+        tool_defs = (
+            tools_batch[idx]
+            if tools_batch is not None and idx < len(tools_batch) and tools_batch[idx]
+            else None
+        )
+
+        # Data is already in OpenAI format (role/content).
+        # Inject tool definitions into the system message.
         messages: list[dict[str, Any]] = []
         for msg in conv:
-            converted: dict[str, Any] = {
-                "role": msg["from"],
-                "content": msg.get("value", ""),
+            entry: dict[str, Any] = {
+                "role": msg["role"],
+                "content": msg.get("content", ""),
             }
+            # Inject tool definitions into the system message so the model
+            # learns what tools are available with their exact schemas.
+            if msg["role"] == "system" and tool_defs:
+                entry["content"] = _inject_tools_into_system_prompt(
+                    entry["content"], tool_defs
+                )
             # Preserve tool_calls on assistant messages
             if "tool_calls" in msg:
-                converted["tool_calls"] = msg["tool_calls"]
+                entry["tool_calls"] = msg["tool_calls"]
             # Preserve tool_call_id on tool-response messages
             if "tool_call_id" in msg:
-                converted["tool_call_id"] = msg["tool_call_id"]
-            messages.append(converted)
+                entry["tool_call_id"] = msg["tool_call_id"]
+            messages.append(entry)
 
         text = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=False
         )
         formatted_texts.append(text)
     return {"text": formatted_texts}
+
+
+def _inject_tools_into_system_prompt(
+    system_content: str, tool_defs: list[dict[str, Any]]
+) -> str:
+    """Append tool definitions to the system prompt.
+
+    Renders tool definitions in a ``<tools>`` XML block appended to the
+    system prompt.  This follows the Qwen tool-calling convention
+    (``<tools>...</tools>`` + ``<tool_call>...</tool_call>``) which works
+    with ChatML-family models.
+
+    Args:
+        system_content: Original system prompt text
+        tool_defs: List of OpenAI-format tool definitions
+
+    Returns:
+        System prompt with tool definitions appended
+    """
+    if not tool_defs:
+        return system_content
+
+    tools_block = (
+        "\n\n# Tools\n\n"
+        "You may call one or more functions to assist with the user query.\n\n"
+        "You are provided with function signatures within <tools></tools> XML tags:\n"
+        "<tools>\n"
+    )
+    for td in tool_defs:
+        tools_block += json.dumps(td) + "\n"
+    tools_block += (
+        "</tools>\n\n"
+        "For each function call, return a json object with function name and "
+        "arguments within <tool_call></tool_call> XML tags:\n"
+        "<tool_call>\n"
+        '{"name": <function-name>, "arguments": <args-json-object>}\n'
+        "</tool_call>"
+    )
+    return system_content + tools_block
 
 
 def main(args: argparse.Namespace) -> None:

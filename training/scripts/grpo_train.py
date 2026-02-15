@@ -53,6 +53,86 @@ from datasets import Dataset
 from reward_functions import ToolCallRewardComputer
 from trl import GRPOConfig, GRPOTrainer
 from unsloth import FastLanguageModel
+from unsloth.chat_templates import get_chat_template
+
+# ---------------------------------------------------------------------------
+# Condensed system prompt for GRPO rollouts.
+#
+# During SFT the model sees the full ~10K-char Nibble system prompt which
+# describes tool *usage rules* in natural language.  During GRPO rollouts
+# the model must also know:
+#   1. Its identity (Nibble, meal planning assistant)
+#   2. The exact set of available tools with parameter schemas
+#   3. How to format tool calls (<tool_call> JSON)
+#   4. When NOT to call tools (general chat, out-of-scope)
+#
+# We keep this condensed (~2K chars) to fit within context alongside the
+# generated completions.  The reward function handles scoring; the system
+# prompt just gives the model enough context to produce well-formed calls.
+# ---------------------------------------------------------------------------
+
+GRPO_SYSTEM_PROMPT = """\
+You are Nibble, a friendly meal planning assistant for families.
+
+You have access to the following tools. When a user request requires a tool,
+respond with a single tool call using this exact format:
+<tool_call>
+{"name": "<tool_name>", "arguments": {<args>}}
+</tool_call>
+
+If the user's message does NOT require a tool (greetings, general cooking
+knowledge, thanks, or off-topic requests), respond with helpful text only.
+For off-topic requests, politely redirect to food/cooking topics.
+
+Available tools:
+
+1. search_recipes - Search the user's recipe collection
+   Parameters:
+   - query (string, optional): Search text
+   - cuisine (string, optional): Filter by cuisine
+   - difficulty (string, optional): "easy", "medium", or "hard"
+   - max_cook_time (integer, optional): Maximum cook time in minutes
+   - sort_by (string, optional): Sort field e.g. "times_cooked"
+   - include_full_recipe (boolean, optional): Return full recipe details
+
+2. get_meal_plan_history - View past meal plans
+   Parameters:
+   - days (integer, optional): Number of days to look back (default 14)
+
+3. suggest_recipe - Save a new recipe to the collection
+   Parameters (all required):
+   - title (string): Recipe name
+   - description (string): Brief description
+   - prep_time_minutes (integer): Preparation time
+   - cook_time_minutes (integer): Cooking time
+   - serving_min (integer): Minimum servings
+   - instructions (string): Step-by-step instructions
+   - category (string): Recipe category
+   - ingredients (array): List of ingredients
+   Optional:
+   - source_url (string): Original recipe URL
+
+4. update_user_memory - Remember user preferences and dietary info
+   Parameters:
+   - memory_content (string, required): Updated memory content in markdown
+
+5. propose_meal_for_day - Propose a meal for a specific date
+   Parameters:
+   - date (string, required): ISO date e.g. "2026-01-25"
+   - day_label (string, required): e.g. "Saturday"
+   Plus optional fields for existing/new recipes, leftovers, eating out
+
+6. get_daily_weather - Get weather for meal planning context
+   No parameters required.
+
+7. web_search - Search the web for recipe ideas
+   Parameters:
+   - query (string, required): Search query
+
+8. fetch_url_as_markdown - Fetch a webpage as markdown text
+   Parameters:
+   - url (string, required): URL to fetch
+"""
 
 
 def install_mamba_kernels() -> None:
@@ -84,19 +164,23 @@ def install_mamba_kernels() -> None:
     print("✅ Mamba CUDA kernels installed")
 
 
-def load_prompts(prompts_path: str) -> Dataset:
-    """Load GRPO prompts from JSON file.
+def load_prompts(prompts_path: str, tokenizer) -> tuple[Dataset, list[dict]]:
+    """Load GRPO prompts and format as chat-template conversations.
 
-    The prompts file should contain an array of objects with at minimum
-    a "prompt" field. Additional fields ("expected_tool", "category",
-    "expected_args", "expected_query_keywords") are used by the reward
-    function but not passed to the trainer.
+    Each prompt is wrapped in a chat message list with the Nibble system
+    prompt (including tool schemas) so the model knows what tools are
+    available and how to format calls — matching the SFT training
+    distribution.
+
+    The ``prompt`` column contains the tokenizer-rendered string (ChatML)
+    so GRPOTrainer can tokenize it directly.
 
     Args:
-        prompts_path: Path to grpo_prompts.json
+        prompts_path: Path to grpo_prompts.json or Azure ML Data Asset name
+        tokenizer: HuggingFace tokenizer with chat template applied
 
     Returns:
-        HuggingFace Dataset with "prompt" column
+        Tuple of (HuggingFace Dataset, raw prompt dicts)
     """
     if prompts_path.startswith("pantrypilot-"):
         # Load from Azure ML Data Asset
@@ -117,15 +201,25 @@ def load_prompts(prompts_path: str) -> Dataset:
 
     print(f"📚 Loaded {len(raw_prompts)} prompts from {prompts_path}")
 
-    # Build prompt dataset — GRPOTrainer expects a "prompt" column
-    # We store the full prompt data for reward function access
+    # Format each prompt as a chat conversation with system context.
+    # GRPOTrainer accepts pre-rendered prompt strings; we apply the chat
+    # template here so the model sees the same ChatML format as during SFT.
     prompts = []
     for item in raw_prompts:
+        messages = [
+            {"role": "system", "content": GRPO_SYSTEM_PROMPT},
+            {"role": "user", "content": item["prompt"]},
+        ]
+        rendered = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
         prompts.append(
             {
-                "prompt": item["prompt"],
+                "prompt": rendered,
                 "expected_tool": item.get("expected_tool"),
                 "category": item.get("category", "unknown"),
+                # Keep raw user text for reward function lookups
+                "raw_prompt": item["prompt"],
             }
         )
 
@@ -146,17 +240,38 @@ def build_reward_fn(
         prompt_to_expected[item["prompt"]] = item.get("expected_tool")
 
     def reward_fn(
-        completions: list[str], prompts: list[str] | None = None
+        completions,
+        prompts=None,
+        expected_tool=None,
+        raw_prompt=None,
+        **kwargs,
     ) -> list[float]:
-        """Compute rewards for a batch of completions."""
+        """Compute rewards for a batch of completions.
+
+        TRL GRPOTrainer calls reward functions with keyword arguments:
+        prompts, completions, completion_ids, trainer_state, plus any
+        extra dataset columns (expected_tool, category, raw_prompt, etc.).
+
+        ``prompts`` contains the full chat-template-rendered text.
+        ``raw_prompt`` contains the original user text (used for lookups).
+        """
         rewards = []
         for i, completion in enumerate(completions):
-            prompt = prompts[i] if prompts else ""
-            expected_tool = prompt_to_expected.get(prompt)
+            # Use raw_prompt (original user text) for reward context
+            user_text = (
+                raw_prompt[i]
+                if raw_prompt is not None
+                else (prompts[i] if prompts else "")
+            )
+            # Use dataset column if available, fall back to lookup dict
+            if expected_tool is not None:
+                exp_tool = expected_tool[i]
+            else:
+                exp_tool = prompt_to_expected.get(user_text)
             score = reward_computer.compute_total_reward(
                 completion=completion,
-                prompt=prompt,
-                expected_tool=expected_tool,
+                prompt=user_text,
+                expected_tool=exp_tool,
             )
             rewards.append(score)
         return rewards
@@ -188,6 +303,11 @@ def main(args: argparse.Namespace) -> None:
         device_map="auto",
     )
 
+    # Apply ChatML chat template so apply_chat_template() works in
+    # load_prompts() and GRPOTrainer rollout tokenisation.
+    tokenizer = get_chat_template(tokenizer, chat_template="chatml")
+    print("✅ Applied ChatML chat template to tokenizer")
+
     # Apply LoRA with higher rank for RL (default 32 vs SFT's 16)
     if args.target_modules:
         target_modules = args.target_modules.split(",")
@@ -217,7 +337,7 @@ def main(args: argparse.Namespace) -> None:
 
     # Load prompts
     print("\n📚 Loading GRPO prompts...")
-    prompt_dataset, raw_prompts = load_prompts(args.prompts_path)
+    prompt_dataset, raw_prompts = load_prompts(args.prompts_path, tokenizer)
     print(f"✅ {len(prompt_dataset)} prompts loaded")
 
     # Category breakdown
@@ -279,7 +399,7 @@ def main(args: argparse.Namespace) -> None:
         run_name=args.run_name,
         num_generations=args.num_generations,
         temperature=args.temperature,
-        max_new_tokens=args.max_new_tokens,
+        max_completion_length=args.max_new_tokens,  # was max_new_tokens in older TRL
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.learning_rate,
@@ -297,7 +417,7 @@ def main(args: argparse.Namespace) -> None:
     print("\n🏋️ Initializing GRPOTrainer...")
     trainer = GRPOTrainer(
         model=model,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         args=training_args,
         train_dataset=prompt_dataset,
         reward_funcs=[reward_fn],
