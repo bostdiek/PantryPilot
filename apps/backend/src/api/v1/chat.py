@@ -52,11 +52,7 @@ from schemas.chat_streaming import (
     MessageSummary,
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
-from services.chat_agent import (
-    ChatAgentDeps,
-    get_chat_agent,
-    normalize_agent_output,
-)
+from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
 from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 

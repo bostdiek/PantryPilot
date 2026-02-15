@@ -51,7 +51,7 @@ GRPO_MODELS: dict[str, dict] = {
         "max_seq_length": 4096,
     },
     "liquid-1.2b": {
-        "model_id": "LiquidAI/LFM2.5-1.2B-Instruct",
+        "model_id": "unsloth/LFM2.5-1.2B-Instruct",
         "no_4bit": True,
         "target_modules": ("q_proj,k_proj,v_proj,out_proj,in_proj,w1,w2,w3"),
         "max_seq_length": 4096,

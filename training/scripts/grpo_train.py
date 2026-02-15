@@ -301,6 +301,8 @@ def main(args: argparse.Namespace) -> None:
         load_in_4bit=load_4bit,
         dtype=None,  # Auto-detect
         device_map="auto",
+        fast_inference=False,  # Disable vLLM path (not available on V100)
+        max_lora_rank=args.lora_r,  # Pre-allocate LoRA dims for LFM2 dynamo compat
     )
 
     # Apply ChatML chat template so apply_chat_template() works in
