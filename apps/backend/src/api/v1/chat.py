@@ -62,7 +62,7 @@ from services.memory_update import MemoryUpdateService
 # -----------------------------------------------------------------------------
 
 
-def _extract_tool_definitions(agent: PydanticAgent) -> list[dict[str, Any]]:
+def _extract_tool_definitions(agent: PydanticAgent[Any, Any]) -> list[dict[str, Any]]:
     """Extract tool definitions from a pydantic-ai Agent in OpenAI format.
 
     Returns a list of tool definitions compatible with OpenAI function calling
@@ -162,7 +162,7 @@ def _process_model_response_for_training(msg: ModelResponse) -> dict[str, Any] |
 
 def _build_training_prompt_data(
     agent_result: object,
-    agent: PydanticAgent | None = None,
+    agent: PydanticAgent[Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Build training data that mirrors what pydantic-ai sends to the LLM API.
 
