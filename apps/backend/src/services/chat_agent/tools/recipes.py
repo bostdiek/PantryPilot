@@ -40,6 +40,38 @@ def _rrf_score(*, text_rank: int | None, vector_rank: int | None, k: int) -> flo
     return score
 
 
+# Maximum description length to include in compact results (chars).
+_MAX_DESC_LEN = 120
+
+
+def _compact_recipe_dict(
+    recipe: Any,
+    times_cooked: int,
+    relevance_score: float | None = None,
+) -> dict[str, Any]:
+    """Build a minimal recipe dict for tool output (token-efficient).
+
+    Only includes fields the agent actually needs to discuss or propose meals.
+    """
+    desc = recipe.user_notes or recipe.description or ""
+    if len(desc) > _MAX_DESC_LEN:
+        desc = desc[:_MAX_DESC_LEN].rsplit(" ", 1)[0] + "…"
+
+    data: dict[str, Any] = {
+        "id": str(recipe.id),
+        "title": recipe.name,
+        "cook_min": int(recipe.total_time_minutes or 0),
+        "cuisine": recipe.ethnicity or None,
+        "difficulty": recipe.difficulty or None,
+        "times_cooked": times_cooked,
+    }
+    if desc:
+        data["desc"] = desc
+    if relevance_score is not None:
+        data["score"] = relevance_score
+    return data
+
+
 def _build_hybrid_result(
     *,
     items: list[dict[str, Any]],
@@ -57,18 +89,10 @@ def _build_hybrid_result(
     """Build the response dict for hybrid search results."""
     recipes_list = []
     for item in items:
-        recipe_data = {
-            "id": str(item["recipe"].id),
-            "title": item["recipe"].name,
-            "description": item["recipe"].user_notes,  # Using user_notes as description
-            "prep_time_minutes": int(item["recipe"].prep_time_minutes or 0),
-            "cook_time_minutes": int(item["recipe"].cook_time_minutes or 0),
-            "category": item["recipe"].course_type,
-            "difficulty": item["recipe"].difficulty,
-            "detail_path": f"/recipes/{item['recipe'].id}",
-            "edit_path": f"/recipes/{item['recipe'].id}/edit",
-            "times_cooked": item["times_cooked"],
-            "relevance_score": round(
+        recipe_data = _compact_recipe_dict(
+            recipe=item["recipe"],
+            times_cooked=item["times_cooked"],
+            relevance_score=round(
                 _rrf_score(
                     text_rank=item["text_rank"],
                     vector_rank=item["vector_rank"],
@@ -76,26 +100,15 @@ def _build_hybrid_result(
                 ),
                 4,
             ),
-        }
+        )
         # Only include full recipe if requested (token optimization)
         if include_full_recipe:
             recipe_data["full_recipe"] = full_payload_by_id.get(str(item["recipe"].id))
         recipes_list.append(recipe_data)
 
     return {
-        "status": "ok",
+        "total": len(items),
         "query": query,
-        "recipes_page_path": "/recipes",
-        "meal_plan_page_path": "/meal-plan",
-        "filters_applied": {
-            "cuisine": cuisine,
-            "difficulty": difficulty,
-            "max_cook_time": max_cook_time,
-            "min_times_cooked": min_times_cooked,
-        },
-        "fallback_used": fallback_used,
-        "sort_by": sort_by,
-        "total_results": len(items),
         "recipes": recipes_list,
     }
 
@@ -114,37 +127,17 @@ def _build_metadata_result(
     """Build the response dict for metadata-only search results."""
     recipes_list = []
     for recipe, times_cooked in rows:
-        recipe_data = {
-            "id": str(recipe.id),
-            "title": recipe.name,
-            "description": recipe.user_notes,  # Using user_notes as description
-            "prep_time_minutes": int(recipe.prep_time_minutes or 0),
-            "cook_time_minutes": int(recipe.cook_time_minutes or 0),
-            "category": recipe.course_type,
-            "difficulty": recipe.difficulty,
-            "detail_path": f"/recipes/{recipe.id}",
-            "edit_path": f"/recipes/{recipe.id}/edit",
-            "times_cooked": times_cooked,
-        }
+        recipe_data = _compact_recipe_dict(
+            recipe=recipe,
+            times_cooked=int(times_cooked or 0),
+        )
         # Only include full recipe if requested (token optimization)
         if include_full_recipe:
             recipe_data["full_recipe"] = full_payload_by_id.get(str(recipe.id))
         recipes_list.append(recipe_data)
 
     return {
-        "status": "ok",
-        "query": None,
-        "recipes_page_path": "/recipes",
-        "meal_plan_page_path": "/meal-plan",
-        "filters_applied": {
-            "cuisine": cuisine,
-            "difficulty": difficulty,
-            "max_cook_time": max_cook_time,
-            "min_times_cooked": min_times_cooked,
-        },
-        "fallback_used": False,
-        "sort_by": sort_by,
-        "total_results": len(rows),
+        "total": len(rows),
         "recipes": recipes_list,
     }
 
@@ -485,7 +478,7 @@ async def tool_search_recipes(
     Returns:
         Matching recipes ranked by relevance/filters with metadata
     """
-    max_results = 15  # Hardcoded limit
+    max_results = 8  # Limit results to control token usage
     cte_limit = 20
     rrf_k = 60
 
@@ -645,3 +638,49 @@ async def tool_search_recipes(
         sort_by=sort_by,
         include_full_recipe=include_full_recipe,
     )
+
+
+async def tool_get_recipe_details(
+    ctx: RunContext[ChatAgentDeps],
+    recipe_id: str,
+) -> dict[str, Any]:
+    """Get full details for one specific recipe by ID.
+
+    Use this tool after selecting a recipe from search results when you need
+    complete ingredients and instructions for a single recipe.
+
+    Args:
+        recipe_id: UUID of the recipe to fetch
+
+    Returns:
+        Full recipe payload with ingredients/instructions, or an error status.
+    """
+    stmt = (
+        select(Recipe)
+        .where(Recipe.id == recipe_id)
+        .where(
+            or_(
+                Recipe.user_id == ctx.deps.user.id,
+                Recipe.user_id.is_(None),
+            )
+        )
+        .options(
+            selectinload(Recipe.recipeingredients).selectinload(
+                RecipeIngredient.ingredient
+            )
+        )
+    )
+
+    result = await ctx.deps.db.execute(stmt)
+    recipe = result.scalar_one_or_none()
+    if recipe is None:
+        return {
+            "status": "not_found",
+            "recipe_id": recipe_id,
+            "message": "Recipe not found for this user.",
+        }
+
+    return {
+        "status": "ok",
+        "recipe": _recipe_to_full_payload(recipe),
+    }

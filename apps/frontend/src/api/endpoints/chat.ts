@@ -25,6 +25,17 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Handle 401 responses from raw fetch() calls by triggering logout.
+ * Mirrors the session-expiry logic in ApiClient.request().
+ */
+function handleAuthError(status: number): void {
+  if (status === 401 && useAuthStore.getState().token !== null) {
+    logger.info('Session expired (chat endpoint 401) — logging out');
+    useAuthStore.getState().logout('expired');
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Streaming Chat API
 // -----------------------------------------------------------------------------
@@ -79,6 +90,7 @@ export async function streamChatMessage(
     });
 
     if (!response.ok) {
+      handleAuthError(response.status);
       const errorText = await response.text();
       let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -258,6 +270,8 @@ export async function fetchConversations(
   });
 
   if (!response.ok) {
+    handleAuthError(response.status);
+    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -338,6 +352,7 @@ export async function deleteConversation(
   });
 
   if (!response.ok) {
+    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -382,6 +397,7 @@ export async function acceptAction(
   });
 
   if (!response.ok) {
+    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -416,6 +432,7 @@ export async function cancelAction(
   });
 
   if (!response.ok) {
+    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 

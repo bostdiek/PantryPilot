@@ -21,6 +21,7 @@ from services.chat_agent.tools import (
     tool_fetch_url_as_markdown,
     tool_get_daily_weather,
     tool_get_meal_plan_history,
+    tool_get_recipe_details,
     tool_propose_meal_for_day,
     tool_search_recipes,
     tool_suggest_recipe,
@@ -65,10 +66,13 @@ When users ask you to help plan their meals for a week:
 
 3. DAY-BY-DAY PROPOSAL PHASE:
    After user agrees to the high-level plan, for each day:
-   a. Use search_recipes to find matching recipes from user's collection
-   b. Optionally use web_search to find new recipe ideas
-   c. Use propose_meal_for_day to present ONE option at a time
-   d. Wait for user to accept before moving to the next day
+    a. Use search_recipes to find matching recipes from user's collection
+        (compact summaries only)
+    b. When user asks for one specific recipe's ingredients/instructions,
+        use get_recipe_details with that recipe id
+    c. Optionally use web_search to find new recipe ideas
+    d. Use propose_meal_for_day to present ONE option at a time
+    e. Wait for user to accept before moving to the next day
 
    Present options clearly:
    - "From your recipes: [Name]" for existing recipes
@@ -469,6 +473,9 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         tool_get_meal_plan_history
     )
     agent.tool(name="search_recipes", retries=_TOOL_CALL_RETRIES)(tool_search_recipes)
+    agent.tool(name="get_recipe_details", retries=_TOOL_CALL_RETRIES)(
+        tool_get_recipe_details
+    )
     agent.tool(name="get_daily_weather", retries=_TOOL_CALL_RETRIES)(
         tool_get_daily_weather
     )
