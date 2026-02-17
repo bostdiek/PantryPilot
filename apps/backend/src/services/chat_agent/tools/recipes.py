@@ -653,7 +653,8 @@ async def tool_get_recipe_details(
         recipe_id: UUID of the recipe to fetch
 
     Returns:
-        Full recipe payload with ingredients/instructions, or an error status.
+        Full recipe payload with ingredients/instructions, recipe page path,
+        and markdown link metadata, or an error status.
     """
     stmt = (
         select(Recipe)
@@ -680,7 +681,13 @@ async def tool_get_recipe_details(
             "message": "Recipe not found for this user.",
         }
 
+    recipe_id_str = str(recipe.id)
+    detail_path = f"/recipes/{recipe_id_str}"
+
     return {
         "status": "ok",
+        "recipe_id": recipe_id_str,
+        "detail_path": detail_path,
+        "detail_markdown_link": f"[full recipe]({detail_path})",
         "recipe": _recipe_to_full_payload(recipe),
     }
