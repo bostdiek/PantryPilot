@@ -271,7 +271,6 @@ export async function fetchConversations(
 
   if (!response.ok) {
     handleAuthError(response.status);
-    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
