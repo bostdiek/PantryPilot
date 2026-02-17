@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,6 +56,15 @@ GRPO_MODELS: dict[str, dict] = {
         "no_4bit": True,
         "target_modules": ("q_proj,k_proj,v_proj,out_proj,in_proj,w1,w2,w3"),
         "max_seq_length": 4096,
+        "disable_dynamo": True,
+        # --- Native path (default on V100/NC6s_v3) ---
+        # vLLM + LoRA currently fails on LFM2 hybrid layers in our
+        # environment (`BaseLayerWithLoRA` assertion on conv modules).
+        # Keep native generation as default; grpo_train.py has an
+        # automatic vLLM fallback if explicitly enabled.
+        # --- Fallback (no vLLM) ---
+        # Keep monkey-patch enabled for hybrid hidden-state shape issues.
+        "patch_lfm2_logps": True,
     },
 }
 
@@ -64,15 +74,24 @@ DEFAULT_CONFIG: dict[str, int | float | str] = {
     "batch_size": 1,
     "gradient_accumulation_steps": 4,
     "learning_rate": 5e-6,
-    "num_epochs": 1,
+    "num_epochs": 2,
     "lora_r": 32,
     "lora_alpha": 32,
-    "num_generations": 4,
-    "temperature": 0.7,
+    "num_generations": 8,
+    "temperature": 1.0,
     "max_new_tokens": 512,
     "beta": 0.01,
     "logging_steps": 1,
     "save_steps": 50,
+}
+
+V100_SAFE_OVERRIDES: dict[str, int | float] = {
+    "num_generations": 2,
+    "max_new_tokens": 256,
+    "gradient_accumulation_steps": 2,
+    "temperature": 0.8,
+    "learning_rate": 1e-6,
+    "beta": 0.0,
 }
 
 PROMPTS_ASSET_NAME = "pantrypilot-grpo-prompts"
@@ -187,6 +206,57 @@ def get_latest_prompts_ref(ml_client: MLClient) -> str | None:
         return None
 
 
+def _build_grpo_command(
+    model_name: str,
+    model_cfg: dict,
+    config: dict,
+    prompts_arg: str,
+) -> str:
+    """Build the CLI command string for a GRPO training job."""
+    model_id = model_cfg["model_id"]
+    job_name = f"grpo-{model_name}"
+
+    cmd = (
+        "python scripts/grpo_train.py "
+        f"--base_model {model_id} "
+        f"--prompts_path {prompts_arg} "
+        f"--output_dir ./outputs/{model_name} "
+        f"--run_name {job_name} "
+        f"--max_seq_length {config['max_seq_length']} "
+        f"--batch_size {config['batch_size']} "
+        f"--gradient_accumulation_steps "
+        f"{config['gradient_accumulation_steps']} "
+        f"--learning_rate {config['learning_rate']} "
+        f"--num_epochs {config['num_epochs']} "
+        f"--lora_r {config['lora_r']} "
+        f"--lora_alpha {config['lora_alpha']} "
+        f"--num_generations {config['num_generations']} "
+        f"--temperature {config['temperature']} "
+        f"--max_new_tokens {config['max_new_tokens']} "
+        f"--beta {config['beta']} "
+        f"--logging_steps {config['logging_steps']} "
+        f"--save_steps {config['save_steps']} "
+    )
+
+    # Append model-specific boolean/string flags
+    flag_keys = [
+        ("no_4bit", "--no_4bit"),
+        ("install_mamba", "--install_mamba"),
+        ("disable_dynamo", "--disable_dynamo"),
+        ("patch_lfm2_logps", "--patch_lfm2_logps"),
+        ("use_vllm", "--use_vllm"),
+    ]
+    for cfg_key, flag in flag_keys:
+        if model_cfg.get(cfg_key):
+            cmd += f"{flag} "
+    if model_cfg.get("target_modules"):
+        cmd += f"--target_modules {model_cfg['target_modules']} "
+    if model_cfg.get("vllm_attention_backend"):
+        cmd += f"--vllm_attention_backend {model_cfg['vllm_attention_backend']} "
+
+    return cmd
+
+
 def submit_grpo_job(
     ml_client: MLClient,
     model_name: str,
@@ -219,41 +289,10 @@ def submit_grpo_job(
     training_dir = project_root / "training"
 
     # Prompts: data asset input or local file bundled with code
-    if prompts_ref:
-        prompts_arg = "${{inputs.prompts_data}}"
-    else:
-        prompts_arg = "data/grpo_prompts.json"
-
-    # Build command
-    cmd = (
-        "python scripts/grpo_train.py "
-        f"--base_model {model_id} "
-        f"--prompts_path {prompts_arg} "
-        f"--output_dir ./outputs/{model_name} "
-        f"--run_name {job_name} "
-        f"--max_seq_length {config['max_seq_length']} "
-        f"--batch_size {config['batch_size']} "
-        f"--gradient_accumulation_steps "
-        f"{config['gradient_accumulation_steps']} "
-        f"--learning_rate {config['learning_rate']} "
-        f"--num_epochs {config['num_epochs']} "
-        f"--lora_r {config['lora_r']} "
-        f"--lora_alpha {config['lora_alpha']} "
-        f"--num_generations {config['num_generations']} "
-        f"--temperature {config['temperature']} "
-        f"--max_new_tokens {config['max_new_tokens']} "
-        f"--beta {config['beta']} "
-        f"--logging_steps {config['logging_steps']} "
-        f"--save_steps {config['save_steps']} "
+    prompts_arg = (
+        "${{inputs.prompts_data}}" if prompts_ref else "data/grpo_prompts.json"
     )
-
-    # Append model-specific flags
-    if model_cfg.get("no_4bit"):
-        cmd += "--no_4bit "
-    if model_cfg.get("target_modules"):
-        cmd += f"--target_modules {model_cfg['target_modules']} "
-    if model_cfg.get("install_mamba"):
-        cmd += "--install_mamba "
+    cmd = _build_grpo_command(model_name, model_cfg, config, prompts_arg)
 
     # Build inputs dict
     inputs = {}
@@ -278,6 +317,9 @@ def submit_grpo_job(
         logger.info(cmd)
         return None
 
+    # Use model-specific environment override if set, else default
+    job_environment = model_cfg.get("environment", "unsloth-training@latest")
+
     job = command(
         display_name=f"GRPO: {model_name}",
         description=(f"GRPO RL training for {model_id} (tool-calling optimisation)"),
@@ -285,7 +327,7 @@ def submit_grpo_job(
         code=str(training_dir),
         command=cmd,
         inputs=inputs if inputs else None,
-        environment="unsloth-training@latest",
+        environment=job_environment,
         compute="gpu-cluster",
         instance_count=1,
         tags={
@@ -348,6 +390,33 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Override number of generations per prompt",
     )
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=None,
+        help="Override learning rate",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=None,
+        help="Override KL penalty coefficient",
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=None,
+        help="Override maximum generated tokens per completion",
+    )
+    parser.add_argument(
+        "--v100-safe",
+        action="store_true",
+        help=(
+            "Apply conservative GRPO settings for V100 16GB stability "
+            "(num_generations=2, max_new_tokens=256, "
+            "gradient_accumulation_steps=2, temperature=0.8)"
+        ),
+    )
 
     args = parser.parse_args()
     if not args.model and not args.all_models:
@@ -358,10 +427,63 @@ def parse_args() -> argparse.Namespace:
 def build_config(args: argparse.Namespace) -> dict:
     """Build training config with CLI overrides."""
     config = dict(DEFAULT_CONFIG)
+    if args.v100_safe:
+        config.update(V100_SAFE_OVERRIDES)
     if args.num_epochs is not None:
         config["num_epochs"] = args.num_epochs
     if args.num_generations is not None:
         config["num_generations"] = args.num_generations
+    if args.max_new_tokens is not None:
+        config["max_new_tokens"] = args.max_new_tokens
+    if args.learning_rate is not None:
+        config["learning_rate"] = args.learning_rate
+    if args.beta is not None:
+        config["beta"] = args.beta
+
+    if int(config["num_generations"]) < 2:
+        raise SystemExit(
+            "GRPO requires --num-generations >= 2 "
+            "(cannot compute group advantages with 1 generation)."
+        )
+
+    # Keep effective batch aligned with GRPO grouping to avoid runtime
+    # auto-mutation by Unsloth/TRL, which can lead to tensor-length
+    # mismatches in downstream clipping masks.
+    num_generations = int(config["num_generations"])
+    batch_size = int(config["batch_size"])
+    grad_accum = int(config["gradient_accumulation_steps"])
+    effective_batch = batch_size * grad_accum
+    if effective_batch % num_generations != 0:
+        gcd_val = math.gcd(batch_size, num_generations)
+        min_grad_accum = num_generations // gcd_val
+        if grad_accum < min_grad_accum:
+            logger.info(
+                "Adjusting gradient_accumulation_steps from %s to %s so "
+                "effective batch (%s x %s) is divisible by num_generations=%s",
+                grad_accum,
+                min_grad_accum,
+                batch_size,
+                min_grad_accum,
+                num_generations,
+            )
+            config["gradient_accumulation_steps"] = min_grad_accum
+        else:
+            target_effective = (
+                (effective_batch + num_generations - 1) // num_generations
+            ) * num_generations
+            adjusted_grad_accum = max(
+                grad_accum, (target_effective + batch_size - 1) // batch_size
+            )
+            if adjusted_grad_accum != grad_accum:
+                logger.info(
+                    "Adjusting gradient_accumulation_steps from %s to %s so "
+                    "effective batch is divisible by num_generations=%s",
+                    grad_accum,
+                    adjusted_grad_accum,
+                    num_generations,
+                )
+                config["gradient_accumulation_steps"] = adjusted_grad_accum
+
     return config
 
 

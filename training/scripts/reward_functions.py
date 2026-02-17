@@ -7,7 +7,7 @@ Optimization (GRPO) training. Scores model completions on:
 - JSON validity of generated tool calls
 - Correct tool selection from available PantryPilot tools
 - Argument completeness (required args present)
-- Search query quality and expansion
+- Search query quality and keyword coverage
 
 Usage:
     from reward_functions import ToolCallRewardComputer
@@ -17,6 +17,7 @@ Usage:
         completion="<tool_call>...",
         prompt="I have too much basil",
         expected_tool="search_recipes",
+        expected_query_keywords=["pesto", "preservation", "freeze"],
     )
 """
 
@@ -39,6 +40,10 @@ AVAILABLE_TOOLS: dict[str, dict[str, list[str]]] = {
             "sort_by",
             "include_full_recipe",
         ],
+    },
+    "get_recipe_details": {
+        "required_args": ["recipe_id"],
+        "optional_args": [],
     },
     "get_meal_plan_history": {
         "required_args": [],
@@ -162,16 +167,62 @@ class ToolCallRewardComputer:
         return None
 
     def reward_json_validity(self, completion: str) -> float:
-        """Score JSON parsability: 1.0 (valid) / 0.5 (partial) / 0.0 (invalid)."""
+        """Score JSON parsability and format quality on a continuous scale.
+
+        Produces diverse scores by evaluating both parseability and
+        formatting quality to differentiate completions within a GRPO group.
+
+        Scoring breakdown:
+          - 0.0:  No JSON or tool call structure found
+          - 0.15: JSON-like structure attempted but unparseable
+          - 0.5:  Valid tool call JSON (base)
+          - +0.15: Has both 'name' and 'arguments' keys
+          - +0.2:  Proper <tool_call>...</tool_call> tags
+          - +0.15: Minimal extraneous text around the tool call
+
+        Returns:
+            Float in [0.0, 1.0]
+        """
+        has_open_tag = "<tool_call>" in completion
+        has_close_tag = "</tool_call>" in completion
+
         tool_call = self._extract_tool_call(completion)
         if tool_call is None:
+            # Partial credit for attempting JSON structure
+            if "{" in completion and '"name"' in completion:
+                return 0.15
             return 0.0
 
-        try:
-            json.loads(json.dumps(tool_call))  # Ensure serializable
-            return 1.0
-        except (TypeError, ValueError):
-            return 0.5
+        score = 0.5  # Base: parseable tool call found
+
+        # Structure quality
+        if "name" in tool_call and "arguments" in tool_call:
+            score += 0.15
+        elif "name" in tool_call:
+            score += 0.05
+
+        # Tag formatting (ChatML compliance)
+        if has_open_tag and has_close_tag:
+            score += 0.2
+        elif has_open_tag:
+            score += 0.1
+
+        # Conciseness: reward minimal text outside the tool call
+        if has_open_tag:
+            before = completion.split("<tool_call>")[0].strip()
+        else:
+            before = completion.split("{")[0].strip()
+        after = completion.split("</tool_call>")[-1].strip() if has_close_tag else ""
+        extra_chars = len(before) + len(after)
+
+        if extra_chars < 10:
+            score += 0.15
+        elif extra_chars < 50:
+            score += 0.08
+        elif extra_chars < 100:
+            score += 0.03
+
+        return min(score, 1.0)
 
     def reward_tool_name(
         self, completion: str, expected_tool: str | None = None
@@ -194,7 +245,18 @@ class ToolCallRewardComputer:
             return 0.0
 
     def reward_argument_completeness(self, completion: str) -> float:
-        """Score argument presence: ratio of required args present."""
+        """Score argument quality: required args + useful optional args.
+
+        For tools with required args: primary score from required arg
+        ratio, with a small bonus for providing useful optional args.
+
+        For tools without required args (e.g., search_recipes): scores
+        based on whether useful optional args are provided, creating
+        variance between completions that include different arg sets.
+
+        Returns:
+            Float in [0.0, 1.0]
+        """
         tool_call = self._extract_tool_call(completion)
         if tool_call is None:
             return 0.0
@@ -205,20 +267,55 @@ class ToolCallRewardComputer:
         if tool_name not in AVAILABLE_TOOLS:
             return 0.0
 
-        required = AVAILABLE_TOOLS[tool_name]["required_args"]
-        if not required:
-            return 1.0
+        tool_def = AVAILABLE_TOOLS[tool_name]
+        required = tool_def["required_args"]
+        optional = tool_def["optional_args"]
 
-        present = sum(1 for arg in required if arg in args)
-        return present / len(required)
+        if required:
+            # Required args are primary signal
+            required_ratio = sum(1 for a in required if a in args) / len(required)
+            # Small bonus for useful optional args
+            optional_bonus = 0.0
+            if optional and required_ratio > 0.5:
+                used_optional = sum(1 for a in optional if a in args)
+                optional_bonus = min(used_optional / len(optional), 1.0) * 0.15
+            return min(required_ratio * 0.85 + optional_bonus, 1.0)
 
-    def reward_query_expansion(self, completion: str, context: str) -> float:
-        """Score search query quality for query expansion tasks.
+        # No required args
+        if not optional:
+            return 1.0  # Tool takes no args (e.g., get_daily_weather)
 
-        Rewards:
-        - OR expansion (e.g., "pesto OR preservation")
-        - Specificity (e.g., "basil preservation methods")
-        - Context-aware keywords
+        # Score based on useful optional args provided
+        used = sum(1 for a in optional if a in args)
+        if used == 0:
+            return 0.4  # Called tool but with no args at all
+
+        # Continuous score based on optional arg coverage
+        ratio = used / len(optional)
+        return 0.4 + ratio * 0.6  # Range: 0.4 - 1.0
+
+    def reward_query_expansion(
+        self,
+        completion: str,
+        context: str,
+        expected_keywords: list[str] | None = None,
+    ) -> float:
+        """Score search query quality with keyword coverage.
+
+        Uses expected_query_keywords from prompts for objective,
+        per-prompt scoring that creates high variance between completions.
+        This is the primary differentiator for search-related GRPO groups.
+
+        Scoring breakdown:
+          - 0.0:  No query provided
+          - 0.2:  Base for having a non-empty query
+          - +0.0-0.45: Keyword coverage (fraction of expected keywords found)
+          - +0.0-0.15: Query length/specificity bonus
+          - +0.1: OR expansion bonus
+          - +0.1: Specificity keyword bonus
+
+        Returns:
+            Float in [0.0, 1.0]
         """
         tool_call = self._extract_tool_call(completion)
         if tool_call is None or tool_call.get("name") != "search_recipes":
@@ -228,74 +325,103 @@ class ToolCallRewardComputer:
         if not query:
             return 0.0
 
-        score = 0.5  # Base score for having a query
+        score = 0.2  # Base: has a query
 
-        # Reward OR expansion
+        # Keyword coverage — the primary differentiation signal
+        if expected_keywords:
+            query_lower = query.lower()
+            matched = sum(1 for kw in expected_keywords if kw.lower() in query_lower)
+            keyword_ratio = matched / len(expected_keywords)
+            score += keyword_ratio * 0.45  # Up to +0.45
+
+        # Query length/specificity bonus (continuous)
+        word_count = len(query.split())
+        if word_count >= 2:
+            score += min((word_count - 1) / 8, 0.15)  # Up to +0.15
+
+        # OR expansion
         if " OR " in query or "|" in query:
-            score += 0.2
+            score += 0.1
 
-        # Reward specificity keywords
-        specificity_keywords = ["recipe", "method", "technique", "ideas", "ways"]
-        if any(kw in query.lower() for kw in specificity_keywords):
-            score += 0.15
-
-        # Reward context-aware expansion
-        context_terms: dict[str, list[str]] = {
-            "extra": ["preservation", "use up", "freeze", "store"],
-            "too much": ["bulk", "large batch", "freeze"],
-            "leftover": ["repurpose", "next day", "transform"],
-            "expiring": ["quick", "urgent", "preserve"],
-        }
-        for trigger, expected in context_terms.items():
-            if trigger in context.lower():
-                if any(exp in query.lower() for exp in expected):
-                    score += 0.15
-                    break
+        # Specificity keywords
+        specificity = [
+            "recipe",
+            "recipes",
+            "method",
+            "technique",
+            "ideas",
+            "ways",
+            "how to",
+            "dishes",
+        ]
+        if any(kw in query.lower() for kw in specificity):
+            score += 0.1
 
         return min(score, 1.0)
 
     def reward_no_tool(self, completion: str, expected_tool: str | None) -> float:
-        """Score correct non-tool-call behavior.
+        """Score correct non-tool-call behavior with response quality.
 
         When expected_tool is None, the model should NOT produce a tool call.
-        Returns 1.0 if no tool call found, 0.0 if one is generated.
+        Uses response length as a continuous quality proxy to differentiate
+        completions within a GRPO group.
+
+        Returns:
+            Float in [0.0, 1.0]
         """
         if expected_tool is not None:
             return 0.5  # N/A — not a no-tool scenario
 
         tool_call = self._extract_tool_call(completion)
-        return 1.0 if tool_call is None else 0.0
+        if tool_call is not None:
+            return 0.0  # Incorrectly called a tool
+
+        # Correct: no tool call. Score response substance for differentiation.
+        text = completion.strip()
+        length = len(text)
+        if length == 0:
+            return 0.3  # Empty response
+        elif length < 20:
+            return 0.4 + (length / 20) * 0.2  # 0.4-0.6
+        elif length <= 300:
+            return 0.7 + min(length / 300, 1.0) * 0.3  # 0.7-1.0
+        else:
+            # Diminishing returns for very long responses
+            return max(0.7, 1.0 - (length - 300) / 2000)
 
     def compute_total_reward(
         self,
         completion: str,
         prompt: str,
         expected_tool: str | None = None,
+        expected_query_keywords: list[str] | None = None,
     ) -> float:
-        """Compute weighted total reward.
+        """Compute weighted total reward with keyword-aware scoring.
 
         For prompts where no tool is expected (expected_tool=None),
-        uses the no-tool reward instead of tool-specific scores.
+        uses the no-tool reward which varies by response quality.
+
+        For tool prompts, combines four reward dimensions with
+        configurable weights.  The query expansion dimension uses
+        expected_query_keywords for per-prompt, objective scoring
+        that creates high variance across completions.
         """
         if expected_tool is None:
-            # No tool expected — reward model for NOT calling tools
             no_tool_score = self.reward_no_tool(completion, expected_tool)
+            if no_tool_score > 0:
+                return no_tool_score  # Varies by response quality (0.3-1.0)
+            # Incorrectly called a tool — small credit for well-formed JSON
             json_score = self.reward_json_validity(completion)
-            # If no tool call found, that's correct: reward highly
-            # If tool call found, penalize
-            if no_tool_score == 1.0:
-                return 1.0
-            else:
-                # Model incorrectly called a tool — partial credit for
-                # well-formed JSON but penalize for wrong decision
-                return json_score * 0.2
+            return json_score * 0.15
 
         # Tool expected — score all dimensions
         rewards = {
             "json": self.reward_json_validity(completion) * self.json_weight,
             "tool": self.reward_tool_name(completion, expected_tool) * self.tool_weight,
             "args": self.reward_argument_completeness(completion) * self.args_weight,
-            "query": self.reward_query_expansion(completion, prompt)
+            "query": self.reward_query_expansion(
+                completion, prompt, expected_keywords=expected_query_keywords
+            )
             * self.query_weight,
         }
 
