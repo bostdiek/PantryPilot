@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from pydantic_ai import AgentRunResultEvent
+from pydantic_ai import Agent as PydanticAgent, AgentRunResultEvent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -52,12 +52,7 @@ from schemas.chat_streaming import (
     MessageSummary,
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
-from services.chat_agent import (
-    CHAT_SYSTEM_PROMPT,
-    ChatAgentDeps,
-    get_chat_agent,
-    normalize_agent_output,
-)
+from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
 from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 
@@ -65,6 +60,34 @@ from services.memory_update import MemoryUpdateService
 # -----------------------------------------------------------------------------
 # Training Data Capture Helpers
 # -----------------------------------------------------------------------------
+
+
+def _extract_tool_definitions(agent: PydanticAgent[Any, Any]) -> list[dict[str, Any]]:
+    """Extract tool definitions from a pydantic-ai Agent in OpenAI format.
+
+    Returns a list of tool definitions compatible with OpenAI function calling
+    and transformers' ``apply_chat_template(tools=...)``.
+    This ensures the training data always reflects the *current* set of tools
+    registered on the agent, so model and training stay in sync.
+    """
+    tools: list[dict[str, Any]] = []
+    # pydantic-ai stores tools on _function_toolset.tools
+    toolset = getattr(agent, "_function_toolset", None)
+    if toolset is None:
+        return tools
+    for _name, tool in toolset.tools.items():
+        td = tool.tool_def
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": td.name,
+                    "description": td.description or "",
+                    "parameters": td.parameters_json_schema,
+                },
+            }
+        )
+    return tools
 
 
 @dataclass
@@ -84,7 +107,8 @@ def _process_model_request_for_training(
     messages: list[dict[str, Any]] = []
     for part in msg.parts:
         if isinstance(part, SystemPromptPart):
-            # Skip - we add CHAT_SYSTEM_PROMPT manually
+            # When using instructions= these don't appear, but guard
+            # against future changes to pydantic-ai.
             continue
         elif isinstance(part, UserPromptPart):
             # Deduplicate user messages (history + current)
@@ -138,27 +162,47 @@ def _process_model_response_for_training(msg: ModelResponse) -> dict[str, Any] |
 
 def _build_training_prompt_data(
     agent_result: object,
-) -> list[dict[str, Any]]:
-    """Build ChatML-format prompt data from agent result.
+    agent: PydanticAgent[Any, Any] | None = None,
+) -> dict[str, Any]:
+    """Build training data that mirrors what pydantic-ai sends to the LLM API.
 
-    Extracts messages from PydanticAI's all_messages() and converts to
-    training-ready format with system prompt prepended.
+    Captures the exact information the model receives at inference time:
+
+    * **System instructions** — extracted from ``ModelRequest.instructions``
+      which contains the static ``CHAT_SYSTEM_PROMPT`` *plus* all dynamic
+      ``@agent.instructions`` output (datetime context, user preferences,
+      memory).  This is what pydantic-ai actually sends as the system
+      message in the API call.
+    * **Conversation messages** — user prompts, assistant responses (with
+      ``tool_calls``), and tool return values from ``all_messages()``.
+    * **Tool definitions** — extracted from the live agent so the training
+      data always reflects the exact function schemas the model was
+      expected to use.
 
     Args:
         agent_result: The result from agent.run() with all_messages() method
+        agent: Optional pydantic-ai Agent to extract tool schemas from
 
     Returns:
-        List of message dicts in ChatML format
+        Dict with ``messages`` (list of ChatML message dicts) and ``tools``
+        (list of OpenAI-format function definitions).
     """
-    # NOTE: PydanticAI's `instructions` param is NOT in all_messages()
-    # so we manually prepend CHAT_SYSTEM_PROMPT for training data.
-    history_data: list[dict[str, Any]] = [
-        {"role": "system", "content": CHAT_SYSTEM_PROMPT}
-    ]
+    history_data: list[dict[str, Any]] = []
 
     all_msgs = (
         agent_result.all_messages() if hasattr(agent_result, "all_messages") else []
     )
+
+    # Extract the real system instructions from the first ModelRequest.
+    # pydantic-ai stores the combined static instructions + dynamic
+    # @agent.instructions output on ModelRequest.instructions — this is
+    # the exact text sent as the system message in the API call.
+    for msg in all_msgs:
+        if isinstance(msg, ModelRequest):
+            instructions = getattr(msg, "instructions", None)
+            if instructions:
+                history_data.append({"role": "system", "content": instructions})
+            break
 
     # Track seen user messages to avoid duplicates from history
     seen_user_msgs: set[str] = set()
@@ -172,7 +216,11 @@ def _build_training_prompt_data(
             if assistant_msg:
                 history_data.append(assistant_msg)
 
-    return history_data
+    # Extract tool definitions from the live agent so the training data
+    # always matches whichever tools are currently registered.
+    tool_defs = _extract_tool_definitions(agent) if agent is not None else []
+
+    return {"messages": history_data, "tools": tool_defs}
 
 
 def _serialize_raw_output_for_training(raw_output: object) -> str:
@@ -594,8 +642,10 @@ class _ToolCallStart:
     call_order: int = 0
 
 
-# Maximum messages to include in history for multi-turn context
-MAX_HISTORY_MESSAGES = 50
+# Maximum messages to include in history for multi-turn context.
+# Kept low to avoid blowing past Gemini's practical token budget —
+# each tool-call cycle can add thousands of tokens.
+MAX_HISTORY_MESSAGES = 20
 
 
 def _extract_text_from_blocks(content_blocks: list[dict[str, Any]]) -> str:
@@ -607,6 +657,49 @@ def _extract_text_from_blocks(content_blocks: list[dict[str, Any]]) -> str:
             if text:
                 texts.append(text)
     return "\n".join(texts)
+
+
+# ── token-budget helpers for conversation history ──────────────────
+# When replaying older tool calls we only need enough detail for the
+# model to maintain coherent context, *not* the full 15-recipe JSON
+# blob that was returned originally.
+
+_MAX_TOOL_RESULT_CHARS = 1_500  # ~375 tokens
+_MAX_TOOL_ARGS_CHARS = 500  # ~125 tokens
+
+
+def _truncate_json(data: Any, max_chars: int) -> Any:
+    """Return *data* as-is if its JSON repr fits in *max_chars*.
+
+    Otherwise return a compact summary string so the model still sees
+    *something* useful without blowing up the context window.
+    """
+    import json as _json
+
+    try:
+        rendered = _json.dumps(data, default=str, ensure_ascii=False)
+    except (TypeError, ValueError):
+        rendered = str(data)
+
+    if len(rendered) <= max_chars:
+        return data
+
+    # For dicts with a "recipes" list, produce a count summary
+    if isinstance(data, dict) and "recipes" in data:
+        recipe_list = data["recipes"]
+        titles = [
+            r.get("title", r.get("name", "?"))
+            for r in recipe_list
+            if isinstance(r, dict)
+        ][:10]
+        return {
+            "total": data.get("total", len(recipe_list)),
+            "titles": titles,
+            "_truncated": True,
+        }
+
+    # Generic fallback: keep the first max_chars of text
+    return rendered[:max_chars] + "…[truncated]"
 
 
 def _convert_db_messages_to_pydantic_ai(
@@ -655,7 +748,7 @@ def _convert_db_messages_to_pydantic_ai(
                 parts.append(
                     ToolCallPart(
                         tool_name=tool_call.tool_name,
-                        args=tool_call.arguments,
+                        args=_truncate_json(tool_call.arguments, _MAX_TOOL_ARGS_CHARS),
                         tool_call_id=tool_call_id,
                     )
                 )
@@ -673,7 +766,9 @@ def _convert_db_messages_to_pydantic_ai(
                 return_parts = [
                     ToolReturnPart(
                         tool_name=tool_call.tool_name,
-                        content=tool_call.result or {},
+                        content=_truncate_json(
+                            tool_call.result or {}, _MAX_TOOL_RESULT_CHARS
+                        ),
                         tool_call_id=tool_call.call_metadata.get(
                             "tool_call_id", str(tool_call.id)
                         ),
@@ -1359,8 +1454,10 @@ async def stream_chat_message(  # noqa: C901
                         for call_id, tc in tool_calls_by_id.items()
                     }
 
-                # Build training data using helper functions
-                history_data = _build_training_prompt_data(agent_result)
+                # Build training data using helper functions.
+                # Pass the agent so tool definitions are captured alongside
+                # the conversation — keeps training data in sync with code.
+                history_data = _build_training_prompt_data(agent_result, agent)
                 raw_output_for_training = _serialize_raw_output_for_training(raw_output)
 
                 prompt_tokens, completion_tokens, _ = _extract_usage_metrics(

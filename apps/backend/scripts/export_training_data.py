@@ -57,6 +57,39 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _normalize_prompt_payload(raw_prompt: str) -> tuple[list[dict], list[dict]]:
+    """Normalize raw_prompt payload across legacy and current formats.
+
+    Legacy format stores a JSON list of message dicts.
+    Current format stores a JSON object with:
+    - messages: list[dict]
+    - tools: list[dict]
+
+    Returns:
+        Tuple of (messages, tools).
+    """
+    fallback = [{"role": "user", "content": raw_prompt}]
+
+    try:
+        payload = json.loads(raw_prompt)
+    except json.JSONDecodeError:
+        return fallback, []
+
+    if isinstance(payload, list):
+        messages = [msg for msg in payload if isinstance(msg, dict)]
+        return messages or fallback, []
+
+    if isinstance(payload, dict):
+        raw_messages = payload.get("messages", [])
+        raw_tools = payload.get("tools", [])
+
+        messages = [msg for msg in raw_messages if isinstance(msg, dict)]
+        tools = [tool for tool in raw_tools if isinstance(tool, dict)]
+        return messages or fallback, tools
+
+    return fallback, []
+
+
 def _sample_to_chatml(sample: AITrainingSample) -> dict:
     """Convert a training sample to ChatML format.
 
@@ -69,10 +102,7 @@ def _sample_to_chatml(sample: AITrainingSample) -> dict:
     - assistant: Assistant responses (may include tool_calls array)
     - tool: Tool return values with tool_call_id
     """
-    try:
-        prompt_data = json.loads(sample.raw_prompt)
-    except json.JSONDecodeError:
-        prompt_data = [{"role": "user", "content": sample.raw_prompt}]
+    prompt_data, tool_defs = _normalize_prompt_payload(sample.raw_prompt)
 
     # Check if the prompt already has a system message
     has_system = any(msg.get("role") == "system" for msg in prompt_data)
@@ -126,7 +156,10 @@ def _sample_to_chatml(sample: AITrainingSample) -> dict:
             "feedback": sample.user_feedback,
             "is_simulated": sample.is_simulated,
             "has_tool_calls": sample.tool_calls is not None,
+            "has_tools": len(tool_defs) > 0,
+            "tool_count": len(tool_defs),
         },
+        **({"tools": tool_defs} if tool_defs else {}),
     }
 
 

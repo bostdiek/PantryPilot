@@ -180,7 +180,7 @@ class TestBuildTrainingPromptData:
     """Tests for _build_training_prompt_data."""
 
     def test_prepends_system_prompt(self) -> None:
-        """Test that CHAT_SYSTEM_PROMPT is prepended."""
+        """Test that helper returns structured prompt payload."""
         from api.v1.chat import _build_training_prompt_data
 
         mock_result = MagicMock()
@@ -188,8 +188,11 @@ class TestBuildTrainingPromptData:
 
         result = _build_training_prompt_data(mock_result)
 
-        assert len(result) >= 1
-        assert result[0]["role"] == "system"
+        assert isinstance(result, dict)
+        assert "messages" in result
+        assert "tools" in result
+        assert result["messages"] == []
+        assert result["tools"] == []
 
     def test_handles_missing_all_messages(self) -> None:
         """Test handles objects without all_messages method."""
@@ -199,9 +202,9 @@ class TestBuildTrainingPromptData:
 
         result = _build_training_prompt_data(mock_result)
 
-        # Should still have system prompt
-        assert len(result) == 1
-        assert result[0]["role"] == "system"
+        assert isinstance(result, dict)
+        assert result["messages"] == []
+        assert result["tools"] == []
 
 
 class TestSerializeRawOutputForTraining:
