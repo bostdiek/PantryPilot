@@ -88,7 +88,9 @@ def _parse_raw_prompt(
     if isinstance(prompt_data, list):
         messages = [msg for msg in prompt_data if isinstance(msg, dict)]
         if messages:
-            logger.warning("raw_prompt uses legacy list format; exporting without tools")
+            logger.warning(
+                "raw_prompt uses legacy list format; exporting without tools"
+            )
         return messages, []
 
     if not isinstance(prompt_data, dict):
