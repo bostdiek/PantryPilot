@@ -18,9 +18,10 @@ vi.mock('../../client', () => ({
 
 // Control auth token in tests
 let tokenValue: string | null = 'test-token';
+let logoutMock = vi.fn();
 vi.mock('../../../stores/useAuthStore', () => ({
   useAuthStore: {
-    getState: () => ({ token: tokenValue }),
+    getState: () => ({ token: tokenValue, logout: logoutMock }),
   },
 }));
 
@@ -38,6 +39,7 @@ describe('chat API endpoints', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     tokenValue = 'test-token';
+    logoutMock = vi.fn();
   });
 
   // ---------------------------------------------------------------------------
