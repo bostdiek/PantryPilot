@@ -237,5 +237,6 @@ infra/**/*.json
 
 # Training data and ML artifacts (large files, should not be committed)
 apps/backend/data/
+training/data/grpo_prompts.json
 *.jsonl
 !apps/backend/tests/**/*.jsonl
