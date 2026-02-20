@@ -209,7 +209,7 @@ def _build_training_prompt_data(
     if deps is not None:
         system_parts.append(build_datetime_instructions(deps))
         system_parts.append(build_user_context_instructions(deps))
-    history_data.append({"role": "system", "content": "\n\n".join(system_parts)})
+    history_data.append({"role": "system", "content": "".join(system_parts)})
 
     all_msgs = (
         agent_result.all_messages() if hasattr(agent_result, "all_messages") else []

@@ -472,7 +472,7 @@ def build_user_context_instructions(deps: ChatAgentDeps) -> str:
         if prefs.allergies:
             allergies = ", ".join(prefs.allergies)
             sections.append(
-                f"- Allergies: {allergies} \u26a0\ufe0f CRITICAL - "
+                f"- Allergies: {allergies} ⚠️ CRITICAL - "
                 "never suggest recipes with these ingredients"
             )
 
@@ -497,7 +497,7 @@ def build_user_context_instructions(deps: ChatAgentDeps) -> str:
             sections.append(f"- Location: {', '.join(location_parts)}")
         else:
             sections.append(
-                "- Location: \u26a0\ufe0f NOT SET - Remind user to set location in "
+                "- Location: ⚠️ NOT SET - Remind user to set location in "
                 "[Your Profile](/user) for weather-based meal planning"
             )
     else:

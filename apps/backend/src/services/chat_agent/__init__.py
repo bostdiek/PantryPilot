@@ -20,6 +20,8 @@ __all__ = [
     # Agent construction
     "ChatAgentDeps",
     "CHAT_SYSTEM_PROMPT",
+    "build_datetime_instructions",
+    "build_user_context_instructions",
     "get_chat_agent",
     "normalize_agent_output",
     # Schemas
