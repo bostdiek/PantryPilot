@@ -202,9 +202,11 @@ class TestBuildTrainingPromptData:
         assert "messages" in result
         assert "tools" in result
         messages = result["messages"]
-        # First message must be system with the static prompt
+        # First message must be system with the static prompt.
+        # When no deps are provided the content is exactly the static
+        # constant — use equality so a truncated string never silently passes.
         assert messages[0]["role"] == "system"
-        assert CHAT_SYSTEM_PROMPT in messages[0]["content"]
+        assert messages[0]["content"] == CHAT_SYSTEM_PROMPT
         # Second should be the user message
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "Hello"
@@ -245,6 +247,58 @@ class TestBuildTrainingPromptData:
         assert "CURRENT DATE AND TIME" in messages[0]["content"]
         assert messages[1]["role"] == "user"
 
+    def test_includes_user_preferences_in_system_prompt(self) -> None:
+        """User preferences are serialised into the system message."""
+        import datetime
+        from unittest.mock import MagicMock
+
+        from api.v1.chat import _build_training_prompt_data
+        from services.chat_agent.deps import ChatAgentDeps
+
+        user_part = UserPromptPart(
+            content="What should I cook tonight?", timestamp=None
+        )
+        request = ModelRequest(parts=[user_part])
+
+        mock_result = MagicMock()
+        mock_result.all_messages.return_value = [request]
+
+        mock_prefs = MagicMock()
+        mock_prefs.family_size = 4
+        mock_prefs.default_servings = 4
+        mock_prefs.dietary_restrictions = ["vegetarian"]
+        mock_prefs.allergies = ["peanuts"]
+        mock_prefs.preferred_cuisines = ["Italian", "Mexican"]
+        mock_prefs.meal_planning_days = 5
+        mock_prefs.units = "imperial"
+        mock_prefs.city = "Seattle"
+        mock_prefs.state_or_region = "WA"
+        mock_prefs.postal_code = "98101"
+        mock_prefs.country = "US"
+
+        deps = ChatAgentDeps(
+            db=MagicMock(),
+            user=MagicMock(),
+            current_datetime=datetime.datetime(2026, 2, 20, 10, 0, tzinfo=datetime.UTC),
+            user_timezone="America/Los_Angeles",
+            user_preferences=mock_prefs,
+            memory_content=None,
+        )
+
+        result = _build_training_prompt_data(mock_result, deps=deps)
+        messages = result["messages"]
+
+        assert messages[0]["role"] == "system"
+        system_content = messages[0]["content"]
+        # User preferences section present
+        assert "USER PREFERENCES:" in system_content
+        assert "4 people" in system_content
+        assert "vegetarian" in system_content
+        assert "peanuts" in system_content
+        assert "Italian" in system_content
+        # CRITICAL allergy warning language present
+        assert "CRITICAL" in system_content
+
     def test_handles_missing_all_messages(self) -> None:
         """System message is still present even when all_messages is unavailable."""
         from api.v1.chat import _build_training_prompt_data
@@ -258,7 +312,7 @@ class TestBuildTrainingPromptData:
         messages = result["messages"]
         assert len(messages) == 1
         assert messages[0]["role"] == "system"
-        assert CHAT_SYSTEM_PROMPT in messages[0]["content"]
+        assert messages[0]["content"] == CHAT_SYSTEM_PROMPT
         # No agent passed → empty tools
         assert result["tools"] == []
 

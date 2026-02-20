@@ -428,6 +428,11 @@ def build_datetime_instructions(deps: ChatAgentDeps) -> str:
     dt = deps.current_datetime
     tz = deps.user_timezone
 
+    # Defensive guard: both fields are required by the type but protect against
+    # unexpected None values at runtime (e.g. during testing or migration).
+    if dt is None or tz is None:
+        return ""
+
     try:
         tzinfo = ZoneInfo(tz)
         local_dt = dt.astimezone(tzinfo)
