@@ -180,41 +180,85 @@ class TestBuildTrainingPromptData:
     """Tests for _build_training_prompt_data."""
 
     def test_extracts_system_instructions(self) -> None:
-        """Test that system prompt is extracted from ModelRequest.instructions."""
-        from api.v1.chat import _build_training_prompt_data
+        """Test that the static system prompt is always prepended.
 
-        # Create a ModelRequest with instructions (as pydantic-ai does)
+        The chat agent uses ``instructions=`` (not ``system_prompt=``) so
+        pydantic-ai never stores a ``SystemPromptPart`` in message history.
+        ``_build_training_prompt_data`` reconstructs the system message from
+        the known ``CHAT_SYSTEM_PROMPT`` constant (and optionally deps).
+        """
+        from api.v1.chat import _build_training_prompt_data
+        from services.chat_agent.agent import CHAT_SYSTEM_PROMPT
+
         user_part = UserPromptPart(content="Hello", timestamp=None)
-        request = ModelRequest(parts=[user_part], instructions="You are Nibble.")
+        request = ModelRequest(parts=[user_part])
 
         mock_result = MagicMock()
         mock_result.all_messages.return_value = [request]
 
         result = _build_training_prompt_data(mock_result)
 
-        # Result is a dict with "messages" and "tools" keys
         assert isinstance(result, dict)
         assert "messages" in result
         assert "tools" in result
         messages = result["messages"]
-        # First message should be the system prompt from instructions
+        # First message must be system with the static prompt
         assert messages[0]["role"] == "system"
-        assert messages[0]["content"] == "You are Nibble."
+        assert CHAT_SYSTEM_PROMPT in messages[0]["content"]
         # Second should be the user message
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "Hello"
 
-    def test_handles_missing_all_messages(self) -> None:
-        """Test handles objects without all_messages method."""
+    def test_extracts_multiple_system_parts_concatenated(self) -> None:
+        """With deps, dynamic sections are appended to the system message."""
+        import datetime
+        from unittest.mock import MagicMock
+
         from api.v1.chat import _build_training_prompt_data
+        from services.chat_agent.agent import CHAT_SYSTEM_PROMPT
+        from services.chat_agent.deps import ChatAgentDeps
+
+        user_part = UserPromptPart(content="Help me plan meals", timestamp=None)
+        request = ModelRequest(parts=[user_part])
+
+        mock_result = MagicMock()
+        mock_result.all_messages.return_value = [request]
+
+        deps = ChatAgentDeps(
+            db=MagicMock(),
+            user=MagicMock(),
+            current_datetime=datetime.datetime(
+                2026, 1, 23, 15, 45, tzinfo=datetime.UTC
+            ),
+            user_timezone="America/New_York",
+            user_preferences=None,
+            memory_content=None,
+        )
+
+        result = _build_training_prompt_data(mock_result, deps=deps)
+        messages = result["messages"]
+
+        assert messages[0]["role"] == "system"
+        # Static prompt present
+        assert CHAT_SYSTEM_PROMPT in messages[0]["content"]
+        # Dynamic datetime section present
+        assert "CURRENT DATE AND TIME" in messages[0]["content"]
+        assert messages[1]["role"] == "user"
+
+    def test_handles_missing_all_messages(self) -> None:
+        """System message is still present even when all_messages is unavailable."""
+        from api.v1.chat import _build_training_prompt_data
+        from services.chat_agent.agent import CHAT_SYSTEM_PROMPT
 
         mock_result = MagicMock(spec=[])  # No all_messages
 
         result = _build_training_prompt_data(mock_result)
 
-        # No messages available → empty list
+        # System message is always prepended from the known constant
         messages = result["messages"]
-        assert len(messages) == 0
+        assert len(messages) == 1
+        assert messages[0]["role"] == "system"
+        assert CHAT_SYSTEM_PROMPT in messages[0]["content"]
         # No agent passed → empty tools
         assert result["tools"] == []
 

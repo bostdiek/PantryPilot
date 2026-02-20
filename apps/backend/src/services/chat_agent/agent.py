@@ -353,11 +353,16 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     """Create and cache the chat assistant agent.
 
     Returns an agent configured with structured output type AssistantMessage.
-    Uses `instructions` instead of `system_prompt` because evaluation tooling
-    treats this as a standard chat-style agent and dynamically scores runs
-    against the full prompt. The recipe extraction agent uses `system_prompt`
-    because it is evaluated as a structured task-specific extractor rather
-    than a general chat assistant.
+    Uses ``instructions=`` (not ``system_prompt=``) so that on multi-turn calls
+    where ``message_history`` is provided, stale system-prompt parts from old
+    turns are *not* re-sent to the model.  Pydantic-AI's Google backend collects
+    every ``SystemPromptPart`` from the full history into a single
+    ``system_instruction`` block — using ``system_prompt=`` would cause the
+    prompt to be duplicated on every turn and inject stale datetime/user-context
+    from previous turns.
+
+    Training-data capture reconstructs the full system prompt from the known
+    static constant plus the explicit deps passed to each run.
 
     Supports both Azure OpenAI and Google Gemini based on USE_AZURE_OPENAI setting.
     Includes retry logic for transient API errors (503 overload, etc.)
@@ -373,100 +378,20 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         retries=4,
     )
 
-    # Add dynamic instructions with current date/time context
-    # NOTE: Since this agent is configured with `instructions=...`, dynamic
-    # context must be provided via `@agent.instructions` (not `@agent.system_prompt`).
+    # Add dynamic instructions for current date/time context and user preferences.
+    # Using @agent.instructions keeps these out of stored message history so they
+    # are not duplicated on subsequent multi-turn requests.  The standalone
+    # module-level helpers below are also used by training-data capture to
+    # reconstruct the exact system prompt without needing message history.
     @agent.instructions
     def add_datetime_context(ctx: RunContext[ChatAgentDeps]) -> str:
         """Add current date/time context to help with meal planning."""
-        dt = ctx.deps.current_datetime
-        tz = ctx.deps.user_timezone
-
-        # Prefer displaying dates in the user's timezone to avoid "today" drifting.
-        try:
-            tzinfo = ZoneInfo(tz)
-            local_dt = dt.astimezone(tzinfo)
-        except Exception:
-            local_dt = dt
-
-        # Format: "Thursday, January 23, 2026 at 3:45 PM (America/New_York)"
-        formatted_date = local_dt.strftime("%A, %B %d, %Y at %I:%M %p")
-        today_iso = local_dt.date().isoformat()
-        tomorrow_iso = (local_dt + timedelta(days=1)).date().isoformat()
-        tomorrow_label = (local_dt + timedelta(days=1)).strftime("%A")
-
-        return (
-            "\n\nCURRENT DATE AND TIME:\n"
-            f"Today is {formatted_date} ({tz}).\n"
-            f"Today (ISO): {today_iso}.\n"
-            f"Tomorrow (ISO): {tomorrow_iso} ({tomorrow_label}).\n"
-            "When using propose_meal_for_day, always use the correct ISO date for the "
-            "user's request."
-        )
+        return build_datetime_instructions(ctx.deps)
 
     @agent.instructions
     def add_user_context(ctx: RunContext[ChatAgentDeps]) -> str:
         """Add user preferences and memory to personalize responses."""
-        prefs = ctx.deps.user_preferences
-        memory = ctx.deps.memory_content
-
-        sections = []
-
-        # User preferences section
-        if prefs:
-            sections.append("USER PREFERENCES:")
-            sections.append(f"- Family Size: {prefs.family_size} people")
-            sections.append(f"- Default Servings: {prefs.default_servings}")
-
-            if prefs.dietary_restrictions:
-                restrictions = ", ".join(prefs.dietary_restrictions)
-                sections.append(f"- Dietary Restrictions: {restrictions}")
-
-            if prefs.allergies:
-                allergies = ", ".join(prefs.allergies)
-                sections.append(
-                    f"- Allergies: {allergies} ⚠️ CRITICAL - "
-                    "never suggest recipes with these ingredients"
-                )
-
-            if prefs.preferred_cuisines:
-                cuisines = ", ".join(prefs.preferred_cuisines)
-                sections.append(f"- Preferred Cuisines: {cuisines}")
-
-            sections.append(f"- Meal Planning Days: {prefs.meal_planning_days}")
-            sections.append(f"- Units: {prefs.units}")
-
-            # Location section
-            if prefs.city or prefs.postal_code:
-                location_parts = [
-                    p
-                    for p in [
-                        prefs.city,
-                        prefs.state_or_region,
-                        prefs.postal_code,
-                        prefs.country,
-                    ]
-                    if p
-                ]
-                sections.append(f"- Location: {', '.join(location_parts)}")
-            else:
-                sections.append(
-                    "- Location: ⚠️ NOT SET - Remind user to set location in "
-                    "[Your Profile](/user) for weather-based meal planning"
-                )
-        else:
-            sections.append("USER PREFERENCES: Not configured yet")
-            sections.append(
-                "- Encourage user to set preferences in [Your Profile](/user)"
-            )
-
-        # Memory section
-        if memory and memory.strip():
-            sections.append("")
-            sections.append("REMEMBERED ABOUT THIS USER:")
-            sections.append(memory)
-
-        return "\n\n" + "\n".join(sections)
+        return build_user_context_instructions(ctx.deps)
 
     # Register tools using extracted implementations
     agent.tool(name="get_meal_plan_history", retries=_TOOL_CALL_RETRIES)(
@@ -492,6 +417,99 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
     )
 
     return agent
+
+
+def build_datetime_instructions(deps: ChatAgentDeps) -> str:
+    """Return the datetime context string that the agent sends as instructions.
+
+    Extracted so training-data capture can reconstruct the full system prompt
+    from known deps without relying on stored message history.
+    """
+    dt = deps.current_datetime
+    tz = deps.user_timezone
+
+    try:
+        tzinfo = ZoneInfo(tz)
+        local_dt = dt.astimezone(tzinfo)
+    except Exception:
+        local_dt = dt
+
+    formatted_date = local_dt.strftime("%A, %B %d, %Y at %I:%M %p")
+    today_iso = local_dt.date().isoformat()
+    tomorrow_iso = (local_dt + timedelta(days=1)).date().isoformat()
+    tomorrow_label = (local_dt + timedelta(days=1)).strftime("%A")
+
+    return (
+        "\n\nCURRENT DATE AND TIME:\n"
+        f"Today is {formatted_date} ({tz}).\n"
+        f"Today (ISO): {today_iso}.\n"
+        f"Tomorrow (ISO): {tomorrow_iso} ({tomorrow_label}).\n"
+        "When using propose_meal_for_day, always use the correct ISO date for the "
+        "user's request."
+    )
+
+
+def build_user_context_instructions(deps: ChatAgentDeps) -> str:
+    """Return the user-preferences/memory context string for training capture.
+
+    Mirrors the ``add_user_context`` @agent.instructions callback so training
+    data records the exact personalisation the model received.
+    """
+    prefs = deps.user_preferences
+    memory = deps.memory_content
+
+    sections: list[str] = []
+
+    if prefs:
+        sections.append("USER PREFERENCES:")
+        sections.append(f"- Family Size: {prefs.family_size} people")
+        sections.append(f"- Default Servings: {prefs.default_servings}")
+
+        if prefs.dietary_restrictions:
+            restrictions = ", ".join(prefs.dietary_restrictions)
+            sections.append(f"- Dietary Restrictions: {restrictions}")
+
+        if prefs.allergies:
+            allergies = ", ".join(prefs.allergies)
+            sections.append(
+                f"- Allergies: {allergies} \u26a0\ufe0f CRITICAL - "
+                "never suggest recipes with these ingredients"
+            )
+
+        if prefs.preferred_cuisines:
+            cuisines = ", ".join(prefs.preferred_cuisines)
+            sections.append(f"- Preferred Cuisines: {cuisines}")
+
+        sections.append(f"- Meal Planning Days: {prefs.meal_planning_days}")
+        sections.append(f"- Units: {prefs.units}")
+
+        if prefs.city or prefs.postal_code:
+            location_parts = [
+                p
+                for p in [
+                    prefs.city,
+                    prefs.state_or_region,
+                    prefs.postal_code,
+                    prefs.country,
+                ]
+                if p
+            ]
+            sections.append(f"- Location: {', '.join(location_parts)}")
+        else:
+            sections.append(
+                "- Location: \u26a0\ufe0f NOT SET - Remind user to set location in "
+                "[Your Profile](/user) for weather-based meal planning"
+            )
+    else:
+        sections.append("USER PREFERENCES: Not configured yet")
+        sections.append("- Encourage user to set preferences in [Your Profile](/user)")
+
+    if memory and memory.strip():
+        sections.append("")
+        sections.append("REMEMBERED ABOUT THIS USER:")
+        sections.append(memory)
+
+    return "\n\n" + "\n".join(sections)
 
 
 def normalize_agent_output(output: object) -> AssistantMessage:
