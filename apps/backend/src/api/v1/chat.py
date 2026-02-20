@@ -52,7 +52,14 @@ from schemas.chat_streaming import (
     MessageSummary,
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
-from services.chat_agent import ChatAgentDeps, get_chat_agent, normalize_agent_output
+from services.chat_agent import (
+    CHAT_SYSTEM_PROMPT,
+    ChatAgentDeps,
+    build_datetime_instructions,
+    build_user_context_instructions,
+    get_chat_agent,
+    normalize_agent_output,
+)
 from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 
@@ -107,8 +114,9 @@ def _process_model_request_for_training(
     messages: list[dict[str, Any]] = []
     for part in msg.parts:
         if isinstance(part, SystemPromptPart):
-            # When using instructions= these don't appear, but guard
-            # against future changes to pydantic-ai.
+            # Already extracted from the first ModelRequest in
+            # _build_training_prompt_data — skip here to avoid duplicating
+            # the system message on every subsequent turn.
             continue
         elif isinstance(part, UserPromptPart):
             # Deduplicate user messages (history + current)
@@ -163,16 +171,18 @@ def _process_model_response_for_training(msg: ModelResponse) -> dict[str, Any] |
 def _build_training_prompt_data(
     agent_result: object,
     agent: PydanticAgent[Any, Any] | None = None,
+    deps: ChatAgentDeps | None = None,
 ) -> dict[str, Any]:
     """Build training data that mirrors what pydantic-ai sends to the LLM API.
 
     Captures the exact information the model receives at inference time:
 
-    * **System instructions** — extracted from ``ModelRequest.instructions``
-      which contains the static ``CHAT_SYSTEM_PROMPT`` *plus* all dynamic
-      ``@agent.instructions`` output (datetime context, user preferences,
-      memory).  This is what pydantic-ai actually sends as the system
-      message in the API call.
+    * **System instructions** — reconstructed from the known static
+      ``CHAT_SYSTEM_PROMPT`` constant plus the dynamic datetime and
+      user-context sections built from ``deps``.  The chat agent uses
+      ``instructions=`` (not ``system_prompt=``) so system content is never
+      stored in ``ModelRequest.parts``; instead we reconstruct it here from
+      the same helpers the agent callbacks delegate to.
     * **Conversation messages** — user prompts, assistant responses (with
       ``tool_calls``), and tool return values from ``all_messages()``.
     * **Tool definitions** — extracted from the live agent so the training
@@ -182,6 +192,7 @@ def _build_training_prompt_data(
     Args:
         agent_result: The result from agent.run() with all_messages() method
         agent: Optional pydantic-ai Agent to extract tool schemas from
+        deps: Optional ChatAgentDeps used to reconstruct dynamic system sections
 
     Returns:
         Dict with ``messages`` (list of ChatML message dicts) and ``tools``
@@ -189,20 +200,20 @@ def _build_training_prompt_data(
     """
     history_data: list[dict[str, Any]] = []
 
+    # Reconstruct the full system prompt that was sent to the model.
+    # The chat agent uses instructions= (not system_prompt=) so pydantic-ai
+    # never stores system content in ModelRequest.parts.  We rebuild it from
+    # the known static constant plus the same dynamic helpers the agent
+    # callbacks delegate to.
+    system_parts = [CHAT_SYSTEM_PROMPT]
+    if deps is not None:
+        system_parts.append(build_datetime_instructions(deps))
+        system_parts.append(build_user_context_instructions(deps))
+    history_data.append({"role": "system", "content": "".join(system_parts)})
+
     all_msgs = (
         agent_result.all_messages() if hasattr(agent_result, "all_messages") else []
     )
-
-    # Extract the real system instructions from the first ModelRequest.
-    # pydantic-ai stores the combined static instructions + dynamic
-    # @agent.instructions output on ModelRequest.instructions — this is
-    # the exact text sent as the system message in the API call.
-    for msg in all_msgs:
-        if isinstance(msg, ModelRequest):
-            instructions = getattr(msg, "instructions", None)
-            if instructions:
-                history_data.append({"role": "system", "content": instructions})
-            break
 
     # Track seen user messages to avoid duplicates from history
     seen_user_msgs: set[str] = set()
@@ -1457,7 +1468,7 @@ async def stream_chat_message(  # noqa: C901
                 # Build training data using helper functions.
                 # Pass the agent so tool definitions are captured alongside
                 # the conversation — keeps training data in sync with code.
-                history_data = _build_training_prompt_data(agent_result, agent)
+                history_data = _build_training_prompt_data(agent_result, agent, deps)
                 raw_output_for_training = _serialize_raw_output_for_training(raw_output)
 
                 prompt_tokens, completion_tokens, _ = _extract_usage_metrics(
