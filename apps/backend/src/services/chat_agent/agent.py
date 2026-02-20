@@ -424,14 +424,13 @@ def build_datetime_instructions(deps: ChatAgentDeps) -> str:
 
     Extracted so training-data capture can reconstruct the full system prompt
     from known deps without relying on stored message history.
+
+    ``current_datetime`` and ``user_timezone`` are required (non-Optional) in
+    ``ChatAgentDeps``, so callers must always supply them.  The ZoneInfo lookup
+    below already falls back to UTC for unrecognised timezone strings.
     """
     dt = deps.current_datetime
     tz = deps.user_timezone
-
-    # Defensive guard: both fields are required by the type but protect against
-    # unexpected None values at runtime (e.g. during testing or migration).
-    if dt is None or tz is None:
-        return ""
 
     try:
         tzinfo = ZoneInfo(tz)
