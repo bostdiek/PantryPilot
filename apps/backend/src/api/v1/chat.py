@@ -576,7 +576,7 @@ async def get_message_history(
 ) -> MessageHistoryResponse:
     """Fetch message history for a conversation with optional cursor pagination."""
     # Validate and clamp limit parameter
-    limit = max(1, min(limit, 100))
+    limit = max(1, min(limit, 200))
 
     # Verify conversation exists and belongs to user
     conv_query = select(ChatConversation).where(
@@ -613,16 +613,21 @@ async def get_message_history(
             )
         query = query.where(ChatMessage.created_at < cursor_time)
 
-    # Order by created_at ascending (oldest first) for chronological display
-    query = query.order_by(ChatMessage.created_at.asc()).limit(limit + 1)
+    # Order by created_at descending to get the NEWEST messages, then reverse
+    # for chronological display. This ensures that on initial load (no cursor),
+    # the client always receives the most recent messages rather than the oldest.
+    query = query.order_by(ChatMessage.created_at.desc()).limit(limit + 1)
 
     result = await db.execute(query)
     messages = list(result.scalars().all())
 
-    # Determine if there are more messages
+    # Determine if there are more (older) messages before the current page
     has_more = len(messages) > limit
     if has_more:
         messages = messages[:limit]
+
+    # Reverse so the response is in ascending (oldest-first) chronological order
+    messages = list(reversed(messages))
 
     summaries = [
         MessageSummary(
