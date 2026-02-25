@@ -188,7 +188,7 @@ module azureOpenAI 'modules/openai.bicep' = if (deployAzureOpenAI) {
 
 // Reference the Azure OpenAI account so we can read keys without exposing them as module outputs
 // Note: Use resourceNames.azureOpenAI directly instead of module output to avoid ARM reference() in existing resource name
-resource azureOpenAIAccount 'Microsoft.CognitiveServices/accounts@2025-09-01' existing = if (deployAzureOpenAI) {
+resource azureOpenAIAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = if (deployAzureOpenAI) {
   name: resourceNames.azureOpenAI
   dependsOn: [azureOpenAI]
 }
