@@ -22,6 +22,10 @@ export default function AssistantPage() {
   const messagesByConversationId = useChatStore(
     (s) => s.messagesByConversationId
   );
+  const hasPreviousMessagesByConversationId = useChatStore(
+    (s) => s.hasPreviousMessagesByConversationId
+  );
+  const loadMoreMessages = useChatStore((s) => s.loadMoreMessages);
 
   const [announcement, setAnnouncement] = useState('');
   const lastAnnouncedMessageId = useRef<string | null>(null);
@@ -32,6 +36,10 @@ export default function AssistantPage() {
     if (!activeConversationId) return [];
     return messagesByConversationId[activeConversationId] ?? [];
   }, [activeConversationId, messagesByConversationId]);
+
+  const hasPreviousMessages = activeConversationId
+    ? (hasPreviousMessagesByConversationId[activeConversationId] ?? false)
+    : false;
 
   const lastMessage = useMemo(() => {
     return messages.length > 0 ? messages[messages.length - 1] : null;
@@ -224,6 +232,21 @@ export default function AssistantPage() {
               </div>
             ) : (
               <ol role="list" className="space-y-4">
+                {hasPreviousMessages ? (
+                  <li className="flex justify-center py-1">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        activeConversationId &&
+                        void loadMoreMessages(activeConversationId)
+                      }
+                      disabled={isLoading}
+                      className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50"
+                    >
+                      {isLoading ? 'Loading…' : 'Load older messages'}
+                    </button>
+                  </li>
+                ) : null}
                 {messages.map((msg) => (
                   <ChatMessage key={msg.id} message={msg} />
                 ))}

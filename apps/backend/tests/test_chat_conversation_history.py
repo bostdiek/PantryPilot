@@ -662,7 +662,9 @@ async def test_get_message_history_with_messages() -> None:
             self._call_count += 1
             if self._call_count == 1:
                 return _ExecuteResult(single=conv)
-            return _ExecuteResult(items=[msg1, msg2])
+            # Return newest-first (DESC) to simulate ORDER BY created_at DESC;
+            # the endpoint reverses the list before responding (ascending order).
+            return _ExecuteResult(items=[msg2, msg1])
 
     db = _MessagesDbSession()
 

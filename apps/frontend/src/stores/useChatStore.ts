@@ -51,8 +51,12 @@ export interface ChatState {
   /** AbortController for canceling the current stream */
   _abortController: AbortController | null;
 
+  /** Whether there are older messages to load for each conversation */
+  hasPreviousMessagesByConversationId: Record<string, boolean>;
+
   loadConversations: () => Promise<void>;
   loadMessages: (conversationId: string) => Promise<void>;
+  loadMoreMessages: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
   switchConversation: (id: string) => Promise<void>;
   deleteConversation: (id: string) => Promise<void>;
@@ -65,7 +69,7 @@ export interface ChatState {
   clearError: () => void;
 }
 
-const MAX_MESSAGES_PER_CONVERSATION = 50;
+const MAX_MESSAGES_PER_CONVERSATION = 200;
 
 function getNowIso(): string {
   return new Date().toISOString();
@@ -111,6 +115,7 @@ export const useChatStore = create<ChatState>()(
       conversations: [],
       activeConversationId: null,
       messagesByConversationId: {},
+      hasPreviousMessagesByConversationId: {},
       isLoading: false,
       isStreaming: false,
       streamingMessageId: null,
@@ -141,7 +146,10 @@ export const useChatStore = create<ChatState>()(
       loadMessages: async (conversationId: string) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await fetchMessages(conversationId);
+          const response = await fetchMessages(
+            conversationId,
+            MAX_MESSAGES_PER_CONVERSATION
+          );
           const messages: Message[] = response.messages.map((m) => {
             const blocks = m.content_blocks as ChatContentBlock[];
 
@@ -169,10 +177,71 @@ export const useChatStore = create<ChatState>()(
               ...state.messagesByConversationId,
               [conversationId]: messages,
             },
+            hasPreviousMessagesByConversationId: {
+              ...state.hasPreviousMessagesByConversationId,
+              [conversationId]: response.has_more,
+            },
           }));
         } catch (err) {
           logger.error('Failed to load messages:', err);
           set({ error: 'Failed to load messages' });
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      loadMoreMessages: async (conversationId: string) => {
+        const existingMessages =
+          get().messagesByConversationId[conversationId] ?? [];
+        if (existingMessages.length === 0) return;
+
+        // Use the oldest message's ID as the cursor
+        const oldestMessageId = existingMessages[0].id;
+
+        set({ isLoading: true, error: null });
+        try {
+          const response = await fetchMessages(
+            conversationId,
+            MAX_MESSAGES_PER_CONVERSATION,
+            oldestMessageId
+          );
+          const olderMessages: Message[] = response.messages.map((m) => {
+            const blocks = m.content_blocks as ChatContentBlock[];
+
+            let content: string | undefined;
+            if (
+              m.role === 'user' &&
+              blocks.length > 0 &&
+              blocks[0].type === 'text'
+            ) {
+              content = blocks[0].text;
+            }
+
+            return {
+              id: m.id,
+              conversationId,
+              role: m.role as ChatRole,
+              content,
+              blocks,
+              createdAt: m.created_at,
+            };
+          });
+          set((state) => ({
+            messagesByConversationId: {
+              ...state.messagesByConversationId,
+              [conversationId]: [
+                ...olderMessages,
+                ...(state.messagesByConversationId[conversationId] ?? []),
+              ],
+            },
+            hasPreviousMessagesByConversationId: {
+              ...state.hasPreviousMessagesByConversationId,
+              [conversationId]: response.has_more,
+            },
+          }));
+        } catch (err) {
+          logger.error('Failed to load older messages:', err);
+          set({ error: 'Failed to load older messages' });
         } finally {
           set({ isLoading: false });
         }
@@ -214,11 +283,9 @@ export const useChatStore = create<ChatState>()(
 
       switchConversation: async (id: string) => {
         set({ activeConversationId: id, error: null });
-        // Load messages for this conversation if not already loaded
-        const messages = get().messagesByConversationId[id];
-        if (!messages || messages.length === 0) {
-          await get().loadMessages(id);
-        }
+        // Always reload from server to ensure consistency across devices.
+        // Cached messages remain visible while the fresh load completes.
+        await get().loadMessages(id);
       },
 
       deleteConversation: async (id: string) => {
@@ -655,6 +722,8 @@ export const useChatStore = create<ChatState>()(
         conversations: state.conversations,
         activeConversationId: state.activeConversationId,
         messagesByConversationId: state.messagesByConversationId,
+        hasPreviousMessagesByConversationId:
+          state.hasPreviousMessagesByConversationId,
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
