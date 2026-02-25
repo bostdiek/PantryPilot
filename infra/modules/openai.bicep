@@ -21,7 +21,7 @@ param customSubDomainName string = name
 param deployments array = []
 
 // Azure OpenAI resource (Cognitive Services account with kind=OpenAI)
-resource openai 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
+resource openai 'Microsoft.CognitiveServices/accounts@2025-09-01' = {
   name: name
   location: location
   kind: 'OpenAI'
@@ -49,7 +49,7 @@ resource openai 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
 // Model deployments (e.g., gpt-4o-mini, gpt-4.1)
 // Use batchSize(1) to deploy sequentially - Azure OpenAI doesn't support parallel deployments
 @batchSize(1)
-resource modelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = [
+resource modelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025-09-01' = [
   for deployment in deployments: {
     parent: openai
     name: deployment.name
@@ -63,6 +63,7 @@ resource modelDeployments 'Microsoft.CognitiveServices/accounts/deployments@2025
         name: deployment.model
         version: deployment.?version ?? null
       }
+      raiPolicyName: deployment.?raiPolicyName ?? 'Microsoft.DefaultV2'
       versionUpgradeOption: deployment.?versionUpgradeOption ?? 'OnceNewDefaultVersionAvailable'
     }
   }
