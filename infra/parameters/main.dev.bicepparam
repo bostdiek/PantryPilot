@@ -17,9 +17,10 @@ param braveSearchApiKey = readEnvironmentVariable('BRAVE_SEARCH_API_KEY', '')
 // Gemini API key for AI model access (used for chat/endpoints instead of Azure OpenAI)
 param geminiApiKey = readEnvironmentVariable('GEMINI_API_KEY', '')
 
-// Azure OpenAI - deploy models for other project parts, but use Gemini for chat/endpoints
-// Bicep is idempotent - if resources exist with matching config, deployment will pass
-param deployAzureOpenAI = true
+// Azure OpenAI - disabled in Bicep to avoid transient 715-123420 ARM failures.
+// Models (gpt-4.1, gpt-5-mini, gpt-5-nano, text-embedding-3-small) remain deployed
+// in Azure and can be managed manually for training/evaluation use cases.
+param deployAzureOpenAI = false
 param useAzureOpenAIForLLM = false
 param azureOpenAILocation = readEnvironmentVariable('AZURE_OPENAI_LOCATION', 'eastus2')
 param azureOpenAIApiKey = readEnvironmentVariable('AZURE_OPENAI_API_KEY', '')
