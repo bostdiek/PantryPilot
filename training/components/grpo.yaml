@@ -1,0 +1,251 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: pantrypilot_grpo_training
+version: "1.0.0"
+display_name: "GRPO Reinforcement Learning"
+description: >
+  Reinforcement learning stage using Group Relative Policy Optimization (GRPO)
+  to optimize tool-calling behavior. Takes an SFT checkpoint as input and aligns
+  the model for correct tool selection, argument completeness, and search query
+  expansion. Uses ToolCallRewardComputer for reward signals. This is the final
+  stage in the DAPT → SFT → GRPO pipeline.
+  NOTE: On NC6s_v3 (V100), Liquid AI LFM-2.5 models are unstable with GRPO.
+  Use Qwen3-0.6B for GRPO training.
+
+type: command
+
+inputs:
+  # Model — receives SFT checkpoint output (uri_folder) when used in pipeline
+  base_model:
+    type: uri_folder
+    description: >
+      Path to SFT checkpoint directory. In the pipeline, this is wired to the
+      trained_model output of the SFT component.
+
+  max_seq_length:
+    type: integer
+    default: 4096
+    description: "Maximum sequence length. Recommended: 4096, 8192"
+
+  # Data
+  prompts_path:
+    type: uri_file
+    description: "GRPO evaluation prompts JSON file (Azure ML Data Asset path)"
+
+  # GRPO-specific hyperparameters
+  num_generations:
+    type: integer
+    default: 8
+    description: >
+      Completions per prompt for group comparison.
+      Higher values (8-16) provide more reward variance. Must be >= 2.
+
+  temperature:
+    type: number
+    default: 1.0
+    description: "Sampling temperature. Higher values encourage exploration."
+
+  max_new_tokens:
+    type: integer
+    default: 512
+    description: "Maximum tokens generated per completion"
+
+  beta:
+    type: number
+    default: 0.01
+    description: "KL divergence penalty coefficient"
+
+  # Training hyperparameters
+  learning_rate:
+    type: number
+    default: 0.000005
+    description: "Peak learning rate (lower than SFT default)"
+
+  num_epochs:
+    type: integer
+    default: 2
+    description: "Training epochs (2-3 recommended for GRPO)"
+
+  batch_size:
+    type: integer
+    default: 1
+    description: "Per-device batch size (keep low — each prompt expands to num_generations)"
+
+  gradient_accumulation_steps:
+    type: integer
+    default: 4
+    description: "Gradient accumulation steps"
+
+  # LoRA (higher rank for RL)
+  lora_r:
+    type: integer
+    default: 32
+    description: "LoRA rank — higher than SFT for RL exploration"
+
+  lora_alpha:
+    type: integer
+    default: 32
+    description: "LoRA alpha"
+
+  target_modules:
+    type: string
+    optional: true
+    description: >
+      Comma-separated LoRA target modules.
+      Default: q/k/v/o/gate/up/down_proj.
+
+  # Reward function weights
+  json_weight:
+    type: number
+    default: 1.0
+    description: "Reward weight for JSON validity"
+
+  tool_weight:
+    type: number
+    default: 2.0
+    description: "Reward weight for correct tool selection"
+
+  args_weight:
+    type: number
+    default: 1.5
+    description: "Reward weight for argument completeness"
+
+  query_weight:
+    type: number
+    default: 1.0
+    description: "Reward weight for search query expansion quality"
+
+  # Quantization & architecture flags
+  no_4bit:
+    type: boolean
+    optional: true
+    default: false
+    description: "Disable 4-bit quantization"
+
+  disable_dynamo:
+    type: boolean
+    optional: true
+    default: false
+    description: >
+      Disable torch.compile via TORCHDYNAMO_DISABLE=1 (set via sys.argv before
+      imports in grpo_train.py). Required for hybrid architectures (e.g. LFM-2.5)
+      that cause TorchRuntimeError in chunked_hidden_states_selective_log_softmax.
+      DECISION: Liquid AI LFM-2.5 remains unstable on V100 even with this flag.
+      Use Qwen3-0.6B for GRPO phases.
+
+  patch_lfm2_logps:
+    type: boolean
+    optional: true
+    default: false
+    description: >
+      Monkey-patch chunked_hidden_states_selective_log_softmax in Unsloth's
+      compiled cache to handle LFM2 hidden states arriving with vocab_size
+      dimension instead of hidden_size. Prefer --use_vllm when available.
+      Retained for reference; LFM-2.5 GRPO on V100 is still unstable.
+
+  use_vllm:
+    type: boolean
+    optional: true
+    default: false
+    description: >
+      Use vLLM for GRPO generation (requires unsloth-vllm-training environment).
+      Bypasses Unsloth's chunked_hidden_states_selective_log_softmax entirely—
+      the official fix for LFM2 hybrid-architecture models. Not available on V100
+      (NC6s_v3) since vLLM's LoRA init fails with BaseLayerWithLoRA assertion
+      on LFM2 conv layers; grpo_train.py retries with fast_inference=False.
+
+  vllm_attention_backend:
+    type: string
+    optional: true
+    default: "auto"
+    description: >
+      vLLM attention backend: auto, flashinfer, xformers, flashattn, sdpa.
+      'auto' defaults to vLLM's choice except on pre-Ampere GPUs (<8.0)
+      where it forces XFORMERS for compatibility with V100/T4.
+
+  # Mamba2 kernel installation (Granite 4.0)
+  install_mamba:
+    type: boolean
+    optional: true
+    default: false
+    description: >
+      Install mamba_ssm + causal_conv1d CUDA kernels at runtime.
+      Required for IBM Granite 4.0 Mamba2 hybrid models running GRPO.
+      NOTE: NC6s_v3 (V100) has blockers for Granite—see Phase 6 notes.
+
+  # Export
+  export_gguf:
+    type: boolean
+    optional: true
+    default: false
+    description: "Export final model to GGUF format"
+
+  gguf_quantization:
+    type: string
+    optional: true
+    default: "q4_k_m"
+    description: "GGUF quantization method: q4_k_m, q5_k_m, q8_0, f16"
+
+  # Logging
+  logging_steps:
+    type: integer
+    default: 1
+    description: "Log metrics every N steps (default 1 for RL visibility)"
+
+  save_steps:
+    type: integer
+    default: 50
+    description: "Save checkpoint every N steps"
+
+  seed:
+    type: integer
+    default: 3407
+    description: "Random seed for reproducibility"
+
+  run_name:
+    type: string
+    default: "grpo-pipeline-run"
+    description: "MLflow run name"
+
+outputs:
+  trained_model:
+    type: uri_folder
+    description: "GRPO-aligned model checkpoint directory"
+
+code: ..
+
+command: >-
+  python scripts/grpo_train.py
+  --base_model "${{inputs.base_model}}"
+  --prompts_path "${{inputs.prompts_path}}"
+  --output_dir "${{outputs.trained_model}}"
+  --run_name "${{inputs.run_name}}"
+  --max_seq_length ${{inputs.max_seq_length}}
+  --num_generations ${{inputs.num_generations}}
+  --temperature ${{inputs.temperature}}
+  --max_new_tokens ${{inputs.max_new_tokens}}
+  --beta ${{inputs.beta}}
+  --batch_size ${{inputs.batch_size}}
+  --gradient_accumulation_steps ${{inputs.gradient_accumulation_steps}}
+  --learning_rate ${{inputs.learning_rate}}
+  --num_epochs ${{inputs.num_epochs}}
+  --lora_r ${{inputs.lora_r}}
+  --lora_alpha ${{inputs.lora_alpha}}
+  --json_weight ${{inputs.json_weight}}
+  --tool_weight ${{inputs.tool_weight}}
+  --args_weight ${{inputs.args_weight}}
+  --query_weight ${{inputs.query_weight}}
+  --logging_steps ${{inputs.logging_steps}}
+  --save_steps ${{inputs.save_steps}}
+  --seed ${{inputs.seed}}
+  --gguf_quantization "${{inputs.gguf_quantization}}"
+  $[[--target_modules "${{inputs.target_modules}}"]]
+  $[[--vllm_attention_backend "${{inputs.vllm_attention_backend}}"]]
+  $([ "${{inputs.no_4bit}}" = "True" ] && echo "--no_4bit" || true)
+  $([ "${{inputs.export_gguf}}" = "True" ] && echo "--export_gguf" || true)
+  $([ "${{inputs.disable_dynamo}}" = "True" ] && echo "--disable_dynamo" || true)
+  $([ "${{inputs.patch_lfm2_logps}}" = "True" ] && echo "--patch_lfm2_logps" || true)
+  $([ "${{inputs.use_vllm}}" = "True" ] && echo "--use_vllm" || true)
+  $([ "${{inputs.install_mamba}}" = "True" ] && echo "--install_mamba" || true)
+
+environment: azureml:unsloth-training@latest

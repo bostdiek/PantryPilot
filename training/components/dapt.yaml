@@ -1,0 +1,143 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: pantrypilot_dapt_training
+version: "1.0.0"
+display_name: "Domain Adaptive Pre-Training"
+description: >
+  Continues pre-training a base language model on a culinary-domain corpus using
+  causal language modeling (CLM). No chat template is applied — the model learns
+  to predict the next token on domain-specific text. This is the first stage in
+  the DAPT → SFT → GRPO pipeline.
+
+type: command
+
+inputs:
+  # Model
+  base_model:
+    type: string
+    default: "unsloth/Qwen3-0.6B-Base-unsloth-bnb-4bit"
+    description: "HuggingFace base model ID (use Base models, not Instruct)"
+
+  max_seq_length:
+    type: integer
+    default: 2048
+    description: "Maximum sequence length. Recommended: 2048, 4096"
+
+  # Data
+  training_data:
+    type: uri_file
+    description: "DAPT corpus JSONL file (Azure ML Data Asset path)"
+
+  streaming:
+    type: boolean
+    optional: true
+    default: false
+    description: "Use streaming data loading for large corpora (150M+ tokens)"
+
+  max_steps:
+    type: integer
+    default: 10000
+    description: "Max training steps when streaming=true (ignored otherwise)"
+
+  # Hyperparameters
+  learning_rate:
+    type: number
+    default: 0.00002
+    description: "Peak learning rate (lower than SFT to preserve base knowledge)"
+
+  num_epochs:
+    type: integer
+    default: 1
+    description: "Number of epochs (1 is typical for DAPT on large corpora)"
+
+  batch_size:
+    type: integer
+    default: 4
+    description: "Per-device batch size (DAPT can use larger batches than SFT)"
+
+  gradient_accumulation_steps:
+    type: integer
+    default: 4
+    description: "Gradient accumulation steps"
+
+  warmup_steps:
+    type: integer
+    default: 100
+    description: "Learning rate warmup steps"
+
+  # LoRA
+  lora_r:
+    type: integer
+    default: 16
+    description: "LoRA rank"
+
+  lora_alpha:
+    type: integer
+    default: 32
+    description: "LoRA alpha (typically 2x lora_r)"
+
+  target_modules:
+    type: string
+    optional: true
+    description: >
+      Comma-separated LoRA target modules
+      (default: q_proj,k_proj,v_proj,o_proj,gate_proj,up_proj,down_proj)
+
+  # Quantization
+  no_4bit:
+    type: boolean
+    optional: true
+    default: false
+    description: "Disable 4-bit quantization (required for some architectures)"
+
+  # Logging
+  logging_steps:
+    type: integer
+    default: 10
+    description: "Log metrics every N steps"
+
+  save_steps:
+    type: integer
+    default: 500
+    description: "Save checkpoint every N steps"
+
+  seed:
+    type: integer
+    default: 3407
+    description: "Random seed for reproducibility"
+
+  run_name:
+    type: string
+    default: "dapt-pipeline-run"
+    description: "MLflow run name"
+
+outputs:
+  trained_model:
+    type: uri_folder
+    description: "DAPT checkpoint directory (LoRA adapters + base weights)"
+
+code: ..
+
+command: >-
+  python scripts/dapt_train.py
+  --base_model "${{inputs.base_model}}"
+  --training_data "${{inputs.training_data}}"
+  --output_dir "${{outputs.trained_model}}"
+  --run_name "${{inputs.run_name}}"
+  --max_seq_length ${{inputs.max_seq_length}}
+  --batch_size ${{inputs.batch_size}}
+  --gradient_accumulation_steps ${{inputs.gradient_accumulation_steps}}
+  --learning_rate ${{inputs.learning_rate}}
+  --num_epochs ${{inputs.num_epochs}}
+  --warmup_steps ${{inputs.warmup_steps}}
+  --max_steps ${{inputs.max_steps}}
+  --lora_r ${{inputs.lora_r}}
+  --lora_alpha ${{inputs.lora_alpha}}
+  --logging_steps ${{inputs.logging_steps}}
+  --save_steps ${{inputs.save_steps}}
+  --seed ${{inputs.seed}}
+  $[[--target_modules ${{inputs.target_modules}}]]
+  $([ "${{inputs.streaming}}" = "True" ] && echo "--streaming" || true)
+  $([ "${{inputs.no_4bit}}" = "True" ] && echo "--no_4bit" || true)
+
+environment: azureml:unsloth-training@latest

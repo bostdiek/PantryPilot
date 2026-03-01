@@ -1,0 +1,194 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+
+name: pantrypilot_sft_training
+version: "1.0.0"
+display_name: "Supervised Fine-Tuning"
+description: >
+  Trains an instruct-tuned model on PantryPilot tool-calling conversations using
+  QLoRA + Unsloth. Supports RoPE scaling for extended context (up to 16K tokens),
+  optional GGUF export, and produces a checkpoint for the optional GRPO stage.
+  This is the required center stage in the DAPT → SFT → GRPO pipeline.
+
+type: command
+
+inputs:
+  # Model — two mutually exclusive options (provide exactly one):
+  #   base_model       : HuggingFace model ID for downloading from the Hub
+  #   base_model_path  : uri_folder output of a preceding DAPT pipeline step
+  base_model:
+    type: string
+    optional: true
+    description: >
+      HuggingFace Instruct model ID (e.g. unsloth/Qwen3-0.6B-unsloth-bnb-4bit).
+      Use this for standalone SFT runs. For DAPT→SFT pipeline use base_model_path.
+
+  base_model_path:
+    type: uri_folder
+    optional: true
+    description: >
+      Path to a DAPT checkpoint directory. In the pipeline, wire this to the
+      trained_model output of the DAPT component. Mutually exclusive with base_model.
+
+  max_seq_length:
+    type: integer
+    default: 8192
+    description: >
+      Maximum sequence length. Unsloth extends context automatically via RoPE
+      scaling. Recommended: 4096, 8192, 16384.
+
+  # Data
+  training_data:
+    type: uri_file
+    description: "SFT training JSONL (Azure ML Data Asset path)"
+
+  val_data:
+    type: uri_file
+    optional: true
+    description: "SFT validation JSONL for eval_loss tracking (optional)"
+
+  # Hyperparameters
+  learning_rate:
+    type: number
+    default: 0.0002
+    description: "Peak learning rate"
+
+  num_epochs:
+    type: integer
+    default: 3
+    description: "Number of training epochs"
+
+  batch_size:
+    type: integer
+    default: 2
+    description: "Per-device batch size"
+
+  gradient_accumulation_steps:
+    type: integer
+    default: 4
+    description: "Gradient accumulation steps"
+
+  warmup_steps:
+    type: integer
+    default: 10
+    description: "Learning rate warmup steps"
+
+  # LoRA
+  lora_r:
+    type: integer
+    default: 16
+    description: "LoRA rank"
+
+  lora_alpha:
+    type: integer
+    default: 32
+    description: "LoRA alpha (typically 2x lora_r)"
+
+  target_modules:
+    type: string
+    optional: true
+    description: >
+      Comma-separated LoRA target modules. Default: q/k/v/o/gate/up/down_proj.
+      For LFM-2.5: q_proj,k_proj,v_proj,out_proj,in_proj,w1,w2,w3
+
+  # Chat template
+  chat_template:
+    type: string
+    default: "chatml"
+    description: >
+      Chat template for the tokenizer. Use 'chatml' for Qwen/Gemma/LFM,
+      'native' for models with their own built-in template (e.g. Granite 4.0).
+
+  # Quantization
+  no_4bit:
+    type: boolean
+    optional: true
+    default: false
+    description: "Disable 4-bit quantization (required for LFM-2.5 and Granite)"
+
+  # Mamba2 kernel installation (Granite 4.0)
+  install_mamba:
+    type: boolean
+    optional: true
+    default: false
+    description: >
+      Install mamba_ssm + causal_conv1d CUDA kernels at runtime.
+      Required for IBM Granite 4.0 Mamba2 hybrid models. Not needed for
+      Qwen3 or LFM-2.5. Kernels compile against the pre-installed
+      PyTorch/CUDA so --no-build-isolation is used internally.
+      NOTE: NC6s_v3 (V100/CUDA 11.8) has multiple blockers for Granite —
+      see Phase 6 notes. Reserved for future hardware.
+
+  # GGUF export
+  export_gguf:
+    type: boolean
+    optional: true
+    default: false
+    description: "Export GGUF model alongside the LoRA checkpoint"
+
+  gguf_quantization:
+    type: string
+    optional: true
+    default: "q4_k_m"
+    description: "GGUF quantization method: q4_k_m, q5_k_m, q8_0, f16"
+
+  # Logging
+  logging_steps:
+    type: integer
+    default: 10
+    description: "Log training metrics every N steps"
+
+  eval_steps:
+    type: integer
+    default: 100
+    description: "Run evaluation every N steps (requires val_data)"
+
+  save_steps:
+    type: integer
+    default: 100
+    description: "Save checkpoint every N steps"
+
+  seed:
+    type: integer
+    default: 3407
+    description: "Random seed for reproducibility"
+
+  run_name:
+    type: string
+    default: "sft-pipeline-run"
+    description: "MLflow run name"
+
+outputs:
+  trained_model:
+    type: uri_folder
+    description: "SFT checkpoint directory (LoRA adapters + tokenizer)"
+
+code: ..
+
+command: >-
+  python scripts/sft_train.py
+  --training_data "${{inputs.training_data}}"
+  --output_dir "${{outputs.trained_model}}"
+  --run_name "${{inputs.run_name}}"
+  --max_seq_length ${{inputs.max_seq_length}}
+  --batch_size ${{inputs.batch_size}}
+  --gradient_accumulation_steps ${{inputs.gradient_accumulation_steps}}
+  --learning_rate ${{inputs.learning_rate}}
+  --num_epochs ${{inputs.num_epochs}}
+  --warmup_steps ${{inputs.warmup_steps}}
+  --lora_r ${{inputs.lora_r}}
+  --lora_alpha ${{inputs.lora_alpha}}
+  --chat_template "${{inputs.chat_template}}"
+  --logging_steps ${{inputs.logging_steps}}
+  --eval_steps ${{inputs.eval_steps}}
+  --save_steps ${{inputs.save_steps}}
+  --seed ${{inputs.seed}}
+  --gguf_quantization "${{inputs.gguf_quantization}}"
+  $[[--base_model "${{inputs.base_model}}"]]
+  $[[--base_model "${{inputs.base_model_path}}"]]
+  $[[--val_data "${{inputs.val_data}}"]]
+  $[[--target_modules "${{inputs.target_modules}}"]]
+  $([ "${{inputs.no_4bit}}" = "True" ] && echo "--no_4bit" || true)
+  $([ "${{inputs.export_gguf}}" = "True" ] && echo "--export_gguf" || true)
+  $([ "${{inputs.install_mamba}}" = "True" ] && echo "--install_mamba" || true)
+
+environment: azureml:unsloth-training@latest
