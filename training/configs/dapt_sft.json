@@ -1,0 +1,39 @@
+{
+  "base_model": "unsloth/Qwen3-0.6B-Base-unsloth-bnb-4bit",
+  "compute": "gpu-cluster",
+  "enable_dapt": true,
+  "enable_grpo": false,
+  "dapt_data": "azureml:dapt-culinary-corpus@latest",
+  "sft_data": "azureml:pantrypilot-sft-data@latest",
+  "val_data": "azureml:pantrypilot-sft-data-val@latest",
+  "dapt": {
+    "max_seq_length": 2048,
+    "learning_rate": 2e-5,
+    "num_epochs": 1,
+    "batch_size": 4,
+    "gradient_accumulation_steps": 4,
+    "warmup_steps": 100,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "streaming": true,
+    "max_steps": 50000,
+    "logging_steps": 10,
+    "save_steps": 500,
+    "seed": 3407
+  },
+  "sft": {
+    "max_seq_length": 8192,
+    "learning_rate": 2e-4,
+    "num_epochs": 3,
+    "batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "warmup_steps": 10,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "chat_template": "chatml",
+    "logging_steps": 10,
+    "eval_steps": 100,
+    "save_steps": 100,
+    "seed": 3407
+  }
+}

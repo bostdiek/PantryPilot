@@ -1,0 +1,23 @@
+{
+  "base_model": "unsloth/Qwen3-0.6B-unsloth-bnb-4bit",
+  "compute": "gpu-cluster",
+  "enable_dapt": false,
+  "enable_grpo": false,
+  "sft_data": "azureml:pantrypilot-sft-data@latest",
+  "val_data": "azureml:pantrypilot-sft-data-val@latest",
+  "sft": {
+    "max_seq_length": 8192,
+    "learning_rate": 2e-4,
+    "num_epochs": 3,
+    "batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "warmup_steps": 10,
+    "lora_r": 16,
+    "lora_alpha": 32,
+    "chat_template": "chatml",
+    "logging_steps": 10,
+    "eval_steps": 100,
+    "save_steps": 100,
+    "seed": 3407
+  }
+}
