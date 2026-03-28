@@ -118,13 +118,11 @@ inputs:
   # Quantization & architecture flags
   no_4bit:
     type: boolean
-    optional: true
     default: false
     description: "Disable 4-bit quantization"
 
   disable_dynamo:
     type: boolean
-    optional: true
     default: false
     description: >
       Disable torch.compile via TORCHDYNAMO_DISABLE=1 (set via sys.argv before
@@ -135,7 +133,6 @@ inputs:
 
   patch_lfm2_logps:
     type: boolean
-    optional: true
     default: false
     description: >
       Monkey-patch chunked_hidden_states_selective_log_softmax in Unsloth's
@@ -145,7 +142,6 @@ inputs:
 
   use_vllm:
     type: boolean
-    optional: true
     default: false
     description: >
       Use vLLM for GRPO generation (requires unsloth-vllm-training environment).
@@ -156,7 +152,6 @@ inputs:
 
   vllm_attention_backend:
     type: string
-    optional: true
     default: "auto"
     description: >
       vLLM attention backend: auto, flashinfer, xformers, flashattn, sdpa.
@@ -166,7 +161,6 @@ inputs:
   # Mamba2 kernel installation (Granite 4.0)
   install_mamba:
     type: boolean
-    optional: true
     default: false
     description: >
       Install mamba_ssm + causal_conv1d CUDA kernels at runtime.
@@ -176,13 +170,11 @@ inputs:
   # Export
   export_gguf:
     type: boolean
-    optional: true
     default: false
     description: "Export final model to GGUF format"
 
   gguf_quantization:
     type: string
-    optional: true
     default: "q4_k_m"
     description: "GGUF quantization method: q4_k_m, q5_k_m, q8_0, f16"
 
@@ -240,12 +232,12 @@ command: >-
   --seed ${{inputs.seed}}
   --gguf_quantization "${{inputs.gguf_quantization}}"
   $[[--target_modules "${{inputs.target_modules}}"]]
-  $[[--vllm_attention_backend "${{inputs.vllm_attention_backend}}"]]
-  $([ "${{inputs.no_4bit}}" = "True" ] && echo "--no_4bit" || true)
-  $([ "${{inputs.export_gguf}}" = "True" ] && echo "--export_gguf" || true)
-  $([ "${{inputs.disable_dynamo}}" = "True" ] && echo "--disable_dynamo" || true)
-  $([ "${{inputs.patch_lfm2_logps}}" = "True" ] && echo "--patch_lfm2_logps" || true)
-  $([ "${{inputs.use_vllm}}" = "True" ] && echo "--use_vllm" || true)
-  $([ "${{inputs.install_mamba}}" = "True" ] && echo "--install_mamba" || true)
+  --vllm_attention_backend "${{inputs.vllm_attention_backend}}"
+  --no_4bit ${{inputs.no_4bit}}
+  --export_gguf ${{inputs.export_gguf}}
+  --disable_dynamo ${{inputs.disable_dynamo}}
+  --patch_lfm2_logps ${{inputs.patch_lfm2_logps}}
+  --use_vllm ${{inputs.use_vllm}}
+  --install_mamba ${{inputs.install_mamba}}
 
 environment: azureml:unsloth-training@latest

@@ -38,6 +38,18 @@ import os
 import subprocess
 import sys
 
+
+def _str2bool(v: str | bool) -> bool:
+    """Parse boolean values from Azure ML component string inputs."""
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("true", "1", "yes"):
+        return True
+    if v.lower() in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
+
+
 # Disable Unsloth's padding-free auto-enable BEFORE importing unsloth.
 # V100 GPUs lack Flash Attention 2, and Unsloth's padding-free mode
 # causes SDPA tensor size mismatches on the FA2-less fallback path.
@@ -53,17 +65,17 @@ if "--disable_dynamo" in sys.argv:
     os.environ["TORCHDYNAMO_DISABLE"] = "1"
     print("⚠️ torch.compile disabled (--disable_dynamo) — using eager execution")
 
-import mlflow
-import torch
+import mlflow  # noqa: E402
+import torch  # noqa: E402
 
 # Unsloth MUST be imported before trl, transformers, peft
 # to ensure all optimisation patches are applied.
-import unsloth  # noqa: F401  (side-effect import for patching)
-from datasets import Dataset
-from reward_functions import ToolCallRewardComputer
-from trl import GRPOConfig, GRPOTrainer
-from unsloth import FastLanguageModel
-from unsloth.chat_templates import get_chat_template
+import unsloth  # noqa: F401, E402  (side-effect import for patching)
+from datasets import Dataset  # noqa: E402
+from reward_functions import ToolCallRewardComputer  # noqa: E402
+from trl import GRPOConfig, GRPOTrainer  # noqa: E402
+from unsloth import FastLanguageModel  # noqa: E402
+from unsloth.chat_templates import get_chat_template  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Condensed system prompt for GRPO rollouts.
@@ -895,14 +907,20 @@ if __name__ == "__main__":
     # Quantization
     parser.add_argument(
         "--no_4bit",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Disable 4-bit quantization",
     )
 
     # Export options
     parser.add_argument(
         "--export_gguf",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Export final model to GGUF format",
     )
     parser.add_argument(
@@ -936,13 +954,19 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--install_mamba",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Install mamba_ssm + causal_conv1d CUDA kernels at runtime "
         "(required for Granite 4.0 Mamba2 hybrid models)",
     )
     parser.add_argument(
         "--disable_dynamo",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Set TORCHDYNAMO_DISABLE=1 to force eager execution. "
         "Required for models whose hybrid architecture causes "
         "torch.compile symbolic shape mismatches in Unsloth's "
@@ -950,7 +974,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--patch_lfm2_logps",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Monkey-patch chunked_hidden_states_selective_log_softmax "
         "in Unsloth's compiled cache to handle LFM2 hybrid models "
         "whose hidden states arrive with vocab_size dimension instead "
@@ -959,7 +986,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--use_vllm",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Use vLLM for GRPO generation (requires unsloth-vllm-training "
         "environment).  This takes vLLM's generation path and bypasses "
         "Unsloth's chunked_hidden_states_selective_log_softmax entirely, "

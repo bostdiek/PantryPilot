@@ -38,21 +38,33 @@ Usage:
 import argparse
 import os
 
+
+def _str2bool(v: str | bool) -> bool:
+    """Parse boolean values from Azure ML component string inputs."""
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("true", "1", "yes"):
+        return True
+    if v.lower() in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
+
+
 # Disable Unsloth's padding-free auto-enable BEFORE importing unsloth.
 # V100 GPUs lack Flash Attention 2, and Unsloth's padding-free mode
 # causes SDPA tensor size mismatches on the FA2-less fallback path.
 os.environ["UNSLOTH_DISABLE_AUTO_PADDING_FREE"] = "1"
 
-import mlflow
-import torch
+import mlflow  # noqa: E402
+import torch  # noqa: E402
 
 # Unsloth MUST be imported before trl, transformers, peft
 # to ensure all optimisation patches are applied.
-import unsloth  # noqa: F401  (side-effect import for patching)
-from datasets import load_dataset
-from transformers import TrainerCallback
-from trl import SFTConfig, SFTTrainer
-from unsloth import FastLanguageModel
+import unsloth  # noqa: F401, E402  (side-effect import for patching)
+from datasets import load_dataset  # noqa: E402
+from transformers import TrainerCallback  # noqa: E402
+from trl import SFTConfig, SFTTrainer  # noqa: E402
+from unsloth import FastLanguageModel  # noqa: E402
 
 
 class DAPTMetricsCallback(TrainerCallback):
@@ -336,7 +348,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--streaming",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Use streaming data loading for large corpora (memory-efficient)",
     )
     parser.add_argument(
@@ -415,7 +430,10 @@ if __name__ == "__main__":
     # Quantization
     parser.add_argument(
         "--no_4bit",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Disable 4-bit quantization",
     )
 

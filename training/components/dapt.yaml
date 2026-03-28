@@ -30,7 +30,6 @@ inputs:
 
   streaming:
     type: boolean
-    optional: true
     default: false
     description: "Use streaming data loading for large corpora (150M+ tokens)"
 
@@ -86,7 +85,6 @@ inputs:
   # Quantization
   no_4bit:
     type: boolean
-    optional: true
     default: false
     description: "Disable 4-bit quantization (required for some architectures)"
 
@@ -137,7 +135,7 @@ command: >-
   --save_steps ${{inputs.save_steps}}
   --seed ${{inputs.seed}}
   $[[--target_modules ${{inputs.target_modules}}]]
-  $([ "${{inputs.streaming}}" = "True" ] && echo "--streaming" || true)
-  $([ "${{inputs.no_4bit}}" = "True" ] && echo "--no_4bit" || true)
+  --streaming ${{inputs.streaming}}
+  --no_4bit ${{inputs.no_4bit}}
 
 environment: azureml:unsloth-training@latest

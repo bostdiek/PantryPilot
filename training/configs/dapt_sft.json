@@ -3,9 +3,9 @@
   "compute": "gpu-cluster",
   "enable_dapt": true,
   "enable_grpo": false,
-  "dapt_data": "azureml:dapt-culinary-corpus@latest",
-  "sft_data": "azureml:pantrypilot-sft-data@latest",
-  "val_data": "azureml:pantrypilot-sft-data-val@latest",
+  "dapt_data": "azureml:dapt-culinary-corpus:1",
+  "sft_data": "azureml:pantrypilot-sft-data:3",
+  "val_data": "azureml:pantrypilot-sft-data-val:3",
   "dapt": {
     "max_seq_length": 2048,
     "learning_rate": 2e-5,

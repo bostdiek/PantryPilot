@@ -49,7 +49,7 @@ dev = [
     "pip-audit>=2.10.0",
     "tiktoken>=0.8.0",
 ]
-dapt = [
+training = [
     "pandas>=2.2.0",
     "tqdm>=4.66.0",
     "kaggle>=1.6.0",

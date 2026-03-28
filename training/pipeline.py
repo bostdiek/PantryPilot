@@ -399,6 +399,8 @@ def build_training_pipeline(
             sft_kwargs["export_gguf"] = True
         if sft_params.get("install_mamba"):
             sft_kwargs["install_mamba"] = True
+        if sft_params.get("load_in_16bit"):
+            sft_kwargs["load_in_16bit"] = True
 
         sft_step = sft_comp(**sft_kwargs)
         sft_step.compute = compute

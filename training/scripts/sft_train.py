@@ -24,22 +24,34 @@ import subprocess
 import sys
 from typing import Any
 
+
+def _str2bool(v: str | bool) -> bool:
+    """Parse boolean values from Azure ML component string inputs."""
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ("true", "1", "yes"):
+        return True
+    if v.lower() in ("false", "0", "no"):
+        return False
+    raise argparse.ArgumentTypeError(f"Boolean value expected, got {v!r}")
+
+
 # Disable Unsloth's padding-free auto-enable BEFORE importing unsloth.
 # V100 GPUs lack Flash Attention 2, and Unsloth's padding-free mode
 # causes SDPA tensor size mismatches on the FA2-less fallback path.
 os.environ["UNSLOTH_DISABLE_AUTO_PADDING_FREE"] = "1"
 
-import mlflow
-import torch
+import mlflow  # noqa: E402
+import torch  # noqa: E402
 
 # Unsloth MUST be imported before trl, transformers, peft
 # to ensure all optimisation patches are applied.
-import unsloth  # noqa: F401  (side-effect import for patching)
-from datasets import load_dataset
-from transformers import TrainerCallback
-from trl import SFTConfig, SFTTrainer
-from unsloth import FastLanguageModel
-from unsloth.chat_templates import get_chat_template
+import unsloth  # noqa: F401, E402  (side-effect import for patching)
+from datasets import Dataset  # noqa: E402
+from transformers import TrainerCallback  # noqa: E402
+from trl import SFTConfig, SFTTrainer  # noqa: E402
+from unsloth import FastLanguageModel  # noqa: E402
+from unsloth.chat_templates import get_chat_template  # noqa: E402
 
 
 def install_mamba_kernels() -> None:
@@ -136,6 +148,26 @@ def load_data_from_azure_ml(data_asset_name: str) -> str:
     return data_asset.path
 
 
+def _load_jsonl_dataset(path: str) -> Dataset:
+    """Load a JSONL file into a HuggingFace Dataset, normalizing null content.
+
+    The ``datasets`` library infers Arrow column types from the first batch.
+    Assistant tool-call messages have ``"content": null`` which can cause
+    ``Couldn't cast array of type string to null`` when later rows have
+    string content.  We normalize null content to ``""`` before building
+    the Dataset to avoid this schema conflict.
+    """
+    rows: list[dict[str, Any]] = []
+    with open(path) as f:
+        for line in f:
+            row = json.loads(line)
+            for msg in row.get("messages", []):
+                if msg.get("content") is None:
+                    msg["content"] = ""
+            rows.append(row)
+    return Dataset.from_list(rows)
+
+
 def format_conversations(examples: dict[str, Any], tokenizer: Any) -> dict[str, list]:
     """
     Format conversation data using ChatML template.
@@ -145,9 +177,9 @@ def format_conversations(examples: dict[str, Any], tokenizer: Any) -> dict[str, 
 
     Each example has:
 
-    * ``messages`` \u2014 list of message dicts with ``role``, ``content``,
+    * ``messages`` — list of message dicts with ``role``, ``content``,
       optional ``tool_calls`` (assistant) and ``tool_call_id`` (tool).
-    * ``tools`` \u2014 list of OpenAI-format function definitions.
+    * ``tools`` — list of OpenAI-format function definitions.
 
     Tool definitions are injected into the system message text so the
     model learns tool-use syntax with the exact parameter schemas it will
@@ -256,14 +288,23 @@ def main(args: argparse.Namespace) -> None:
 
     # Load model with optional 4-bit quantization and RoPE scaling
     load_4bit = not args.no_4bit
-    print(f"\n📦 Loading base model from HuggingFace (4-bit={load_4bit})...")
-    model, tokenizer = FastLanguageModel.from_pretrained(
-        model_name=args.base_model,
-        max_seq_length=args.max_seq_length,  # RoPE scaling handled automatically!
-        load_in_4bit=load_4bit,
-        dtype=None,  # Auto-detect
-        device_map="auto",
+    load_16bit = args.load_in_16bit
+    print(
+        f"\n📦 Loading base model from HuggingFace (4-bit={load_4bit}, 16-bit={load_16bit})..."
     )
+    load_kwargs: dict[str, Any] = {
+        "model_name": args.base_model,
+        "max_seq_length": args.max_seq_length,
+        "load_in_4bit": load_4bit,
+        "dtype": None,
+        "device_map": "auto",
+    }
+    if load_16bit:
+        # Qwen3.5 hybrid models should use bf16 LoRA, not QLoRA 4-bit
+        load_kwargs["load_in_4bit"] = False
+        load_kwargs["load_in_16bit"] = True
+        load_kwargs["full_finetuning"] = False
+    model, tokenizer = FastLanguageModel.from_pretrained(**load_kwargs)
 
     # Apply QLoRA / LoRA
     # Default target modules work for Llama/Qwen/Gemma architectures.
@@ -295,12 +336,10 @@ def main(args: argparse.Namespace) -> None:
     # Load training data
     print("\n📚 Loading training data...")
     if args.training_data.startswith("pantrypilot-"):
-        # Load from Azure ML Data Asset
         train_data_path = load_data_from_azure_ml(args.training_data)
-        dataset = load_dataset("json", data_files=train_data_path, split="train")
+        dataset = _load_jsonl_dataset(train_data_path)
     else:
-        # Load from local file
-        dataset = load_dataset("json", data_files=args.training_data, split="train")
+        dataset = _load_jsonl_dataset(args.training_data)
 
     # Load validation data if provided
     eval_dataset = None
@@ -308,9 +347,9 @@ def main(args: argparse.Namespace) -> None:
         print("📚 Loading validation data...")
         if args.val_data.startswith("pantrypilot-"):
             val_data_path = load_data_from_azure_ml(args.val_data)
-            eval_dataset = load_dataset("json", data_files=val_data_path, split="train")
+            eval_dataset = _load_jsonl_dataset(val_data_path)
         else:
-            eval_dataset = load_dataset("json", data_files=args.val_data, split="train")
+            eval_dataset = _load_jsonl_dataset(args.val_data)
 
     # Apply chat template (ChatML for Qwen/Gemma, native for Granite/others)
     chat_template_name = args.chat_template
@@ -357,6 +396,7 @@ def main(args: argparse.Namespace) -> None:
             "lora_alpha": args.lora_alpha,
             "target_modules": ",".join(target_modules),
             "load_in_4bit": load_4bit,
+            "load_in_16bit": load_16bit,
             "optim": "adamw_8bit",
             "lr_scheduler_type": "cosine",
             "weight_decay": 0.01,
@@ -564,8 +604,20 @@ if __name__ == "__main__":
     # Quantization
     parser.add_argument(
         "--no_4bit",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Disable 4-bit quantization (required for some models like LFM2.5)",
+    )
+    parser.add_argument(
+        "--load_in_16bit",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
+        help="Load model in bf16/16-bit LoRA instead of 4-bit QLoRA. "
+        "Required for Qwen3.5 hybrid (Gated DeltaNet) models.",
     )
 
     # Logging and checkpointing
@@ -591,7 +643,10 @@ if __name__ == "__main__":
     # Export options
     parser.add_argument(
         "--export_gguf",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Export final model to GGUF format for llama.cpp deployment",
     )
     parser.add_argument(
@@ -612,7 +667,10 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--install_mamba",
-        action="store_true",
+        type=_str2bool,
+        nargs="?",
+        const=True,
+        default=False,
         help="Install mamba_ssm + causal_conv1d CUDA kernels at runtime "
         "(required for Granite 4.0 Mamba2 hybrid models)",
     )

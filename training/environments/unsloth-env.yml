@@ -31,6 +31,10 @@ dependencies:
     # sentencepiece, pillow, protobuf, etc. automatically.
     - unsloth
 
+    # Transformers v5+ required for Qwen3.5 hybrid (Gated DeltaNet) architecture.
+    # Unsloth may pin an older version; this forces the upgrade.
+    - transformers>=5.0.0
+
     # MLflow for experiment tracking
     - mlflow>=2.10.0
     - azureml-mlflow>=1.55.0
