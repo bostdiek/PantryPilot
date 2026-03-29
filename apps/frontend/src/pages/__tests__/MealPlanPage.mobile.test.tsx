@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MealPlanState } from '../../stores/useMealPlanStore';
 import { useMealPlanStore } from '../../stores/useMealPlanStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
@@ -89,6 +89,10 @@ beforeEach(() => {
     writable: true,
     value: mockMatchMedia,
   });
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
