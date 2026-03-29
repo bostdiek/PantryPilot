@@ -10,6 +10,9 @@ param location string = resourceGroup().location
 @description('Unique suffix for resource naming')
 param uniqueSuffix string = substring(uniqueString(resourceGroup().id), 0, 6)
 
+@description('Database name suffix (e.g., empty string for dev, "v2-" for prod after storage migration)')
+param dbNameSuffix string = ''
+
 @description('Database admin username')
 param dbAdminUsername string = 'pantrypilot_admin'
 
@@ -92,10 +95,10 @@ var environmentSettings = {
     keyVaultSku: 'standard'
   }
   prod: {
-    // Production-optimized settings
-    acrSku: 'Standard'
+    // Production-optimized settings (cost-optimized for low-traffic personal app)
+    acrSku: 'Basic'
     dbSku: 'Standard_B1ms'
-    dbStorageSize: 128 // Must be >= current size (128 GB). Azure PostgreSQL does not allow storage shrinking.
+    dbStorageSize: 32
     containerMinReplicas: 1
     containerMaxReplicas: 3
     containerCpu: '0.25'
@@ -113,7 +116,7 @@ var currentSettings = environmentSettings[environmentName]
 var resourceNames = {
   acr: 'pantrypilotacr${environmentName}${uniqueSuffix}'
   keyVault: 'ppkv${environmentName}${uniqueSuffix}'
-  postgreSQL: 'pantrypilot-db-${environmentName}-${uniqueSuffix}'
+  postgreSQL: 'pantrypilot-db-${environmentName}-${dbNameSuffix}${uniqueSuffix}'
   containerAppsEnv: 'pantrypilot-env-${environmentName}-${uniqueSuffix}'
   containerAppBackend: 'pantrypilot-backend-${environmentName}'
   staticWebApp: 'pantrypilot-frontend-${environmentName}-${uniqueSuffix}'
@@ -202,10 +205,11 @@ var useAzureOpenAI = useAzureOpenAIForLLM || (!empty(azureOpenAIEndpoint) && !em
 var resolvedAzureOpenAIEndpoint = deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : azureOpenAIEndpoint
 
 // Container Apps Environment and Backend App
-// Use quickstart placeholder for initial deployment, or ACR image after CI/CD builds
+// Use quickstart placeholder for initial deployment, or the environment-specific ACR tag after CI/CD builds
+var backendImageTag = environmentName
 var containerImage = useQuickstartImage
   ? 'mcr.microsoft.com/k8se/quickstart:latest'
-  : '${acr.outputs.loginServer}/pantrypilot-backend:latest'
+  : '${acr.outputs.loginServer}/pantrypilot-backend:${backendImageTag}'
 
 // Reference existing ACR to get admin credentials (only needed when using ACR image)
 resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
