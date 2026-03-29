@@ -205,10 +205,11 @@ var useAzureOpenAI = useAzureOpenAIForLLM || (!empty(azureOpenAIEndpoint) && !em
 var resolvedAzureOpenAIEndpoint = deployAzureOpenAI ? azureOpenAI!.outputs.endpoint : azureOpenAIEndpoint
 
 // Container Apps Environment and Backend App
-// Use quickstart placeholder for initial deployment, or ACR image after CI/CD builds
+// Use quickstart placeholder for initial deployment, or the environment-specific ACR tag after CI/CD builds
+var backendImageTag = environmentName
 var containerImage = useQuickstartImage
   ? 'mcr.microsoft.com/k8se/quickstart:latest'
-  : '${acr.outputs.loginServer}/pantrypilot-backend:latest'
+  : '${acr.outputs.loginServer}/pantrypilot-backend:${backendImageTag}'
 
 // Reference existing ACR to get admin credentials (only needed when using ACR image)
 resource acrResource 'Microsoft.ContainerRegistry/registries@2023-07-01' existing = {
