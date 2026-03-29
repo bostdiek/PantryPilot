@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 # Embedding dimensions - consistent across both providers
 # Azure text-embedding-3-small supports 768 dimensions, matching Gemini
 EMBEDDING_DIMENSIONS = 768
+
+# Timeout for embedding API calls (seconds)
+EMBEDDING_TIMEOUT_SECONDS = 30
 
 
 def _is_azure_provider() -> bool:
@@ -105,11 +109,25 @@ async def _generate_azure_embedding(text: str) -> list[float]:
     settings = get_settings()
     client = get_embedding_client()
 
-    response = await client.embeddings.create(
-        model=settings.EMBEDDING_MODEL,
-        input=text,
-        dimensions=EMBEDDING_DIMENSIONS,
+    logger.info(
+        "Starting Azure embedding call (model=%s, text_len=%d)",
+        settings.EMBEDDING_MODEL,
+        len(text),
     )
+    try:
+        response = await asyncio.wait_for(
+            client.embeddings.create(
+                model=settings.EMBEDDING_MODEL,
+                input=text,
+                dimensions=EMBEDDING_DIMENSIONS,
+            ),
+            timeout=EMBEDDING_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        logger.error(
+            "Azure embedding API call timed out after %ds", EMBEDDING_TIMEOUT_SECONDS
+        )
+        raise
 
     if not response.data:
         raise ValueError("No embeddings returned from Azure API")
@@ -125,14 +143,29 @@ async def _generate_gemini_embedding(text: str, task_type: str) -> list[float]:
     settings = get_settings()
     client = get_embedding_client()
 
-    result = await client.aio.models.embed_content(
-        model=settings.EMBEDDING_MODEL,
-        contents=text,
-        config=types.EmbedContentConfig(
-            task_type=task_type,
-            output_dimensionality=EMBEDDING_DIMENSIONS,
-        ),
+    logger.info(
+        "Starting Gemini embedding call (model=%s, task=%s, text_len=%d)",
+        settings.EMBEDDING_MODEL,
+        task_type,
+        len(text),
     )
+    try:
+        result = await asyncio.wait_for(
+            client.aio.models.embed_content(
+                model=settings.EMBEDDING_MODEL,
+                contents=text,
+                config=types.EmbedContentConfig(
+                    task_type=task_type,
+                    output_dimensionality=EMBEDDING_DIMENSIONS,
+                ),
+            ),
+            timeout=EMBEDDING_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        logger.error(
+            "Gemini embedding API call timed out after %ds", EMBEDDING_TIMEOUT_SECONDS
+        )
+        raise
 
     if not result.embeddings:
         raise ValueError("No embeddings returned from Gemini API")

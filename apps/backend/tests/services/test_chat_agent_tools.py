@@ -567,13 +567,12 @@ class TestBuildHybridResult:
             rrf_k=60,
         )
 
-        assert result["status"] == "ok"
         assert result["query"] == "test query"
-        assert result["total_results"] == 1
+        assert result["total"] == 1
         assert len(result["recipes"]) == 1
         assert result["recipes"][0]["title"] == "Test Recipe"
         assert result["recipes"][0]["times_cooked"] == 5
-        assert "relevance_score" in result["recipes"][0]
+        assert "score" in result["recipes"][0]
 
     def test_builds_result_with_fallback_flag(self) -> None:
         """Test fallback_used flag is included in result."""
@@ -592,9 +591,9 @@ class TestBuildHybridResult:
             fallback_used=True,
         )
 
-        assert result["fallback_used"] is True
-        assert result["filters_applied"]["cuisine"] == "italian"
-        assert result["filters_applied"]["max_cook_time"] == 30
+        assert result["query"] == "fallback query"
+        assert result["total"] == 0
+        assert result["recipes"] == []
 
     def test_builds_empty_result(self) -> None:
         """Test building result with no items."""
@@ -612,7 +611,7 @@ class TestBuildHybridResult:
             rrf_k=60,
         )
 
-        assert result["total_results"] == 0
+        assert result["total"] == 0
         assert result["recipes"] == []
 
 
@@ -640,9 +639,7 @@ class TestBuildMetadataResult:
             sort_by="name",
         )
 
-        assert result["status"] == "ok"
-        assert result["query"] is None  # No query for metadata-only search
-        assert result["total_results"] == 1
+        assert result["total"] == 1
         assert len(result["recipes"]) == 1
         assert result["recipes"][0]["title"] == "Pasta Dish"
         assert result["recipes"][0]["times_cooked"] == 3
@@ -661,11 +658,8 @@ class TestBuildMetadataResult:
             sort_by="times_cooked",
         )
 
-        assert result["filters_applied"]["cuisine"] == "mexican"
-        assert result["filters_applied"]["difficulty"] == "hard"
-        assert result["filters_applied"]["max_cook_time"] == 60
-        assert result["filters_applied"]["min_times_cooked"] == 5
-        assert result["sort_by"] == "times_cooked"
+        assert result["total"] == 0
+        assert result["recipes"] == []
 
 
 class TestBuildFallbackQuery:

@@ -7,12 +7,13 @@ scenarios for training data generation.
 TOOL COVERAGE (from agent.py):
 1. get_meal_plan_history - "What did I make last week?"
 2. search_recipes - "Find me a quick chicken dinner"
-3. get_daily_weather - "What's the weather like?" / "Something warm for this cold day"
-4. web_search - "Find me a recipe for beef wellington online"
-5. fetch_url_as_markdown - "Get that recipe from allrecipes.com"
-6. suggest_recipe - "Save this recipe for later"
-7. propose_meal_for_day - "Add chicken to Monday's dinner"
-8. update_user_memory - Implicit through personal info sharing
+3. get_recipe_details - "Show me full ingredients and steps for that recipe"
+4. get_daily_weather - "What's the weather like?" / "Something warm for this cold day"
+5. web_search - "Find me a recipe for beef wellington online"
+6. fetch_url_as_markdown - "Get that recipe from allrecipes.com"
+7. suggest_recipe - "Save this recipe for later"
+8. propose_meal_for_day - "Add chicken to Monday's dinner"
+9. update_user_memory - Implicit through personal info sharing
 """
 
 from typing import Any
@@ -27,6 +28,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "What vegetarian dishes use quinoa?",
         "I'm craving Italian food - any suggestions?",
         "Show me recipes under 30 minutes",
+        # get_recipe_details - request full single-recipe details
+        "Show me full ingredients and steps for the first recipe",
         # get_meal_plan_history - history queries
         "What did I make last Tuesday?",
         "What have I been eating this month?",
@@ -65,6 +68,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "I have ground beef and need to use it",
         "Kid-friendly recipes with chicken",
         "Show me recipes the whole family will like",
+        # get_recipe_details
+        "Can you show the full recipe card for that one?",
         # get_meal_plan_history
         "What did we have last week?",
         "It's Taco Tuesday, remind me what we usually do",
@@ -102,6 +107,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Easy recipe using eggs",
         "What's the fastest thing I can cook?",
         "Single portion meals",
+        # get_recipe_details
+        "Pull the full ingredients and instructions for that option",
         # get_meal_plan_history
         "What did I eat last week?",
         "I think I made ramen recently, when was that?",
@@ -137,6 +144,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Rice-based dinner ideas",
         "GF Italian food options",
         "What GF recipes do I have?",
+        # get_recipe_details
+        "Show me the full recipe details for the safest option",
         # get_meal_plan_history
         "What did I make last week that was GF?",
         "Show me my safe meal history",
@@ -177,6 +186,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "What's the most complex recipe in my collection?",
         "Show me authentic Middle Eastern recipes",
         "Traditional Thai recipes",
+        # get_recipe_details
+        "Give me full instructions and ingredients for that dish",
         # get_meal_plan_history
         "What did I cook last month?",
         "What cuisines have I been exploring lately?",
@@ -218,6 +229,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Our traditional Sunday roast recipe",
         "The meatloaf recipe we always use",
         "I don't like changes, show me familiar recipes",
+        # get_recipe_details
+        "Open the full recipe details for the usual Sunday roast",
         # get_meal_plan_history
         "What did we have last week? Do that again",
         "What do we usually have on Mondays?",
@@ -260,6 +273,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "Lean protein sources",
         "What are my high-protein recipes?",
         "Clean eating recipes",
+        # get_recipe_details
+        "Show the full recipe so I can check ingredients and steps",
         # get_meal_plan_history
         "What did I have for breakfast yesterday?",
         "How much protein have I been getting this week?",
@@ -301,6 +316,8 @@ PERSONA_QUERIES: dict[str, list[str]] = {
         "What dairy-free recipes do I have?",
         "Plant-based recipes",
         "Vegan mac and cheese",
+        # get_recipe_details
+        "Show me complete ingredients and instructions for that recipe",
         # get_meal_plan_history
         "What did I cook last Tuesday?",
         "Show me what I've been making lately",
@@ -339,10 +356,10 @@ PERSONA_QUERIES: dict[str, list[str]] = {
 
 
 # Multi-turn conversation scenarios - each is a flow of queries for realistic dialogues
-# These cover ALL 8 tools from agent.py:
-# 1. get_meal_plan_history, 2. search_recipes, 3. get_daily_weather,
-# 4. web_search, 5. fetch_url_as_markdown, 6. suggest_recipe,
-# 7. propose_meal_for_day, 8. update_user_memory
+# These cover ALL 9 tools from agent.py:
+# 1. get_meal_plan_history, 2. search_recipes, 3. get_recipe_details,
+# 4. get_daily_weather, 5. web_search, 6. fetch_url_as_markdown,
+# 7. suggest_recipe, 8. propose_meal_for_day, 9. update_user_memory
 CONVERSATION_SCENARIOS: dict[str, list[list[str]]] = {
     "veggie_val": [
         # Full meal planning flow (propose_meal_for_day + search_recipes + history)
@@ -630,16 +647,17 @@ FOLLOW_UP_TYPES: dict[str, list[str]] = {
 }
 
 
-# Tool coverage mapping - maps query patterns to the 8 agent tools
+# Tool coverage mapping - maps query patterns to the 9 agent tools
 # Tools from agent.py:
 # 1. get_meal_plan_history - meal history queries
 # 2. search_recipes - recipe discovery in user's collection
-# 3. get_daily_weather - weather-based meal suggestions
-# 4. web_search - find recipes online
-# 5. fetch_url_as_markdown - get recipe from specific URL
-# 6. suggest_recipe - save/draft a recipe for collection
-# 7. propose_meal_for_day - add meal to specific day
-# 8. update_user_memory - remember user preferences/info
+# 3. get_recipe_details - fetch full ingredients/instructions for one recipe
+# 4. get_daily_weather - weather-based meal suggestions
+# 5. web_search - find recipes online
+# 6. fetch_url_as_markdown - get recipe from specific URL
+# 7. suggest_recipe - save/draft a recipe for collection
+# 8. propose_meal_for_day - add meal to specific day
+# 9. update_user_memory - remember user preferences/info
 QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
     "veggie_val": {
         "search_recipes": [
@@ -647,6 +665,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "Can you suggest",
             "Show me recipes",
             "What vegetarian dishes",
+        ],
+        "get_recipe_details": [
+            "Show me full ingredients and steps",
+            "full recipe for that one",
+            "pull the full instructions",
         ],
         "get_meal_plan_history": [
             "What did I make last",
@@ -681,6 +704,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "I need dinner for",
             "Kid-friendly recipes",
             "Show me recipes the whole family",
+        ],
+        "get_recipe_details": [
+            "show the full recipe card",
+            "full ingredients for that one",
+            "full instructions for that option",
         ],
         "get_meal_plan_history": [
             "What did we have last week",
@@ -724,6 +752,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "What's the fastest thing",
             "Single portion meals",
         ],
+        "get_recipe_details": [
+            "pull the full ingredients",
+            "show full instructions",
+            "show me the full recipe",
+        ],
         "get_meal_plan_history": [
             "What did I eat last week",
             "I think I made ramen recently",
@@ -763,6 +796,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "Rice-based dinner",
             "What GF recipes do I have",
         ],
+        "get_recipe_details": [
+            "show me full recipe details",
+            "full ingredients and steps",
+            "open full recipe for that option",
+        ],
         "get_meal_plan_history": [
             "What did I make last week that was GF",
             "Show me my safe meal history",
@@ -797,6 +835,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "I want to try making Thai curry",
             "What's a challenging recipe",
             "Show me authentic Middle Eastern",
+        ],
+        "get_recipe_details": [
+            "give me full instructions",
+            "show full ingredients list",
+            "open the full recipe details",
         ],
         "get_meal_plan_history": [
             "What did I cook last month",
@@ -837,6 +880,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "Show me my usual comfort recipes",
             "Our traditional Sunday roast recipe",
             "familiar recipes",
+        ],
+        "get_recipe_details": [
+            "show the full recipe",
+            "full details for the usual one",
+            "open full ingredients and steps",
         ],
         "get_meal_plan_history": [
             "What did we have last week",
@@ -879,6 +927,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "Lean protein sources",
             "Clean eating recipes",
         ],
+        "get_recipe_details": [
+            "show full recipe so I can check ingredients",
+            "open full instructions",
+            "full recipe details for that meal",
+        ],
         "get_meal_plan_history": [
             "What did I have for breakfast yesterday",
             "How much protein have I been getting",
@@ -919,6 +972,11 @@ QUERY_TOOL_COVERAGE: dict[str, dict[str, list[str]]] = {
             "Coconut milk recipes",
             "What dairy-free recipes do I have",
             "Vegan mac and cheese",
+        ],
+        "get_recipe_details": [
+            "show full ingredients and instructions",
+            "open full recipe details",
+            "full recipe card for that one",
         ],
         "get_meal_plan_history": [
             "What did I cook last Tuesday",

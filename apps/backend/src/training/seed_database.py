@@ -15,6 +15,7 @@ import asyncio
 import logging
 import os
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -24,6 +25,7 @@ from core.security import get_password_hash
 from models.base import Base
 from models.ingredient_names import Ingredient
 from models.meal_history import Meal
+from models.recipe_ingredients import RecipeIngredient
 from models.recipes_names import Recipe
 from models.user_preferences import UserPreferences
 from models.users import User
@@ -335,6 +337,67 @@ async def create_persona_ingredients(
     return ingredients
 
 
+async def create_persona_recipe_ingredients(
+    db: AsyncSession,
+    user: User,
+    recipes: list[Recipe],
+    ingredients: list[Ingredient],
+) -> list[RecipeIngredient]:
+    """Create synthetic recipe-to-ingredient links for seeded recipes.
+
+    This makes `get_recipe_details` outputs realistic during synthetic SFT
+    conversation generation by ensuring seeded recipes have non-empty
+    ingredient lists.
+    """
+    if not recipes or not ingredients:
+        return []
+
+    links: list[RecipeIngredient] = []
+    quantity_pattern = [
+        (Decimal("1.0"), "cup"),
+        (Decimal("2.0"), "tbsp"),
+        (Decimal("0.5"), "tsp"),
+        (Decimal("8.0"), "oz"),
+    ]
+
+    ingredient_count = len(ingredients)
+
+    for recipe in recipes:
+        # Deterministic, persona-specific spread of ingredients per recipe.
+        base = sum(ord(char) for char in recipe.name)
+        per_recipe = min(5, max(3, ingredient_count))
+
+        used_idx: set[int] = set()
+        for offset in range(per_recipe):
+            idx = (base + (offset * 7)) % ingredient_count
+            while idx in used_idx and len(used_idx) < ingredient_count:
+                idx = (idx + 1) % ingredient_count
+            used_idx.add(idx)
+
+            quantity_value, quantity_unit = quantity_pattern[
+                offset % len(quantity_pattern)
+            ]
+            links.append(
+                RecipeIngredient(
+                    recipe_id=recipe.id,
+                    ingredient_id=ingredients[idx].id,
+                    quantity_value=quantity_value,
+                    quantity_unit=quantity_unit,
+                    prep={},
+                    is_optional=False,
+                )
+            )
+
+    db.add_all(links)
+    await db.flush()
+    logger.info(
+        "Created %d recipe-ingredient links for %s",
+        len(links),
+        user.username,
+    )
+    return links
+
+
 async def create_persona_meal_history(
     db: AsyncSession,
     user: User,
@@ -424,6 +487,14 @@ async def seed_persona(
     # Create ingredients (pantry)
     ingredients = await create_persona_ingredients(db, user, persona)
 
+    # Link ingredients to recipes for full recipe-details tool coverage
+    recipe_ingredients = await create_persona_recipe_ingredients(
+        db,
+        user,
+        list(recipe_map.values()),
+        ingredients,
+    )
+
     # Create meal history (requires recipe_map)
     meals = await create_persona_meal_history(db, user, persona, recipe_map)
 
@@ -435,6 +506,7 @@ async def seed_persona(
         "preferences": preferences,
         "recipes": list(recipe_map.values()),
         "ingredients": ingredients,
+        "recipe_ingredients": recipe_ingredients,
         "meals": meals,
     }
 
@@ -546,11 +618,12 @@ async def run_seeding(cleanup_first: bool = True) -> dict[str, dict[str, Any]]:
             logger.info("\n=== Seeding Complete ===")
             for persona_name, data in results.items():
                 logger.info(
-                    "  %s: %d recipes, %d meals, %d ingredient items",
+                    "  %s: %d recipes, %d meals, %d ingredient items, %d recipe links",
                     persona_name,
                     len(data["recipes"]),
                     len(data["meals"]),
                     len(data["ingredients"]),
+                    len(data["recipe_ingredients"]),
                 )
 
             return results

@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MealPlanState } from '../../stores/useMealPlanStore';
 import { useMealPlanStore } from '../../stores/useMealPlanStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
@@ -89,6 +89,22 @@ beforeEach(() => {
     writable: true,
     value: mockMatchMedia,
   });
+});
+
+// Prevent real network requests during render to avoid async console errors
+// that race with vitest environment teardown (EnvironmentTeardownError).
+beforeEach(() => {
+  vi.spyOn(global, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ success: true, data: null }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  );
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
