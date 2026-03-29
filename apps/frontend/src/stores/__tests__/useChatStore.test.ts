@@ -45,6 +45,7 @@ describe('useChatStore', () => {
         conversations: [],
         activeConversationId: null,
         messagesByConversationId: {},
+        hasPreviousMessagesByConversationId: {},
         isLoading: false,
         isStreaming: false,
         streamingMessageId: null,
@@ -105,6 +106,211 @@ describe('useChatStore', () => {
     });
 
     expect(result.current.activeConversationId).toBe(convoId);
+  });
+
+  test('switchConversation always reloads messages from server even when cached', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    const convoId = 'cached-conv';
+
+    // Pre-populate cache so the old skip-if-cached code would have returned early
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: convoId,
+            title: 'Cached',
+            createdAt: new Date().toISOString(),
+            lastMessageAt: new Date().toISOString(),
+          },
+        ],
+        messagesByConversationId: {
+          [convoId]: [
+            {
+              id: 'm1',
+              conversationId: convoId,
+              role: 'user',
+              content: 'cached message',
+              createdAt: new Date().toISOString(),
+            },
+          ],
+        },
+      });
+    });
+
+    await act(async () => {
+      await result.current.switchConversation(convoId);
+    });
+
+    // fetchMessages must be called even though the conversation had cached messages
+    expect(mocks.fetchMessages).toHaveBeenCalledWith(convoId, 200);
+  });
+
+  test('loadMessages stores has_more=true in hasPreviousMessagesByConversationId', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    const conversationId = 'conv-paginated';
+    mocks.fetchMessages.mockResolvedValue({
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content_blocks: [{ type: 'text', text: 'Hello' }],
+          created_at: '2026-01-17T10:00:00Z',
+        },
+      ],
+      has_more: true,
+    });
+
+    await act(async () => {
+      await result.current.loadMessages(conversationId);
+    });
+
+    expect(
+      useChatStore.getState().hasPreviousMessagesByConversationId[
+        conversationId
+      ]
+    ).toBe(true);
+  });
+
+  test('loadMessages stores has_more=false in hasPreviousMessagesByConversationId', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    const conversationId = 'conv-complete';
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    await act(async () => {
+      await result.current.loadMessages(conversationId);
+    });
+
+    expect(
+      useChatStore.getState().hasPreviousMessagesByConversationId[
+        conversationId
+      ]
+    ).toBe(false);
+  });
+
+  test('loadMoreMessages fetches with the oldest message id as before_id cursor', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    const conversationId = 'conv-more';
+    const oldestMsgId = 'msg-oldest';
+
+    act(() => {
+      useChatStore.setState({
+        activeConversationId: conversationId,
+        messagesByConversationId: {
+          [conversationId]: [
+            {
+              id: oldestMsgId,
+              conversationId,
+              role: 'user',
+              content: 'oldest',
+              createdAt: '2026-01-17T10:00:00Z',
+            },
+            {
+              id: 'msg-newer',
+              conversationId,
+              role: 'assistant',
+              content: 'newer',
+              createdAt: '2026-01-17T10:01:00Z',
+            },
+          ],
+        },
+        hasPreviousMessagesByConversationId: { [conversationId]: true },
+      });
+    });
+
+    mocks.fetchMessages.mockResolvedValue({
+      messages: [
+        {
+          id: 'msg-even-older',
+          role: 'user',
+          content_blocks: [{ type: 'text', text: 'Even older' }],
+          created_at: '2026-01-17T09:59:00Z',
+        },
+      ],
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadMoreMessages(conversationId);
+    });
+
+    // Must pass the oldest message id as the cursor
+    expect(mocks.fetchMessages).toHaveBeenCalledWith(
+      conversationId,
+      200,
+      oldestMsgId
+    );
+  });
+
+  test('loadMoreMessages prepends older messages before existing ones', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    const conversationId = 'conv-prepend';
+
+    act(() => {
+      useChatStore.setState({
+        messagesByConversationId: {
+          [conversationId]: [
+            {
+              id: 'msg-recent',
+              conversationId,
+              role: 'user',
+              content: 'recent',
+              createdAt: '2026-01-17T10:05:00Z',
+            },
+          ],
+        },
+        hasPreviousMessagesByConversationId: { [conversationId]: true },
+      });
+    });
+
+    mocks.fetchMessages.mockResolvedValue({
+      messages: [
+        {
+          id: 'msg-old-1',
+          role: 'user',
+          content_blocks: [{ type: 'text', text: 'Old 1' }],
+          created_at: '2026-01-17T09:00:00Z',
+        },
+        {
+          id: 'msg-old-2',
+          role: 'assistant',
+          content_blocks: [{ type: 'text', text: 'Old 2' }],
+          created_at: '2026-01-17T09:30:00Z',
+        },
+      ],
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadMoreMessages(conversationId);
+    });
+
+    const messages =
+      useChatStore.getState().messagesByConversationId[conversationId]!;
+
+    // Older messages come first, then the existing recent message
+    expect(messages).toHaveLength(3);
+    expect(messages[0]?.id).toBe('msg-old-1');
+    expect(messages[1]?.id).toBe('msg-old-2');
+    expect(messages[2]?.id).toBe('msg-recent');
+
+    // has_more updated to false now that we reached the beginning
+    expect(
+      useChatStore.getState().hasPreviousMessagesByConversationId[
+        conversationId
+      ]
+    ).toBe(false);
   });
 
   test('loadConversations fetches from API and updates state', async () => {

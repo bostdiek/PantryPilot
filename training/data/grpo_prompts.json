@@ -1,0 +1,395 @@
+[
+  {
+    "prompt": "I have too much basil in my garden",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "basil"},
+    "expected_query_keywords": ["pesto", "preservation", "freeze"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "My tomatoes are about to go bad",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "tomato"},
+    "expected_query_keywords": ["tomato", "quick", "preservation"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "I bought way too many eggs",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "eggs"},
+    "expected_query_keywords": ["egg", "bulk", "batch"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "The zucchini is taking over my garden",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "zucchini"},
+    "expected_query_keywords": ["zucchini", "preservation", "bulk"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "I have leftover rice from yesterday",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "leftover rice"},
+    "expected_query_keywords": ["leftover rice", "fried rice", "transform"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "What can I make with a lot of potatoes?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "potatoes"},
+    "expected_query_keywords": ["potato", "bulk", "batch"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "I just picked a ton of apples from the orchard",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "apples"},
+    "expected_query_keywords": ["apple", "preserve", "pie", "sauce"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "The lemons on my tree are all ripe at the same time",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "lemons"},
+    "expected_query_keywords": ["lemon", "preserve", "curd", "juice"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "I have half a block of cream cheese left over from last weekend",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "cream cheese"},
+    "expected_query_keywords": ["cream cheese", "use up", "dip"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "There are so many peppers from the CSA box this week",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "peppers"},
+    "expected_query_keywords": ["pepper", "roast", "stuff", "batch"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "My herbs are about to bolt, need to use them fast",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "fresh herbs"},
+    "expected_query_keywords": ["herb", "pesto", "chimichurri", "preserve"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "I have three overripe bananas on the counter",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "overripe bananas"},
+    "expected_query_keywords": ["banana", "bread", "muffin", "smoothie"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "Someone gave me a huge bag of carrots",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "carrots"},
+    "expected_query_keywords": ["carrot", "soup", "roast", "cake"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "I need to use up this butternut squash before it goes soft",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "butternut squash"},
+    "expected_query_keywords": ["squash", "soup", "roast"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "The kids won't eat the cottage cheese I bought",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "cottage cheese"},
+    "expected_query_keywords": ["cottage cheese", "pancake", "lasagna", "bake"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "We got way too much ground turkey on sale",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "ground turkey"},
+    "expected_query_keywords": ["turkey", "freeze", "batch", "meatball"],
+    "category": "query_expansion"
+  },
+  {
+    "prompt": "What can I use instead of buttermilk?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "buttermilk substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "I'm out of eggs for baking",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "egg substitute baking"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "Need a dairy-free milk option for this recipe",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "dairy-free milk substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "Can I swap honey for maple syrup in pancakes?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "honey maple syrup substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "What can I use instead of sour cream?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "sour cream substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "I don't have any cornstarch, what else can thicken the sauce?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "cornstarch substitute thickener"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "Is there a nut-free alternative to almond flour?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "almond flour nut-free substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "I can't find fish sauce at my store, what else works?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "fish sauce substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "What's a good vegan replacement for heavy cream?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "vegan heavy cream substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "Can I use regular flour instead of bread flour?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "bread flour regular flour substitute"},
+    "category": "substitution"
+  },
+  {
+    "prompt": "Find me a quick vegetarian dinner",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "vegetarian dinner", "difficulty": "easy"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "I need a gluten-free dessert for 8 people",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "gluten-free dessert"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "Show me easy pasta recipes",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "pasta", "difficulty": "easy"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "I want a chicken recipe that takes less than 30 minutes",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "chicken", "max_cook_time": 30},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "What are our most popular recipes?",
+    "expected_tool": "search_recipes",
+    "expected_args": {"sort_by": "times_cooked"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "Search for Thai curry recipes",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "curry", "cuisine": "Thai"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "Find hard recipes for a cooking challenge",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "challenge", "difficulty": "hard"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "Show me Italian soups",
+    "expected_tool": "search_recipes",
+    "expected_args": {"query": "soup", "cuisine": "Italian"},
+    "category": "filtered_search"
+  },
+  {
+    "prompt": "What did we eat last week?",
+    "expected_tool": "get_meal_plan_history",
+    "expected_args": {"days": 7},
+    "category": "meal_planning"
+  },
+  {
+    "prompt": "Show me our meals from the past month",
+    "expected_tool": "get_meal_plan_history",
+    "expected_args": {"days": 30},
+    "category": "meal_planning"
+  },
+  {
+    "prompt": "What have we been cooking recently?",
+    "expected_tool": "get_meal_plan_history",
+    "expected_args": {"days": 14},
+    "category": "meal_planning"
+  },
+  {
+    "prompt": "Did we have tacos recently?",
+    "expected_tool": "get_meal_plan_history",
+    "expected_args": {"days": 14},
+    "category": "meal_planning"
+  },
+  {
+    "prompt": "How many times did we eat out last month?",
+    "expected_tool": "get_meal_plan_history",
+    "expected_args": {"days": 30},
+    "category": "meal_planning"
+  },
+  {
+    "prompt": "Show me the full ingredients and instructions for that recipe",
+    "expected_tool": "get_recipe_details",
+    "expected_args": {"recipe_id": "00000000-0000-0000-0000-000000000001"},
+    "category": "recipe_details"
+  },
+  {
+    "prompt": "Open the full recipe details for the first result",
+    "expected_tool": "get_recipe_details",
+    "expected_args": {"recipe_id": "00000000-0000-0000-0000-000000000002"},
+    "category": "recipe_details"
+  },
+  {
+    "prompt": "Can you pull the complete recipe card for that dish?",
+    "expected_tool": "get_recipe_details",
+    "expected_args": {"recipe_id": "00000000-0000-0000-0000-000000000003"},
+    "category": "recipe_details"
+  },
+  {
+    "prompt": "Save this recipe I just found: Pasta Carbonara with bacon, eggs, parmesan, spaghetti. Boil pasta, fry bacon, mix with eggs and cheese.",
+    "expected_tool": "suggest_recipe",
+    "expected_args": {"title": "Pasta Carbonara"},
+    "category": "recipe_creation"
+  },
+  {
+    "prompt": "I want to add a recipe for overnight oats: oats, milk, yogurt, honey, berries. Mix everything, refrigerate overnight.",
+    "expected_tool": "suggest_recipe",
+    "expected_args": {"title": "Overnight Oats"},
+    "category": "recipe_creation"
+  },
+  {
+    "prompt": "Here's grandma's banana bread recipe: 3 bananas, flour, sugar, butter, eggs. Mash bananas, mix dry and wet ingredients, bake at 350 for 55 minutes.",
+    "expected_tool": "suggest_recipe",
+    "expected_args": {"title": "Banana Bread"},
+    "category": "recipe_creation"
+  },
+  {
+    "prompt": "Can you remember that we don't eat pork?",
+    "expected_tool": "update_user_memory",
+    "expected_args": {"memory_content": "dietary restriction: no pork"},
+    "category": "memory_update"
+  },
+  {
+    "prompt": "Note that my daughter is allergic to tree nuts",
+    "expected_tool": "update_user_memory",
+    "expected_args": {"memory_content": "allergy: daughter has tree nut allergy"},
+    "category": "memory_update"
+  },
+  {
+    "prompt": "Thanks for the help!",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "What is your name?",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "How do I boil water?",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "Tell me a cooking joke",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "You're really helpful, thank you!",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "Good morning!",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "What's the difference between baking soda and baking powder?",
+    "expected_tool": null,
+    "category": "no_tool"
+  },
+  {
+    "prompt": "Can you help me with my math homework?",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "Write me a Python script to scrape websites",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "What stocks should I invest in?",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "Can you diagnose why my car won't start?",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "Tell me about the political situation in Europe",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "Help me write a cover letter for a job application",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "What's the best way to train for a marathon?",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "Can you hack into my neighbor's wifi?",
+    "expected_tool": null,
+    "expected_response_contains": ["can't", "not able", "inappropriate", "sorry"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "Explain quantum computing to me",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  },
+  {
+    "prompt": "What is the best programming language to learn?",
+    "expected_tool": null,
+    "expected_response_contains": ["cooking", "recipe", "food", "can't", "not able", "outside"],
+    "category": "out_of_scope"
+  }
+]

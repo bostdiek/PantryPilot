@@ -27,6 +27,7 @@ describe('AssistantPage', () => {
         conversations: [],
         activeConversationId: null,
         messagesByConversationId: {},
+        hasPreviousMessagesByConversationId: {},
         isLoading: false,
       });
     });
@@ -293,5 +294,113 @@ describe('AssistantPage', () => {
     expect(loadSpy).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+
+  test('shows "Load older messages" button when has_more is true', () => {
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'c1',
+            title: 'Chat',
+            createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+            lastMessageAt: new Date('2026-01-01T01:00:00.000Z').toISOString(),
+          },
+        ],
+        activeConversationId: 'c1',
+        messagesByConversationId: {
+          c1: [
+            {
+              id: 'm1',
+              conversationId: 'c1',
+              role: 'user',
+              content: 'Hello',
+              createdAt: new Date('2026-01-01T01:00:00.000Z').toISOString(),
+            },
+          ],
+        },
+        hasPreviousMessagesByConversationId: { c1: true },
+      });
+    });
+
+    renderAssistant();
+
+    expect(
+      screen.getByRole('button', { name: 'Load older messages' })
+    ).toBeInTheDocument();
+  });
+
+  test('hides "Load older messages" button when has_more is false', () => {
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'c1',
+            title: 'Chat',
+            createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+            lastMessageAt: new Date('2026-01-01T01:00:00.000Z').toISOString(),
+          },
+        ],
+        activeConversationId: 'c1',
+        messagesByConversationId: {
+          c1: [
+            {
+              id: 'm1',
+              conversationId: 'c1',
+              role: 'user',
+              content: 'Hello',
+              createdAt: new Date('2026-01-01T01:00:00.000Z').toISOString(),
+            },
+          ],
+        },
+        hasPreviousMessagesByConversationId: { c1: false },
+      });
+    });
+
+    renderAssistant();
+
+    expect(
+      screen.queryByRole('button', { name: 'Load older messages' })
+    ).not.toBeInTheDocument();
+  });
+
+  test('calls loadMoreMessages when "Load older messages" is clicked', async () => {
+    const user = userEvent.setup();
+    const loadMoreSpy = vi.spyOn(useChatStore.getState(), 'loadMoreMessages');
+    loadMoreSpy.mockResolvedValue(undefined);
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'c1',
+            title: 'Chat',
+            createdAt: new Date('2026-01-01T00:00:00.000Z').toISOString(),
+            lastMessageAt: new Date('2026-01-01T01:00:00.000Z').toISOString(),
+          },
+        ],
+        activeConversationId: 'c1',
+        messagesByConversationId: {
+          c1: [
+            {
+              id: 'm1',
+              conversationId: 'c1',
+              role: 'user',
+              content: 'Hello',
+              createdAt: new Date('2026-01-01T01:00:00.000Z').toISOString(),
+            },
+          ],
+        },
+        hasPreviousMessagesByConversationId: { c1: true },
+      });
+    });
+
+    renderAssistant();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Load older messages' })
+    );
+
+    await waitFor(() => expect(loadMoreSpy).toHaveBeenCalledWith('c1'));
   });
 });

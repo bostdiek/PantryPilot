@@ -1,0 +1,47 @@
+# Unsloth Training Environment for PantryPilot SLM
+# Used for DAPT, SFT, and GRPO training on Azure ML
+#
+# Install docs: https://unsloth.ai/docs/get-started/install/conda-install
+# Follows the official Unsloth conda install pattern:
+#   1. Install pytorch + pytorch-cuda from conda channels (pins CUDA version)
+#   2. pip install unsloth (respects existing torch, pulls all transitive deps)
+#
+# CUDA note: For torch > 2.6.9 only CUDA 11.8/12.6/12.8/13.0 are supported.
+# We pin pytorch-cuda=12.1 which constrains torch to <=2.6.x automatically.
+#
+# Base image: acpt-pytorch-2.2-cuda12.1 (provides CUDA 12.1 runtime drivers)
+name: unsloth-training
+channels:
+  - pytorch
+  - nvidia
+  - xformers
+  - conda-forge
+  - defaults
+dependencies:
+  # Conda-installed PyTorch + CUDA toolkit (official Unsloth conda pattern)
+  - python=3.11
+  - pytorch
+  - pytorch-cuda=12.1
+  - cudatoolkit
+  - xformers
+  - pip
+  - pip:
+    # Unsloth — respects conda-installed torch; installs trl, transformers,
+    # datasets, accelerate, peft, bitsandbytes, torchvision, torchao,
+    # sentencepiece, pillow, protobuf, etc. automatically.
+    - unsloth
+
+    # MLflow for experiment tracking
+    - mlflow>=2.10.0
+    - azureml-mlflow>=1.55.0
+
+    # Azure ML SDK (for data asset access inside jobs)
+    - azure-ai-ml>=1.12.0
+    - azure-identity>=1.15.0
+
+    # NOTE: mamba_ssm + causal_conv1d for Granite 4.0 are NOT installed here.
+    # They require --no-build-isolation (unsupported in conda yml pip section).
+    # Instead, sft_train.py installs them at runtime when --install_mamba is set.
+
+    # Additional tokenizers used by our training scripts
+    - tiktoken>=0.7.0
