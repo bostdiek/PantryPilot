@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies.db import get_db
@@ -14,15 +16,27 @@ from main import app
 from tests.conftest import _override_get_db_factory
 
 
+@contextmanager
+def _temporary_db_override(override: object):
+    previous_override = app.dependency_overrides.get(get_db)
+    app.dependency_overrides[get_db] = override
+    try:
+        yield
+    finally:
+        if previous_override is None:
+            app.dependency_overrides.pop(get_db, None)
+        else:
+            app.dependency_overrides[get_db] = previous_override
+
+
 class TestHealthCheck:
     """Tests for basic health check endpoint."""
 
     def test_health_check_returns_success(self) -> None:
         """Test basic health check returns healthy status with DB connected."""
-        app.dependency_overrides[get_db] = _override_get_db_factory
-        client = TestClient(app)
-        response = client.get("/api/v1/health")
-        app.dependency_overrides.pop(get_db, None)
+        with _temporary_db_override(_override_get_db_factory):
+            client = TestClient(app)
+            response = client.get("/api/v1/health")
 
         assert response.status_code == 200
         data = response.json()
@@ -32,12 +46,39 @@ class TestHealthCheck:
         assert "SmartMealPlanner" in data["data"]["message"]
         assert data["message"] == "Health check successful"
 
+    def test_health_check_returns_degraded_when_db_ping_fails(self) -> None:
+        """Test health check degrades when DB ping fails."""
+
+        class _FailingSession:
+            async def execute(self, _stmt: object) -> object:
+                raise SQLAlchemyError("db unavailable")
+
+            async def close(self) -> None:
+                return None
+
+        async def _override_failing_db():
+            session = _FailingSession()
+            try:
+                yield session
+            finally:
+                await session.close()
+
+        with _temporary_db_override(_override_failing_db):
+            client = TestClient(app)
+            response = client.get("/api/v1/health")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert data["data"]["status"] == "degraded"
+        assert data["data"]["database"] == "disconnected"
+        assert data["message"] == "Health check successful"
+
     def test_health_check_response_structure(self) -> None:
         """Test health check response matches ApiResponse schema."""
-        app.dependency_overrides[get_db] = _override_get_db_factory
-        client = TestClient(app)
-        response = client.get("/api/v1/health")
-        app.dependency_overrides.pop(get_db, None)
+        with _temporary_db_override(_override_get_db_factory):
+            client = TestClient(app)
+            response = client.get("/api/v1/health")
 
         data = response.json()
         assert "success" in data

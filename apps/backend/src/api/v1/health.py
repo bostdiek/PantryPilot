@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
@@ -13,6 +15,7 @@ from schemas.api import ApiResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+DB_HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
 
 
 @router.get("/health", response_model=ApiResponse[dict[str, str]])
@@ -21,9 +24,12 @@ async def health_check(
 ) -> ApiResponse[dict[str, str]]:
     """Health check endpoint for monitoring and load balancer health checks."""
     try:
-        await db.execute(select(func.now()))
+        await asyncio.wait_for(
+            db.execute(select(func.now())),
+            timeout=DB_HEALTH_CHECK_TIMEOUT_SECONDS,
+        )
         db_status = "connected"
-    except Exception:
+    except (TimeoutError, SQLAlchemyError, OSError):
         logger.exception("Health check DB ping failed")
         db_status = "disconnected"
 
