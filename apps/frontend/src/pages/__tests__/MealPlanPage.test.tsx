@@ -233,6 +233,24 @@ describe('MealPlanPage', () => {
     expect(loadSpy).toHaveBeenCalledWith('2025-01-05');
   });
 
+  it('does not reset back to current week after navigating to another week', async () => {
+    const user = userEvent.setup();
+    const loadSpy = vi
+      .spyOn(useMealPlanStore.getState(), 'loadWeek')
+      .mockResolvedValue(undefined);
+
+    render(<MealPlanPage />);
+    const initialCalls = loadSpy.mock.calls.length;
+
+    const nextBtns = screen.getAllByRole('button', { name: /Next week/i });
+    await user.click(nextBtns[0]);
+
+    // Given weekStartDate is 2025-01-12 in beforeEach, next week is 2025-01-19
+    expect(loadSpy).toHaveBeenCalledWith('2025-01-19');
+    expect(loadSpy.mock.calls.length).toBe(initialCalls + 1);
+    expect(loadSpy.mock.calls.at(-1)?.[0]).toBe('2025-01-19');
+  });
+
   it('opens recipe preview when clicking on recipe name', async () => {
     const user = userEvent.setup();
 
