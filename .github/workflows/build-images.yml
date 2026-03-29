@@ -107,7 +107,7 @@ jobs:
       - name: Purge old ACR images
         run: |
           az acr run \
-            --cmd "acr purge --filter '${{ env.IMAGE_NAME }}:.*' --ago 7d --untagged --keep 5" \
+            --cmd "acr purge --filter '${{ env.IMAGE_NAME }}:[0-9a-f]{40}' --ago 7d --untagged --keep 5" \
             --registry ${{ secrets.ACR_NAME }} \
             /dev/null || echo "⚠️ ACR purge failed (non-blocking)"
 
