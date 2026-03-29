@@ -91,8 +91,20 @@ beforeEach(() => {
   });
 });
 
+// Prevent real network requests during render to avoid async console errors
+// that race with vitest environment teardown (EnvironmentTeardownError).
+beforeEach(() => {
+  vi.spyOn(global, 'fetch').mockResolvedValue(
+    new Response(JSON.stringify({ success: true, data: null }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  );
+});
+
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
 });
 
 describe('MealPlanPage - Mobile Recipe Title Visibility', () => {
