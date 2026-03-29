@@ -16,11 +16,25 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/health", response_model=ApiResponse[dict[str, str]])
-def health_check() -> ApiResponse[dict[str, str]]:
+async def health_check(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ApiResponse[dict[str, str]]:
     """Health check endpoint for monitoring and load balancer health checks."""
+    try:
+        await db.execute(select(func.now()))
+        db_status = "connected"
+    except Exception:
+        logger.exception("Health check DB ping failed")
+        db_status = "disconnected"
+
+    status = "healthy" if db_status == "connected" else "degraded"
     return ApiResponse(
         success=True,
-        data={"status": "healthy", "message": "SmartMealPlanner API is running"},
+        data={
+            "status": status,
+            "database": db_status,
+            "message": "SmartMealPlanner API is running",
+        },
         message="Health check successful",
     )
 

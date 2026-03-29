@@ -9,28 +9,35 @@ import pytest_asyncio
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from dependencies.db import get_db
 from main import app
+from tests.conftest import _override_get_db_factory
 
 
 class TestHealthCheck:
     """Tests for basic health check endpoint."""
 
     def test_health_check_returns_success(self) -> None:
-        """Test basic health check returns healthy status."""
+        """Test basic health check returns healthy status with DB connected."""
+        app.dependency_overrides[get_db] = _override_get_db_factory
         client = TestClient(app)
         response = client.get("/api/v1/health")
+        app.dependency_overrides.pop(get_db, None)
 
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["data"]["status"] == "healthy"
+        assert data["data"]["database"] == "connected"
         assert "SmartMealPlanner" in data["data"]["message"]
         assert data["message"] == "Health check successful"
 
     def test_health_check_response_structure(self) -> None:
         """Test health check response matches ApiResponse schema."""
+        app.dependency_overrides[get_db] = _override_get_db_factory
         client = TestClient(app)
         response = client.get("/api/v1/health")
+        app.dependency_overrides.pop(get_db, None)
 
         data = response.json()
         assert "success" in data
@@ -38,6 +45,7 @@ class TestHealthCheck:
         assert "message" in data
         assert isinstance(data["data"], dict)
         assert "status" in data["data"]
+        assert "database" in data["data"]
 
 
 @pytest.mark.asyncio
