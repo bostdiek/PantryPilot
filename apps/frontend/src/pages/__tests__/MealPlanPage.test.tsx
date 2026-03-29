@@ -237,18 +237,39 @@ describe('MealPlanPage', () => {
     const user = userEvent.setup();
     const loadSpy = vi
       .spyOn(useMealPlanStore.getState(), 'loadWeek')
-      .mockResolvedValue(undefined);
+      .mockImplementation(async (weekStartDate: string) => {
+        // Simulate real loadWeek behavior by updating the store's currentWeek.weekStartDate
+        useMealPlanStore.setState((state: any) => ({
+          ...state,
+          currentWeek: {
+            ...state.currentWeek,
+            weekStartDate,
+          },
+        }));
+      });
+    // Clear any call history from previous tests that may have reused this spy
+    loadSpy.mockClear();
 
     render(<MealPlanPage />);
-    const initialCalls = loadSpy.mock.calls.length;
 
     const nextBtns = screen.getAllByRole('button', { name: /Next week/i });
     await user.click(nextBtns[0]);
 
     // Given weekStartDate is 2025-01-12 in beforeEach, next week is 2025-01-19
-    expect(loadSpy).toHaveBeenCalledWith('2025-01-19');
-    expect(loadSpy.mock.calls.length).toBe(initialCalls + 1);
-    expect(loadSpy.mock.calls.at(-1)?.[0]).toBe('2025-01-19');
+    await waitFor(() => {
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+      expect(loadSpy).toHaveBeenCalledWith('2025-01-19');
+    });
+
+    // Allow any effects reacting to currentWeek.weekStartDate to run
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Ensure we did not reset back to the original current week (2025-01-12)
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).not.toHaveBeenCalledWith('2025-01-12');
+    expect(
+      useMealPlanStore.getState().currentWeek?.weekStartDate
+    ).toBe('2025-01-19');
   });
 
   it('opens recipe preview when clicking on recipe name', async () => {
