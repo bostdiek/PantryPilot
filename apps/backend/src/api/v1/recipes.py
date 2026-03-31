@@ -636,7 +636,7 @@ async def list_recipes(
 
     Use include_full_recipe=false for token-optimized listings (agent use case).
     """
-    limit = max(1, min(limit, 50))
+    limit = max(1, min(limit, 500))
     offset = max(0, offset)
 
     # Build filters
@@ -648,7 +648,7 @@ async def list_recipes(
         difficulty=difficulty,
     )
 
-    base_q = select(Recipe)
+    base_q = select(Recipe).order_by(Recipe.name)
     if filters:
         base_q = base_q.where(and_(*filters))
 

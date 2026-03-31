@@ -201,3 +201,27 @@ async def test_search_recipes_token_efficiency(async_client: AsyncClient) -> Non
             f"but only reduced by {token_reduction_pct:.1f}% "
             f"(compact: {compact_tokens}, full: {full_tokens})"
         )
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_accepts_large_limit(async_client: AsyncClient) -> None:
+    """Test that a limit of 500 is accepted and not clamped to 50."""
+    response = await async_client.get("/api/v1/recipes/?limit=500")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()["data"]
+    # The returned limit should reflect the requested 500, not be clamped to 50
+    assert data["limit"] == 500
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_limit_cap(async_client: AsyncClient) -> None:
+    """Test that limits above 500 are clamped to 500, not 50."""
+    response = await async_client.get("/api/v1/recipes/?limit=1000")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()["data"]
+    # Should be clamped at 500 max, not 50
+    assert data["limit"] == 500
