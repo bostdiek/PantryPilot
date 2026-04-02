@@ -648,7 +648,7 @@ async def list_recipes(
         difficulty=difficulty,
     )
 
-    base_q = select(Recipe).order_by(Recipe.name)
+    base_q = select(Recipe).order_by(Recipe.name, Recipe.id)
     if filters:
         base_q = base_q.where(and_(*filters))
 
