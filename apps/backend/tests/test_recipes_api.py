@@ -6,7 +6,37 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
+from api.v1.recipes import list_recipes
 from schemas.recipes import RecipeCategory, RecipeDifficulty
+
+
+class _RecordingResult:
+    """Minimal SQLAlchemy-like result for route unit tests."""
+
+    def __init__(self, *, total: int | None = None) -> None:
+        self._total = total
+
+    def scalar(self) -> int | None:
+        return self._total
+
+    def scalars(self) -> "_RecordingResult":
+        return self
+
+    def all(self) -> list[object]:
+        return []
+
+
+class _RecordingSession:
+    """Capture executed statements while returning empty query results."""
+
+    def __init__(self) -> None:
+        self.statements: list[object] = []
+
+    async def execute(self, stmt: object) -> _RecordingResult:
+        self.statements.append(stmt)
+        if len(self.statements) == 1:
+            return _RecordingResult(total=0)
+        return _RecordingResult()
 
 
 @pytest.mark.asyncio
@@ -201,3 +231,49 @@ async def test_search_recipes_token_efficiency(async_client: AsyncClient) -> Non
             f"but only reduced by {token_reduction_pct:.1f}% "
             f"(compact: {compact_tokens}, full: {full_tokens})"
         )
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_accepts_large_limit(async_client: AsyncClient) -> None:
+    """Test that a limit of 500 is accepted and not clamped to 50."""
+    response = await async_client.get("/api/v1/recipes/?limit=500")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()["data"]
+    # The returned limit should reflect the requested 500, not be clamped to 50
+    assert data["limit"] == 500
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_limit_cap(async_client: AsyncClient) -> None:
+    """Test that limits above 500 are clamped to 500, not 50."""
+    response = await async_client.get("/api/v1/recipes/?limit=1000")
+
+    assert response.status_code == status.HTTP_200_OK
+
+    data = response.json()["data"]
+    # Should be clamped at 500 max, not 50
+    assert data["limit"] == 500
+
+
+@pytest.mark.asyncio
+async def test_list_recipes_orders_query_by_title_then_id() -> None:
+    """Test that the list query orders recipes by title with a stable tie-breaker."""
+    db = _RecordingSession()
+    current_user = type(
+        "CurrentUser",
+        (),
+        {"id": uuid.uuid4(), "is_admin": False},
+    )()
+
+    await list_recipes(
+        db=db,
+        current_user=current_user,
+        include_full_recipe=False,
+    )
+
+    list_statement = db.statements[1]
+    compiled = str(list_statement.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "ORDER BY recipe_names.name, recipe_names.id" in compiled
