@@ -75,12 +75,13 @@ const MealPlanPage: FC = () => {
     useMealPlanStore.getState().markCooked(entryId);
   }, []);
 
-  // Load week on mount or reload if the current week doesn't match browser's local week
+  // Load local current week on initial mount only.
+  // Do not auto-reset after user navigates to another week.
   useEffect(() => {
     const localWeekStart = toLocalYyyyMmDd(getLocalStartOfSundayWeek(today));
 
-    // Load if we don't have a week, or if the current week doesn't match the local week
-    if (!currentWeek || currentWeek.weekStartDate !== localWeekStart) {
+    // Load only when no week has been loaded yet.
+    if (!currentWeek) {
       void loadWeek(localWeekStart);
     }
   }, [currentWeek, loadWeek, today]);
