@@ -2,19 +2,35 @@
 
 from __future__ import annotations
 
+import socket
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
+from fastapi import HTTPException
 
 from services.ai.html_extractor import HTMLExtractionService
+
+
+@pytest.fixture
+def mock_recipe_html() -> str:
+    return """
+        <html>
+            <body>
+                <article class="recipe">
+                    <h1>Chicken Parmesan</h1>
+                    <p>Crispy chicken with marinara.</p>
+                    <script>alert('evil script')</script>
+                </article>
+            </body>
+        </html>
+        """
 
 
 def test_validate_url_good_and_bad():
     extractor = HTMLExtractionService()
     extractor._validate_url("https://example.com/recipe")
     extractor._validate_url("http://example.com/recipe")
-
-    from fastapi import HTTPException
 
     bad_urls = [
         "not-a-url",
@@ -27,6 +43,28 @@ def test_validate_url_good_and_bad():
     for u in bad_urls:
         with pytest.raises(HTTPException):
             extractor._validate_url(u)
+
+
+def test_validate_url_allows_globally_routable_reserved_ipv6_answer(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    extractor = HTMLExtractionService()
+
+    def fake_getaddrinfo(host: str, *args: object, **kwargs: object):
+        return [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("23.185.0.4", 0)),
+            (
+                socket.AF_INET6,
+                socket.SOCK_STREAM,
+                6,
+                "",
+                ("aaaa:2620:12a:8001::4", 0, 0, 0),
+            ),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    extractor._validate_url("https://alberscorn.com/sweet-corn-bread/")
 
 
 @pytest.mark.asyncio
@@ -65,6 +103,34 @@ async def test_http_error():
 
         with pytest.raises(HTTPException):
             await extractor.fetch_and_sanitize("https://example.com/missing")
+
+
+@pytest.mark.asyncio
+async def test_fetch_html_reports_bot_protection_challenge() -> None:
+    extractor = HTMLExtractionService()
+    request = httpx.Request("GET", "https://www.ambitiouskitchen.com/recipe")
+    response = httpx.Response(
+        403,
+        request=request,
+        headers={
+            "content-type": "text/html; charset=UTF-8",
+            "server": "cloudflare",
+            "cf-mitigated": "challenge",
+        },
+        text="Just a moment...",
+    )
+
+    with patch("httpx.AsyncClient") as mock_client:
+        mock_async = mock_client.return_value.__aenter__.return_value
+        mock_async.get.return_value = response
+
+        with pytest.raises(HTTPException) as exc:
+            await extractor._fetch_html(
+                "https://www.ambitiouskitchen.com/lemon-blueberry-sweet-rolls/"
+            )
+
+    assert exc.value.status_code == 422
+    assert "blocking automated access" in str(exc.value.detail)
 
 
 @pytest.mark.asyncio
