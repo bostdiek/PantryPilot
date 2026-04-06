@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import HTMLResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from api.v1.api import api_router
@@ -17,10 +18,14 @@ from core.error_handler import (
     setup_logging,
 )
 from core.middleware import CorrelationIdMiddleware
+from core.observability import configure_observability
 from core.scheduler import scheduler_lifespan
 
 
 settings = get_settings()
+
+# Configure OpenTelemetry/Azure Monitor during startup when enabled
+configure_observability()
 
 # Setup logging
 setup_logging()
@@ -80,7 +85,13 @@ app.add_exception_handler(RequestValidationError, global_exception_handler)
 # Configure CORS - enabled for local development and test environments
 # In production, CORS is handled by Azure Container Apps at the infrastructure level
 if settings.ENVIRONMENT not in ("production",):
-    origins = validate_cors_origins(settings.CORS_ORIGINS)
+    configured_origins = settings.CORS_ORIGINS
+    origin_list = (
+        configured_origins
+        if isinstance(configured_origins, list)
+        else configured_origins.split(",")
+    )
+    origins = validate_cors_origins(origin_list)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=origins,
@@ -98,14 +109,14 @@ app.include_router(api_router, prefix="/api/v1")
 
 # Mount OpenAPI docs under /api/v1/docs and /api/v1/redoc
 @app.get("/api/v1/docs", include_in_schema=False)
-def custom_swagger_ui_html():
+def custom_swagger_ui_html() -> HTMLResponse:
     return get_swagger_ui_html(
         openapi_url="/openapi.json", title="SmartMealPlanner API Docs"
     )
 
 
 @app.get("/api/v1/redoc", include_in_schema=False)
-def redoc_html():
+def redoc_html() -> HTMLResponse:
     return get_redoc_html(
         openapi_url="/openapi.json", title="SmartMealPlanner API Redoc"
     )

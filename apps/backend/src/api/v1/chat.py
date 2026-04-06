@@ -32,7 +32,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.config import get_settings
-from core.observability import get_tracer
+from core.error_handler import get_correlation_id
+from core.observability import (
+    ProductTelemetryEventName,
+    build_product_telemetry_attributes,
+    get_tracer,
+)
 from core.ratelimit import check_rate_limit
 from crud.user_preferences import UserPreferencesCRUD
 from dependencies.auth import get_current_user
@@ -1012,7 +1017,7 @@ def _extract_interactive_blocks_from_tool_result(
     return blocks
 
 
-async def _handle_agent_stream_event(
+async def _handle_agent_stream_event(  # noqa: C901
     event: object,
     *,
     conversation_id: UUID,
@@ -1021,6 +1026,7 @@ async def _handle_agent_stream_event(
     db: AsyncSession,
     tool_calls_by_id: dict[str, _ToolCallStart],
     tool_call_order: list[int],
+    request_id: str,
 ) -> tuple[list[str], object | None, list[dict[str, Any]]]:
     """Handle a single agent stream event and return SSE events to emit.
 
@@ -1040,6 +1046,19 @@ async def _handle_agent_stream_event(
             started_at=datetime.now(UTC),
             call_order=current_order,
         )
+        with _tracer.start_as_current_span(f"tool_start:{tool_name}") as span:
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.ASSISTANT_TOOL_STARTED,
+                feature_name="assistant",
+                request_id=request_id,
+                conversation_id=str(conversation_id),
+                tool_count=1,
+                tool_names=[tool_name],
+                streamed=True,
+            ).items():
+                span.set_attribute(key, value)
+            span.set_attribute("tool_call_id", event.tool_call_id)
+            span.set_attribute("call_order", current_order)
         return (
             [
                 ChatSseEvent(
@@ -1068,6 +1087,18 @@ async def _handle_agent_stream_event(
 
         # Create tracing span for tool call
         with _tracer.start_as_current_span(f"tool_call:{tool_name}") as span:
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
+                feature_name="assistant",
+                request_id=request_id,
+                conversation_id=str(conversation_id),
+                success=True,
+                latency_ms=int(duration_ms),
+                tool_count=1,
+                tool_names=[tool_name],
+                streamed=True,
+            ).items():
+                span.set_attribute(key, value)
             span.set_attribute("tool_name", tool_name)
             span.set_attribute("tool_call_id", event.tool_call_id)
             span.set_attribute("call_order", call_order)
@@ -1338,6 +1369,7 @@ async def stream_chat_message(  # noqa: C901
     )
 
     async def event_stream() -> AsyncGenerator[str, None]:  # noqa: C901
+        request_id = get_correlation_id()
         yield ChatSseEvent(
             event="status",
             conversation_id=conversation_id,
@@ -1346,6 +1378,7 @@ async def stream_chat_message(  # noqa: C901
         ).to_sse()
         try:
             run_started_at = time.monotonic()
+            settings = get_settings()
             tool_calls_by_id: dict[str, _ToolCallStart] = {}
             # Counter for tool call ordering (use list for mutability in nested scope)
             tool_call_order: list[int] = [0]
@@ -1355,159 +1388,195 @@ async def stream_chat_message(  # noqa: C901
             agent_result: object | None = None  # Avoid NameError if stream ends early
             # Track blocks emitted from tool results (e.g., recipe cards)
             tool_emitted_blocks: list[dict[str, Any]] = []
+            with _tracer.start_as_current_span("assistant_message") as message_span:
+                for key, value in build_product_telemetry_attributes(
+                    event=ProductTelemetryEventName.ASSISTANT_MESSAGE_STARTED,
+                    feature_name="assistant",
+                    request_id=request_id,
+                    conversation_id=str(conversation_id),
+                    provider=settings.LLM_PROVIDER,
+                    model_name=settings.CHAT_MODEL,
+                    streamed=True,
+                ).items():
+                    message_span.set_attribute(key, value)
+                message_span.set_attribute("message_id", str(message_id))
 
-            # Extract timezone context from client
-            client_ctx = payload.client_context or {}
-            user_timezone = client_ctx.get("user_timezone", "UTC")
-            client_datetime_str = client_ctx.get("current_datetime")
+                # Extract timezone context from client
+                client_ctx = payload.client_context or {}
+                user_timezone = client_ctx.get("user_timezone", "UTC")
+                client_datetime_str = client_ctx.get("current_datetime")
 
-            # Validate client-provided timestamp with 36-hour max skew tolerance,
-            # fall back to server time when invalid or too skewed
-            current_dt = _resolve_current_datetime(
-                client_datetime_str, server_now=datetime.now(UTC)
-            )
+                # Validate client-provided timestamp with 36-hour max skew tolerance,
+                # fall back to server time when invalid or too skewed
+                current_dt = _resolve_current_datetime(
+                    client_datetime_str, server_now=datetime.now(UTC)
+                )
 
-            # Load user preferences for personalization
-            user_prefs_crud = UserPreferencesCRUD()
-            user_prefs = await user_prefs_crud.get_by_user_id(db, current_user.id)
+                # Load user preferences for personalization
+                user_prefs_crud = UserPreferencesCRUD()
+                user_prefs = await user_prefs_crud.get_by_user_id(db, current_user.id)
 
-            # Load memory document content
-            memory_service = MemoryUpdateService(db)
-            memory_doc = await memory_service.get_memory_document(current_user.id)
-            memory_content = memory_doc.content if memory_doc else None
+                # Load memory document content
+                memory_service = MemoryUpdateService(db)
+                memory_doc = await memory_service.get_memory_document(current_user.id)
+                memory_content = memory_doc.content if memory_doc else None
 
-            deps = ChatAgentDeps(
-                db=db,
-                user=current_user,
-                current_datetime=current_dt,
-                user_timezone=user_timezone,
-                user_preferences=user_prefs,
-                memory_content=memory_content,
-            )
-            async for agent_event in agent.run_stream_events(
-                payload.content, deps=deps, message_history=message_history
-            ):
-                sse_events, result, emitted_blocks = await _handle_agent_stream_event(
-                    agent_event,
-                    conversation_id=conversation_id,
-                    message_id=message_id,
-                    user_id=current_user.id,
+                deps = ChatAgentDeps(
                     db=db,
-                    tool_calls_by_id=tool_calls_by_id,
-                    tool_call_order=tool_call_order,
+                    user=current_user,
+                    current_datetime=current_dt,
+                    user_timezone=user_timezone,
+                    user_preferences=user_prefs,
+                    memory_content=memory_content,
                 )
-
-                # Track memory updates and warn if excessive
-                if isinstance(agent_event, FunctionToolCallEvent):
-                    tool_name = _extract_tool_name(agent_event.part)
-                    if tool_name == "update_user_memory":
-                        memory_update_count += 1
-                        if memory_update_count > 2:
-                            logger.warning(
-                                f"Excessive memory updates detected "
-                                f"(count={memory_update_count}) in conversation "
-                                f"{conversation_id} - possible agent loop"
-                            )
-
-                for sse_line in sse_events:
-                    yield sse_line
-                if emitted_blocks:
-                    tool_emitted_blocks.extend(emitted_blocks)
-                if result is not None:
-                    agent_result = result  # Full result object with new_messages()
-
-            # Extract output for normalization
-            if hasattr(agent_result, "output"):
-                raw_output = agent_result.output
-            elif hasattr(agent_result, "data"):
-                raw_output = agent_result.data
-            else:
-                raw_output = agent_result
-
-            message = normalize_agent_output(raw_output)
-            for block in message.blocks:
-                if isinstance(block, TextBlock):
-                    yield ChatSseEvent(
-                        event="message.delta",
+                async for agent_event in agent.run_stream_events(
+                    payload.content, deps=deps, message_history=message_history
+                ):
+                    (
+                        sse_events,
+                        result,
+                        emitted_blocks,
+                    ) = await _handle_agent_stream_event(
+                        agent_event,
                         conversation_id=conversation_id,
                         message_id=message_id,
-                        data={"delta": block.text},
-                    ).to_sse()
+                        user_id=current_user.id,
+                        db=db,
+                        tool_calls_by_id=tool_calls_by_id,
+                        tool_call_order=tool_call_order,
+                        request_id=request_id,
+                    )
+
+                    # Track memory updates and warn if excessive
+                    if isinstance(agent_event, FunctionToolCallEvent):
+                        tool_name = _extract_tool_name(agent_event.part)
+                        if tool_name == "update_user_memory":
+                            memory_update_count += 1
+                            if memory_update_count > 2:
+                                logger.warning(
+                                    f"Excessive memory updates detected "
+                                    f"(count={memory_update_count}) in conversation "
+                                    f"{conversation_id} - possible agent loop"
+                                )
+
+                    for sse_line in sse_events:
+                        yield sse_line
+                    if emitted_blocks:
+                        tool_emitted_blocks.extend(emitted_blocks)
+                    if result is not None:
+                        agent_result = result  # Full result object with new_messages()
+
+                # Extract output for normalization
+                if hasattr(agent_result, "output"):
+                    raw_output = agent_result.output
+                elif hasattr(agent_result, "data"):
+                    raw_output = agent_result.data
                 else:
-                    yield ChatSseEvent(
-                        event="blocks.append",
+                    raw_output = agent_result
+
+                message = normalize_agent_output(raw_output)
+                for block in message.blocks:
+                    if isinstance(block, TextBlock):
+                        yield ChatSseEvent(
+                            event="message.delta",
+                            conversation_id=conversation_id,
+                            message_id=message_id,
+                            data={"delta": block.text},
+                        ).to_sse()
+                    else:
+                        yield ChatSseEvent(
+                            event="blocks.append",
+                            conversation_id=conversation_id,
+                            message_id=message_id,
+                            data={"blocks": [block.model_dump()]},
+                        ).to_sse()
+
+                # Update assistant message with LLM + tool-emitted blocks.
+                db_result = await db.execute(
+                    select(ChatMessage).where(ChatMessage.id == message_id)
+                )
+                assistant_message = db_result.scalar_one()
+                all_blocks = [block.model_dump() for block in message.blocks]
+                all_blocks.extend(tool_emitted_blocks)
+                assistant_message.content_blocks = all_blocks
+                assistant_message.message_metadata = {"streaming": False}
+
+                # Update conversation activity timestamp
+                await _update_conversation_activity(db, conversation_id=conversation_id)
+
+                # Capture training sample before commit so flush() joins the
+                # same transaction — avoids nested-transaction conflicts with
+                # asyncpg
+                try:
+                    # Build tool calls data from completed tool calls
+                    tool_calls_data = None
+                    if tool_calls_by_id:
+                        tool_calls_data = {
+                            call_id: {
+                                "tool_name": tc.tool_name,
+                                "arguments": tc.arguments,
+                            }
+                            for call_id, tc in tool_calls_by_id.items()
+                        }
+
+                    # Build training data using helper functions.
+                    # Pass the agent so tool definitions are captured alongside
+                    # the conversation — keeps training data in sync with code.
+                    history_data = _build_training_prompt_data(
+                        agent_result, agent, deps
+                    )
+                    raw_output_for_training = _serialize_raw_output_for_training(
+                        raw_output
+                    )
+
+                    prompt_tokens, completion_tokens, _ = _extract_usage_metrics(
+                        agent_result
+                    )
+                    model_name, model_version = _extract_model_metadata(agent_result)
+                    latency_ms = int((time.monotonic() - run_started_at) * 1000)
+
+                    await capture_training_sample(
+                        db,
                         conversation_id=conversation_id,
                         message_id=message_id,
-                        data={"blocks": [block.model_dump()]},
-                    ).to_sse()
+                        user_id=current_user.id,
+                        raw_prompt=json.dumps(history_data),
+                        raw_response=raw_output_for_training,
+                        tool_calls=tool_calls_data,
+                        model_name=model_name,
+                        model_version=model_version,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        latency_ms=latency_ms,
+                        user=current_user,  # Pass user for synthetic detection
+                    )
+                except Exception as capture_exc:
+                    logger.warning("Failed to capture training sample: %s", capture_exc)
 
-            # Update the assistant message with the final response content
-            # Include both LLM text blocks and tool-emitted blocks (e.g., recipe cards)
-            db_result = await db.execute(
-                select(ChatMessage).where(ChatMessage.id == message_id)
-            )
-            assistant_message = db_result.scalar_one()
-            all_blocks = [block.model_dump() for block in message.blocks]
-            all_blocks.extend(tool_emitted_blocks)
-            assistant_message.content_blocks = all_blocks
-            assistant_message.message_metadata = {"streaming": False}
-
-            # Update conversation activity timestamp
-            await _update_conversation_activity(db, conversation_id=conversation_id)
-
-            # Capture training sample before commit so flush() joins the
-            # same transaction — avoids nested-transaction conflicts with
-            # asyncpg
-            try:
-                # Build tool calls data from completed tool calls
-                tool_calls_data = None
-                if tool_calls_by_id:
-                    tool_calls_data = {
-                        call_id: {
-                            "tool_name": tc.tool_name,
-                            "arguments": tc.arguments,
-                        }
-                        for call_id, tc in tool_calls_by_id.items()
-                    }
-
-                # Build training data using helper functions.
-                # Pass the agent so tool definitions are captured alongside
-                # the conversation — keeps training data in sync with code.
-                history_data = _build_training_prompt_data(agent_result, agent, deps)
-                raw_output_for_training = _serialize_raw_output_for_training(raw_output)
-
-                prompt_tokens, completion_tokens, _ = _extract_usage_metrics(
-                    agent_result
-                )
-                model_name, model_version = _extract_model_metadata(agent_result)
+                await db.commit()
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
+                tool_names = sorted({tc.tool_name for tc in tool_calls_by_id.values()})
+                for key, value in build_product_telemetry_attributes(
+                    event=ProductTelemetryEventName.ASSISTANT_MESSAGE_COMPLETED,
+                    feature_name="assistant",
+                    request_id=request_id,
+                    conversation_id=str(conversation_id),
+                    provider=settings.LLM_PROVIDER,
+                    model_name=settings.CHAT_MODEL,
+                    success=True,
+                    latency_ms=latency_ms,
+                    tool_count=len(tool_calls_by_id),
+                    tool_names=tool_names,
+                    streamed=True,
+                ).items():
+                    message_span.set_attribute(key, value)
 
-                await capture_training_sample(
-                    db,
+                yield ChatSseEvent(
+                    event="message.complete",
                     conversation_id=conversation_id,
                     message_id=message_id,
-                    user_id=current_user.id,
-                    raw_prompt=json.dumps(history_data),
-                    raw_response=raw_output_for_training,
-                    tool_calls=tool_calls_data,
-                    model_name=model_name,
-                    model_version=model_version,
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    latency_ms=latency_ms,
-                    user=current_user,  # Pass user for synthetic detection
-                )
-            except Exception as capture_exc:
-                logger.warning("Failed to capture training sample: %s", capture_exc)
-
-            await db.commit()
-
-            yield ChatSseEvent(
-                event="message.complete",
-                conversation_id=conversation_id,
-                message_id=message_id,
-                data={},
-            ).to_sse()
+                    data={},
+                ).to_sse()
         except Exception as exc:
             try:
                 # Ensure the session isn't stuck in a failed transaction before
@@ -1515,6 +1584,30 @@ async def stream_chat_message(  # noqa: C901
                 await db.rollback()
             except Exception:
                 logger.exception("Failed to rollback session after streaming error")
+            try:
+                settings = get_settings()
+                latency_ms = int((time.monotonic() - run_started_at) * 1000)
+                for key, value in build_product_telemetry_attributes(
+                    event=ProductTelemetryEventName.ASSISTANT_MESSAGE_FAILED,
+                    feature_name="assistant",
+                    request_id=request_id,
+                    conversation_id=str(conversation_id),
+                    provider=settings.LLM_PROVIDER,
+                    model_name=settings.CHAT_MODEL,
+                    success=False,
+                    latency_ms=latency_ms,
+                    error_type=type(exc).__name__,
+                    tool_count=len(tool_calls_by_id),
+                    tool_names=sorted(
+                        {tc.tool_name for tc in tool_calls_by_id.values()}
+                    ),
+                    streamed=True,
+                ).items():
+                    _tracer.start_span("assistant_message_error").set_attribute(
+                        key, value
+                    )
+            except Exception:
+                logger.exception("Failed to emit assistant telemetry error attributes")
             # Mark orphaned placeholder message as failed to prevent dangling records
             await _mark_message_as_failed(db, message_id)
 

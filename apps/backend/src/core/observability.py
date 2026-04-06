@@ -39,8 +39,11 @@ import logging
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
+from enum import StrEnum
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
+
+from core.error_handler import get_correlation_id
 
 
 if TYPE_CHECKING:
@@ -58,6 +61,79 @@ _DEFAULT_SERVICE_NAME = "pantrypilot-backend"
 
 # Paths to exclude from automatic tracing (reduce noise for health checks)
 EXCLUDED_URLS = "health,health/,favicon.ico"
+
+
+class ProductTelemetryEventName(StrEnum):
+    """Canonical backend product telemetry event names."""
+
+    ASSISTANT_MESSAGE_STARTED = "assistant_message_started"
+    ASSISTANT_MESSAGE_COMPLETED = "assistant_message_completed"
+    ASSISTANT_MESSAGE_FAILED = "assistant_message_failed"
+    ASSISTANT_TOOL_STARTED = "assistant_tool_started"
+    ASSISTANT_TOOL_COMPLETED = "assistant_tool_completed"
+    URL_IMPORT_STARTED = "url_import_started"
+    URL_IMPORT_STREAM_FALLBACK = "url_import_stream_fallback"
+    URL_IMPORT_COMPLETED = "url_import_completed"
+    URL_IMPORT_FAILED = "url_import_failed"
+    IMAGE_IMPORT_STARTED = "image_import_started"
+    IMAGE_IMPORT_COMPLETED = "image_import_completed"
+    IMAGE_IMPORT_FAILED = "image_import_failed"
+    RECIPE_SEARCH_SUBMITTED = "recipe_search_submitted"
+    RECIPE_SEARCH_RESULT_CLICKED = "recipe_search_result_clicked"
+
+
+def _safe_telemetry_value(value: object) -> bool | float | int | str:
+    """Normalize telemetry values to OpenTelemetry-friendly scalar primitives."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int | float | str):
+        return value
+    return str(value)
+
+
+def build_product_telemetry_attributes(
+    *,
+    event: ProductTelemetryEventName,
+    feature_name: str,
+    request_id: str | None = None,
+    conversation_id: str | None = None,
+    provider: str | None = None,
+    model_name: str | None = None,
+    success: bool | None = None,
+    latency_ms: int | None = None,
+    error_type: str | None = None,
+    tool_count: int | None = None,
+    tool_names: list[str] | None = None,
+    streamed: bool | None = None,
+    cancelled: bool | None = None,
+) -> dict[str, bool | float | int | str]:
+    """Build a bounded metadata-only product telemetry attribute payload."""
+    attrs: dict[str, bool | float | int | str] = {
+        "product.telemetry.event": event.value,
+        "product.telemetry.feature_name": feature_name,
+        "product.telemetry.request_id": request_id or get_correlation_id(),
+    }
+
+    optional: dict[str, object | None] = {
+        "product.telemetry.conversation_id": conversation_id,
+        "product.telemetry.provider": provider,
+        "product.telemetry.model_name": model_name,
+        "product.telemetry.success": success,
+        "product.telemetry.latency_ms": latency_ms,
+        "product.telemetry.error_type": error_type,
+        "product.telemetry.tool_count": tool_count,
+        "product.telemetry.streamed": streamed,
+        "product.telemetry.cancelled": cancelled,
+    }
+
+    for key, value in optional.items():
+        if value is not None:
+            attrs[key] = _safe_telemetry_value(value)
+
+    if tool_names:
+        attrs["product.telemetry.tool_names"] = ",".join(tool_names)
+
+    return attrs
 
 
 def _is_observability_enabled() -> bool:

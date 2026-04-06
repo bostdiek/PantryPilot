@@ -12,6 +12,7 @@ only on request validation, calling the orchestrator service, and shaping respon
 from __future__ import annotations
 
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 from uuid import UUID
@@ -20,7 +21,13 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.observability import get_tracer
+from core.config import get_settings
+from core.error_handler import get_correlation_id
+from core.observability import (
+    ProductTelemetryEventName,
+    build_product_telemetry_attributes,
+    get_tracer,
+)
 from core.ratelimit import check_rate_limit
 from crud.ai_drafts import get_draft_by_id
 from dependencies.auth import get_current_user
@@ -111,63 +118,121 @@ async def extract_recipe_from_url(
 
     Delegates orchestration to the injected service (no module-level wrappers).
     """
-    try:
-        logger.debug(
-            "extract_recipe_from_url: received request: %s",
-            request.model_dump(),
-        )
+    request_id = get_correlation_id()
+    started_at = time.monotonic()
+    settings = get_settings()
 
-        outcome: DraftOutcome[AIDraft] = await ai_service.extract_recipe_from_url(
-            str(request.source_url), db, current_user, request.prompt_override
-        )
-        draft, token, success = outcome.draft, outcome.token, outcome.success
+    with _tracer.start_as_current_span("extract_recipe_from_url") as span:
+        for key, value in build_product_telemetry_attributes(
+            event=ProductTelemetryEventName.URL_IMPORT_STARTED,
+            feature_name="url_import",
+            request_id=request_id,
+            provider=settings.LLM_PROVIDER,
+            model_name=settings.TEXT_MODEL,
+            streamed=False,
+        ).items():
+            span.set_attribute(key, value)
 
-        signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
-        # Ensure expires_at is a timezone-aware datetime for the response model
-        expires = getattr(draft, "expires_at", None)
-        if expires is None:
-            # If draft has no expiry, treat as expired for safety
+        try:
+            logger.debug(
+                "extract_recipe_from_url: received request: %s",
+                request.model_dump(),
+            )
+
+            outcome: DraftOutcome[AIDraft] = await ai_service.extract_recipe_from_url(
+                str(request.source_url), db, current_user, request.prompt_override
+            )
+            draft, token, success = outcome.draft, outcome.token, outcome.success
+
+            signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
+            # Ensure expires_at is a timezone-aware datetime for the response model
+            expires = getattr(draft, "expires_at", None)
+            if expires is None:
+                # If draft has no expiry, treat as expired for safety
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Draft has expired",
+                )
+            expires_dt = _ensure_aware_utc_or_404(expires)
+
+            response_data = AIDraftResponse(
+                draft_id=draft.id,
+                signed_url=signed_url,
+                expires_at=expires_dt,
+                ttl_seconds=DRAFT_TTL_SECONDS,
+            )
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.URL_IMPORT_COMPLETED
+                if success
+                else ProductTelemetryEventName.URL_IMPORT_FAILED,
+                feature_name="url_import",
+                request_id=request_id,
+                provider=settings.LLM_PROVIDER,
+                model_name=settings.TEXT_MODEL,
+                success=bool(success),
+                latency_ms=latency_ms,
+                error_type=outcome.message if not success else None,
+                streamed=False,
+            ).items():
+                span.set_attribute(key, value)
+            return ApiResponse(
+                success=bool(success),
+                data=response_data,
+                message="Recipe extracted successfully"
+                if success
+                else "Recipe not found",
+            )
+        except HTTPException as e:
+            logger.debug(
+                "extract_recipe_from_url: HTTPException raised status=%s detail=%s",
+                e.status_code,
+                getattr(e, "detail", None),
+            )
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.URL_IMPORT_FAILED,
+                feature_name="url_import",
+                request_id=request_id,
+                provider=settings.LLM_PROVIDER,
+                model_name=settings.TEXT_MODEL,
+                success=False,
+                latency_ms=latency_ms,
+                error_type=f"http_{e.status_code}",
+                streamed=False,
+            ).items():
+                span.set_attribute(key, value)
+            if e.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
+                message = e.detail if isinstance(e.detail, str) else "Internal AI error"
+                return JSONResponse(
+                    status_code=e.status_code,
+                    content=ApiResponse(
+                        success=False,
+                        data=None,
+                        message=message,
+                        error={"message": message, "type": "ai_agent_failure"},
+                    ).model_dump(),
+                )
+            raise
+        except Exception as e:  # pragma: no cover - unexpected
+            logger.error("Unexpected error in recipe extraction: %s", e)
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.URL_IMPORT_FAILED,
+                feature_name="url_import",
+                request_id=request_id,
+                provider=settings.LLM_PROVIDER,
+                model_name=settings.TEXT_MODEL,
+                success=False,
+                latency_ms=latency_ms,
+                error_type=type(e).__name__,
+                streamed=False,
+            ).items():
+                span.set_attribute(key, value)
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Draft has expired",
-            )
-        expires_dt = _ensure_aware_utc_or_404(expires)
-
-        response_data = AIDraftResponse(
-            draft_id=draft.id,
-            signed_url=signed_url,
-            expires_at=expires_dt,
-            ttl_seconds=DRAFT_TTL_SECONDS,
-        )
-        return ApiResponse(
-            success=bool(success),
-            data=response_data,
-            message="Recipe extracted successfully" if success else "Recipe not found",
-        )
-    except HTTPException as e:
-        logger.debug(
-            "extract_recipe_from_url: HTTPException raised status=%s detail=%s",
-            e.status_code,
-            getattr(e, "detail", None),
-        )
-        if e.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
-            message = e.detail if isinstance(e.detail, str) else "Internal AI error"
-            return JSONResponse(
-                status_code=e.status_code,
-                content=ApiResponse(
-                    success=False,
-                    data=None,
-                    message=message,
-                    error={"message": message, "type": "ai_agent_failure"},
-                ).model_dump(),
-            )
-        raise
-    except Exception as e:  # pragma: no cover - unexpected
-        logger.error("Unexpected error in recipe extraction: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during recipe extraction",
-        ) from e
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred during recipe extraction",
+            ) from e
 
 
 @router.post(
@@ -175,7 +240,7 @@ async def extract_recipe_from_url(
     response_model=ApiResponse[AIDraftResponse],
     dependencies=[Depends(check_rate_limit)],
 )
-async def extract_recipe_from_image(
+async def extract_recipe_from_image(  # noqa: C901
     files: Annotated[list[UploadFile], File(description="Recipe image files")],
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
@@ -196,84 +261,143 @@ async def extract_recipe_from_image(
     Returns:
         AIDraftResponse with draft_id, signed_url, expires_at, and ttl_seconds
     """
-    try:
-        # Validate and collect file data
-        if not files:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="At least one image file is required",
-            )
+    request_id = get_correlation_id()
+    started_at = time.monotonic()
+    settings = get_settings()
 
-        # Read all files into memory
-        image_data: list[tuple[bytes, str]] = []
-        for file in files:
-            content_type = file.content_type or "application/octet-stream"
-            content = await file.read()
-            image_data.append((content, content_type))
+    with _tracer.start_as_current_span("extract_recipe_from_image") as span:
+        for key, value in build_product_telemetry_attributes(
+            event=ProductTelemetryEventName.IMAGE_IMPORT_STARTED,
+            feature_name="image_import",
+            request_id=request_id,
+            provider=settings.LLM_PROVIDER,
+            model_name=settings.MULTIMODAL_MODEL,
+            streamed=False,
+        ).items():
+            span.set_attribute(key, value)
 
-        # Validate and normalize images
         try:
-            normalized_images = normalize_images(image_data)
-        except ImageFormatError as e:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=str(e),
-            ) from e
-        except ImageSizeLimitError as e:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=str(e),
-            ) from e
+            # Validate and collect file data
+            if not files:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="At least one image file is required",
+                )
 
-        # Delegate orchestration to service (same pattern as extract_recipe_from_url)
-        outcome: DraftOutcome[AIDraft] = await ai_service.extract_recipe_from_images(
-            normalized_images, db, current_user, prompt_override=None
-        )
-        draft, token, success = outcome.draft, outcome.token, outcome.success
+            # Read all files into memory
+            image_data: list[tuple[bytes, str]] = []
+            for file in files:
+                content_type = file.content_type or "application/octet-stream"
+                content = await file.read()
+                image_data.append((content, content_type))
 
-        # Commit the draft so it's visible to the streaming endpoint which uses
-        # a separate database session. Without this commit, the draft created
-        # via flush() is only visible within this transaction and cannot be
-        # retrieved by the subsequent GET request to /extract-recipe-image-stream.
-        await db.commit()
+            # Validate and normalize images
+            try:
+                normalized_images = normalize_images(image_data)
+            except ImageFormatError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail=str(e),
+                ) from e
+            except ImageSizeLimitError as e:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=str(e),
+                ) from e
 
-        # Build response (same as extract_recipe_from_url)
-        signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
-        expires = getattr(draft, "expires_at", None)
-        if expires is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Draft has expired",
+            # Delegate orchestration to service
+            # (same pattern as extract_recipe_from_url)
+            outcome: DraftOutcome[
+                AIDraft
+            ] = await ai_service.extract_recipe_from_images(
+                normalized_images, db, current_user, prompt_override=None
             )
-        expires_dt = _ensure_aware_utc_or_404(expires)
+            draft, token, success = outcome.draft, outcome.token, outcome.success
 
-        response_data = AIDraftResponse(
-            draft_id=draft.id,
-            signed_url=signed_url,
-            expires_at=expires_dt,
-            ttl_seconds=DRAFT_TTL_SECONDS,
-        )
+            # Commit the draft so it's visible to the streaming endpoint which uses
+            # a separate database session. Without this commit, the draft created
+            # via flush() is only visible within this transaction and cannot be
+            # retrieved by the subsequent GET request to /extract-recipe-image-stream.
+            await db.commit()
 
-        return ApiResponse(
-            success=bool(success),
-            data=response_data,
-            message=(
-                "Recipe extracted successfully from image(s)"
+            # Build response (same as extract_recipe_from_url)
+            signed_url = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
+            expires = getattr(draft, "expires_at", None)
+            if expires is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Draft has expired",
+                )
+            expires_dt = _ensure_aware_utc_or_404(expires)
+
+            response_data = AIDraftResponse(
+                draft_id=draft.id,
+                signed_url=signed_url,
+                expires_at=expires_dt,
+                ttl_seconds=DRAFT_TTL_SECONDS,
+            )
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.IMAGE_IMPORT_COMPLETED
                 if success
-                else "No recipe found in image(s)"
-            ),
-        )
+                else ProductTelemetryEventName.IMAGE_IMPORT_FAILED,
+                feature_name="image_import",
+                request_id=request_id,
+                provider=settings.LLM_PROVIDER,
+                model_name=settings.MULTIMODAL_MODEL,
+                success=bool(success),
+                latency_ms=latency_ms,
+                error_type=outcome.message if not success else None,
+                streamed=False,
+            ).items():
+                span.set_attribute(key, value)
 
-    except HTTPException:
-        raise
-    except Exception as e:  # pragma: no cover - unexpected
-        logger.error(
-            "Unexpected error in image recipe extraction: %s", e, exc_info=True
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An unexpected error occurred during image recipe extraction",
-        ) from e
+            return ApiResponse(
+                success=bool(success),
+                data=response_data,
+                message=(
+                    "Recipe extracted successfully from image(s)"
+                    if success
+                    else "No recipe found in image(s)"
+                ),
+            )
+
+        except HTTPException as e:
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.IMAGE_IMPORT_FAILED,
+                feature_name="image_import",
+                request_id=request_id,
+                provider=settings.LLM_PROVIDER,
+                model_name=settings.MULTIMODAL_MODEL,
+                success=False,
+                latency_ms=latency_ms,
+                error_type=f"http_{e.status_code}",
+                streamed=False,
+            ).items():
+                span.set_attribute(key, value)
+            raise
+        except Exception as e:  # pragma: no cover - unexpected
+            logger.error(
+                "Unexpected error in image recipe extraction: %s", e, exc_info=True
+            )
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            for key, value in build_product_telemetry_attributes(
+                event=ProductTelemetryEventName.IMAGE_IMPORT_FAILED,
+                feature_name="image_import",
+                request_id=request_id,
+                provider=settings.LLM_PROVIDER,
+                model_name=settings.MULTIMODAL_MODEL,
+                success=False,
+                latency_ms=latency_ms,
+                error_type=type(e).__name__,
+                streamed=False,
+            ).items():
+                span.set_attribute(key, value)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An unexpected error occurred during image recipe extraction",
+            ) from e
 
 
 # --- Streaming (SSE) extraction endpoint ------------------------------------
