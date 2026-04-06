@@ -6,6 +6,10 @@
  */
 
 import { logger } from '../../lib/logger';
+import {
+  buildTelemetryRequestHeaders,
+  type ProductTelemetryRequestMetadata,
+} from '../../lib/telemetry';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { ApiErrorImpl } from '../../types/api';
 import type {
@@ -55,7 +59,8 @@ export async function streamChatMessage(
   conversationId: string | null,
   content: string,
   callbacks: ChatStreamCallbacks,
-  title?: string
+  title?: string,
+  telemetryMetadata?: ProductTelemetryRequestMetadata
 ): Promise<AbortController> {
   const abortController = new AbortController();
   const API_BASE_URL = getApiBaseUrl();
@@ -71,11 +76,14 @@ export async function streamChatMessage(
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const currentDatetime = new Date().toISOString();
 
+  const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...telemetryHeaders,
         ...getAuthHeaders(),
       },
       body: JSON.stringify({

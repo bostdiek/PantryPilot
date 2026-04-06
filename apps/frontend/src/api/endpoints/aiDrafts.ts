@@ -1,4 +1,8 @@
 import { logger } from '../../lib/logger';
+import {
+  buildTelemetryRequestHeaders,
+  type ProductTelemetryRequestMetadata,
+} from '../../lib/telemetry';
 import { useAuthStore } from '../../stores/useAuthStore';
 import type {
   AIDraftFetchResponse,
@@ -199,7 +203,8 @@ export function extractRecipeStream(
  */
 export async function extractRecipeFromUrl(
   sourceUrl: string,
-  promptOverride?: string
+  promptOverride?: string,
+  telemetryMetadata?: ProductTelemetryRequestMetadata
 ): Promise<AIDraftResponse> {
   const body: { source_url: string; prompt_override?: string } = {
     source_url: sourceUrl,
@@ -214,6 +219,7 @@ export async function extractRecipeFromUrl(
     {
       method: 'POST',
       body: JSON.stringify(body),
+      telemetryMetadata,
     }
   );
 }
@@ -272,7 +278,8 @@ export async function extractRecipeStreamFetch(
   promptOverride: string | undefined,
   onProgress: (event: SSEEvent) => void,
   onComplete: (signedUrl: string, draftId: string) => void,
-  onError: (error: ApiErrorImpl) => void
+  onError: (error: ApiErrorImpl) => void,
+  telemetryMetadata?: ProductTelemetryRequestMetadata
 ): Promise<AbortController> {
   const params = new URLSearchParams({
     source_url: sourceUrl,
@@ -289,6 +296,8 @@ export async function extractRecipeStreamFetch(
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
+  Object.assign(headers, telemetryHeaders);
 
   const API_BASE_URL = getApiBaseUrl();
 
@@ -419,10 +428,14 @@ export async function extractRecipeFromImageStream(
   files: File | File[],
   onProgress: (event: SSEEvent) => void,
   onComplete: (signedUrl: string, draftId: string) => void,
-  onError: (error: ApiErrorImpl) => void
+  onError: (error: ApiErrorImpl) => void,
+  telemetryMetadata?: ProductTelemetryRequestMetadata
 ): Promise<AbortController> {
   const abortController = new AbortController();
-  const headers = getAuthHeaders();
+  const headers = {
+    ...getAuthHeaders(),
+    ...buildTelemetryRequestHeaders(telemetryMetadata),
+  };
   const API_BASE_URL = getApiBaseUrl();
 
   try {
@@ -608,10 +621,14 @@ export async function extractRecipeFromImageStream(
  * @returns Promise with the draft response containing signed_url
  */
 export async function extractRecipeFromImage(
-  files: File | File[]
+  files: File | File[],
+  telemetryMetadata?: ProductTelemetryRequestMetadata
 ): Promise<AIDraftResponse> {
   const formData = createImageUploadFormData(files);
-  const headers = getAuthHeaders();
+  const headers = {
+    ...getAuthHeaders(),
+    ...buildTelemetryRequestHeaders(telemetryMetadata),
+  };
   // auth headers are handled by getAuthHeaders(); no debug logging here
   const API_BASE_URL = getApiBaseUrl();
 

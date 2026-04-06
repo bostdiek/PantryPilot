@@ -20,6 +20,16 @@ vi.mock('../../lib/logger', () => ({
     error: vi.fn(),
   },
 }));
+vi.mock('../../lib/telemetry', () => ({
+  createProductTelemetryRequestMetadata: vi.fn((input) => ({
+    requestId: 'store-req-id',
+    featureName: input.featureName,
+    conversationId: input.conversationId,
+  })),
+  emitProductTelemetryEvent: vi.fn(),
+  getTelemetryLatencyMs: vi.fn(() => 10),
+  classifyTelemetryError: vi.fn(() => 'mock_error'),
+}));
 
 // Get the mocked functions
 const getMocks = async () => {
@@ -431,6 +441,16 @@ describe('useChatStore', () => {
 
     const conversationId = useChatStore.getState().activeConversationId;
     expect(conversationId).not.toBeNull();
+    expect(mocks.streamChatMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      'Hello',
+      expect.any(Object),
+      expect.anything(),
+      expect.objectContaining({
+        requestId: 'store-req-id',
+        featureName: 'assistant',
+      })
+    );
 
     // Should have user message and streaming assistant placeholder
     const messages =
@@ -483,6 +503,35 @@ describe('useChatStore', () => {
 
     expect(useChatStore.getState().isLoading).toBe(false);
     expect(useChatStore.getState().isStreaming).toBe(false);
+  });
+
+  test('sendMessage emits recipe_search_submitted when search tools start', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const telemetry = await import('../../lib/telemetry');
+
+    mocks.streamChatMessage.mockImplementation(
+      async (_conversationId, _content, callbacks) => {
+        callbacks.onToolStarted?.('search_recipes', {});
+        callbacks.onDone?.();
+        return new AbortController();
+      }
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('Find chicken recipes');
+    });
+
+    const emitSpy = telemetry.emitProductTelemetryEvent as ReturnType<
+      typeof vi.fn
+    >;
+    expect(emitSpy).toHaveBeenCalledWith(
+      'recipe_search_submitted',
+      expect.any(Object),
+      expect.objectContaining({
+        tool_names: ['search_recipes'],
+      })
+    );
   });
 
   test('clearConversation clears messages for the given conversation', async () => {

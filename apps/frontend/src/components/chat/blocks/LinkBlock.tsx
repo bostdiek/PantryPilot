@@ -7,10 +7,18 @@
 
 import { ExternalLink } from 'lucide-react';
 
+import { emitProductTelemetryEvent } from '../../../lib/telemetry';
 import type { LinkBlock as LinkBlockType } from '../../../types/Chat';
 
 interface LinkBlockProps {
   block: LinkBlockType;
+}
+
+function createTelemetryRequestId(): string {
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 }
 
 /**
@@ -26,11 +34,26 @@ export function LinkBlock({ block }: LinkBlockProps) {
     // Use full href if parsing fails
   }
 
+  const handleClick = () => {
+    emitProductTelemetryEvent(
+      'recipe_search_result_clicked',
+      {
+        requestId: createTelemetryRequestId(),
+        featureName: 'recipe_search',
+      },
+      {
+        success: true,
+        url_length: block.href.length,
+      }
+    );
+  };
+
   return (
     <a
       href={block.href}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={handleClick}
       className="group hover:border-primary-300 hover:bg-primary-50 my-1 flex items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 transition-colors"
     >
       <div className="min-w-0 flex-1">

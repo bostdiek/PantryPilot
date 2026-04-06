@@ -10,6 +10,12 @@ import {
   streamChatMessage,
 } from '../api/endpoints/chat';
 import { logger } from '../lib/logger';
+import {
+  classifyTelemetryError,
+  createProductTelemetryRequestMetadata,
+  emitProductTelemetryEvent,
+  getTelemetryLatencyMs,
+} from '../lib/telemetry';
 import type { ChatContentBlock } from '../types/Chat';
 
 export type ChatRole = 'user' | 'assistant';
@@ -353,6 +359,24 @@ export const useChatStore = create<ChatState>()(
 
         const conversationId = get().activeConversationId;
         if (!conversationId) return;
+        const requestTelemetry = createProductTelemetryRequestMetadata({
+          featureName: 'assistant',
+          conversationId,
+        });
+        const streamStartedAt = Date.now();
+        const startedToolNames: string[] = [];
+        let streamCompleted = false;
+        let streamErrored = false;
+        let streamCancelled = false;
+
+        emitProductTelemetryEvent(
+          'assistant_message_started',
+          requestTelemetry,
+          {
+            streamed: true,
+            success: true,
+          }
+        );
 
         const now = getNowIso();
         const userMessage: Message = {
@@ -467,6 +491,20 @@ export const useChatStore = create<ChatState>()(
             },
 
             onComplete: (messageId) => {
+              if (!streamCompleted && !streamErrored && !streamCancelled) {
+                streamCompleted = true;
+                emitProductTelemetryEvent(
+                  'assistant_message_completed',
+                  requestTelemetry,
+                  {
+                    success: true,
+                    latency_ms: getTelemetryLatencyMs(streamStartedAt),
+                    streamed: true,
+                    tool_count: startedToolNames.length,
+                    tool_names: startedToolNames.slice(0, 10),
+                  }
+                );
+              }
               set((state) => {
                 const messages =
                   state.messagesByConversationId[conversationId] ?? [];
@@ -493,6 +531,22 @@ export const useChatStore = create<ChatState>()(
 
             onError: (errorCode, detail) => {
               logger.error(`Chat stream error: ${errorCode} - ${detail}`);
+              if (!streamErrored && !streamCancelled) {
+                streamErrored = true;
+                emitProductTelemetryEvent(
+                  'assistant_message_failed',
+                  requestTelemetry,
+                  {
+                    success: false,
+                    streamed: true,
+                    latency_ms: getTelemetryLatencyMs(streamStartedAt),
+                    error_type:
+                      errorCode || classifyTelemetryError(new Error(detail)),
+                    tool_count: startedToolNames.length,
+                    tool_names: startedToolNames.slice(0, 10),
+                  }
+                );
+              }
               set((state) => {
                 const messages =
                   state.messagesByConversationId[conversationId] ?? [];
@@ -532,6 +586,20 @@ export const useChatStore = create<ChatState>()(
             },
 
             onDone: () => {
+              if (!streamCompleted && !streamErrored && !streamCancelled) {
+                streamCompleted = true;
+                emitProductTelemetryEvent(
+                  'assistant_message_completed',
+                  requestTelemetry,
+                  {
+                    success: true,
+                    streamed: true,
+                    latency_ms: getTelemetryLatencyMs(streamStartedAt),
+                    tool_count: startedToolNames.length,
+                    tool_names: startedToolNames.slice(0, 10),
+                  }
+                );
+              }
               set({
                 isLoading: false,
                 isStreaming: false,
@@ -566,6 +634,28 @@ export const useChatStore = create<ChatState>()(
 
             onToolStarted: (toolName, data) => {
               logger.debug(`Tool started: ${toolName}`, data);
+              startedToolNames.push(toolName);
+              if (toolName === 'search_recipes' || toolName === 'web_search') {
+                emitProductTelemetryEvent(
+                  'recipe_search_submitted',
+                  requestTelemetry,
+                  {
+                    success: true,
+                    streamed: true,
+                    tool_names: [toolName],
+                    tool_count: 1,
+                  }
+                );
+              }
+              emitProductTelemetryEvent(
+                'assistant_tool_started',
+                requestTelemetry,
+                {
+                  success: true,
+                  tool_names: [toolName],
+                  tool_count: 1,
+                }
+              );
               // Show tool name as status
               const conversationId = get().activeConversationId;
               const streamingMsgId = get().streamingMessageId;
@@ -596,12 +686,49 @@ export const useChatStore = create<ChatState>()(
 
             onToolResult: (data) => {
               logger.debug('Tool result:', data);
+              const rawToolName = data.tool_name;
+              const toolName =
+                typeof rawToolName === 'string' ? rawToolName : undefined;
+              emitProductTelemetryEvent(
+                'assistant_tool_completed',
+                requestTelemetry,
+                {
+                  success: true,
+                  tool_names: toolName ? [toolName] : undefined,
+                  tool_count: toolName ? 1 : undefined,
+                }
+              );
             },
           },
-          conversation?.title || undefined
+          conversation?.title || undefined,
+          requestTelemetry
         );
 
-        set({ _abortController: abortController });
+        const storeAbortController = new AbortController();
+        const onAbort = () => {
+          streamCancelled = true;
+          abortController.abort();
+          if (!streamCompleted && !streamErrored) {
+            emitProductTelemetryEvent(
+              'assistant_message_failed',
+              requestTelemetry,
+              {
+                success: false,
+                cancelled: true,
+                streamed: true,
+                latency_ms: getTelemetryLatencyMs(streamStartedAt),
+                error_type: 'cancelled',
+                tool_count: startedToolNames.length,
+                tool_names: startedToolNames.slice(0, 10),
+              }
+            );
+          }
+        };
+        storeAbortController.signal.addEventListener('abort', onAbort, {
+          once: true,
+        });
+
+        set({ _abortController: storeAbortController });
       },
 
       cancelPendingAssistantReply: () => {

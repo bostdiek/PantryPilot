@@ -5,10 +5,20 @@
 
 import '@testing-library/jest-dom';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { LinkBlock as LinkBlockType } from '../../../../types/Chat';
 import { LinkBlock } from '../LinkBlock';
+
+const mockEmitTelemetry = vi.fn();
+vi.mock('../../../../lib/telemetry', () => ({
+  emitProductTelemetryEvent: (...args: any[]) => mockEmitTelemetry(...args),
+}));
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe('LinkBlock', () => {
   test('renders link with label and href', () => {
@@ -104,5 +114,22 @@ describe('LinkBlock', () => {
 
     const linkElement = screen.getByRole('link');
     expect(linkElement.className).toContain('hover:');
+  });
+
+  test('emits search result click telemetry on click', async () => {
+    const block: LinkBlockType = {
+      type: 'link',
+      label: 'Search Result',
+      href: 'https://example.com',
+    };
+
+    render(<LinkBlock block={block} />);
+    await userEvent.click(screen.getByRole('link', { name: /search result/i }));
+
+    expect(mockEmitTelemetry).toHaveBeenCalledWith(
+      'recipe_search_result_clicked',
+      expect.objectContaining({ featureName: 'recipe_search' }),
+      expect.objectContaining({ success: true })
+    );
   });
 });
