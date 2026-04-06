@@ -175,12 +175,22 @@ Gemini is the default provider for local development due to simpler setup.
 LLM_PROVIDER=gemini
 GEMINI_API_KEY=your-gemini-api-key
 
-# Model names (optional, defaults to Gemini models)
-CHAT_MODEL=gemini-2.5-flash
-MULTIMODAL_MODEL=gemini-2.5-flash-lite
-TEXT_MODEL=gemini-2.5-flash-lite
+# Model names (optional, defaults to Gemini preview models)
+# Assistant standard tier
+CHAT_MODEL=gemini-3-flash-preview
+# URL + image import tier
+MULTIMODAL_MODEL=gemini-3.1-flash-lite-preview
+TEXT_MODEL=gemini-3.1-flash-lite-preview
 EMBEDDING_MODEL=gemini-embedding-001
 ```
+
+**Preview rollout guardrail:**
+- Re-check Google's `models.list`, models docs, and pricing docs before rollout.
+- Gemini preview IDs can change and may have stricter rate limits.
+- Stable rollback pair:
+  - `CHAT_MODEL=gemini-2.5-pro`
+  - `TEXT_MODEL=gemini-2.5-flash-lite`
+  - `MULTIMODAL_MODEL=gemini-2.5-flash-lite`
 
 ### AI Features Coverage
 
@@ -188,11 +198,11 @@ When `LLM_PROVIDER=azure_openai`, the following features use Azure OpenAI:
 
 | Feature | Configuration Variable | Default (Gemini) |
 |---------|----------------------|------------------|
-| Chat Agent | `CHAT_MODEL` | gemini-2.5-flash |
-| Recipe Extraction (URL) | `CHAT_MODEL` | gemini-2.5-flash |
-| Recipe Extraction (Image) | `MULTIMODAL_MODEL` | gemini-2.5-flash-lite |
-| Title Generation | `TEXT_MODEL` | gemini-2.5-flash-lite |
-| Context Generation | `TEXT_MODEL` | gemini-2.5-flash-lite |
+| Chat Agent | `CHAT_MODEL` | gemini-3-flash-preview |
+| Recipe Extraction (URL) | `TEXT_MODEL` | gemini-3.1-flash-lite-preview |
+| Recipe Extraction (Image) | `MULTIMODAL_MODEL` | gemini-3.1-flash-lite-preview |
+| Title Generation | `TEXT_MODEL` | gemini-3.1-flash-lite-preview |
+| Context Generation | `TEXT_MODEL` | gemini-3.1-flash-lite-preview |
 | Semantic Search | `EMBEDDING_MODEL` | gemini-embedding-001 |
 
 All providers support tool calling and structured outputs.

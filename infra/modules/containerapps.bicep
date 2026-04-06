@@ -73,13 +73,13 @@ param azureOpenAIApiKey string = ''
 param llmProvider string = 'gemini'
 
 @description('Chat model name (Azure deployment name when using Azure OpenAI)')
-param chatModel string = 'gemini-2.5-flash'
+param chatModel string = 'gemini-3-flash-preview'
 
 @description('Multimodal model name for image/vision tasks')
-param multimodalModel string = 'gemini-2.5-flash-lite'
+param multimodalModel string = 'gemini-3.1-flash-lite-preview'
 
 @description('Text model name for fast text tasks')
-param textModel string = 'gemini-2.5-flash-lite'
+param textModel string = 'gemini-3.1-flash-lite-preview'
 
 @description('Embedding model name for semantic search')
 param embeddingModel string = 'gemini-embedding-001'
