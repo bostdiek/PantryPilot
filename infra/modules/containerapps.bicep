@@ -362,14 +362,34 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                     secretRef: 'brave-search-api-key' // pragma: allowlist secret
                   }
                 ],
-            // Optional Azure OpenAI for AI features (replaces Gemini when configured)
+            // Always inject LLM provider and model env vars so Gemini deployments
+            // also pick up the correct model names from parameters
+            [
+              {
+                name: 'LLM_PROVIDER'
+                value: llmProvider
+              }
+              {
+                name: 'CHAT_MODEL'
+                value: chatModel
+              }
+              {
+                name: 'MULTIMODAL_MODEL'
+                value: multimodalModel
+              }
+              {
+                name: 'TEXT_MODEL'
+                value: textModel
+              }
+              {
+                name: 'EMBEDDING_MODEL'
+                value: embeddingModel
+              }
+            ],
+            // Azure OpenAI credentials - only inject when endpoint and key are configured
             empty(azureOpenAIEndpoint) || empty(azureOpenAIApiKey)
               ? []
               : [
-                  {
-                    name: 'LLM_PROVIDER'
-                    value: llmProvider
-                  }
                   {
                     name: 'AZURE_OPENAI_ENDPOINT'
                     value: azureOpenAIEndpoint
@@ -377,22 +397,6 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                   {
                     name: 'AZURE_OPENAI_API_KEY'
                     secretRef: 'azure-openai-api-key' // pragma: allowlist secret
-                  }
-                  {
-                    name: 'CHAT_MODEL'
-                    value: chatModel
-                  }
-                  {
-                    name: 'MULTIMODAL_MODEL'
-                    value: multimodalModel
-                  }
-                  {
-                    name: 'TEXT_MODEL'
-                    value: textModel
-                  }
-                  {
-                    name: 'EMBEDDING_MODEL'
-                    value: embeddingModel
                   }
                 ],
             // Optional Application Insights for observability

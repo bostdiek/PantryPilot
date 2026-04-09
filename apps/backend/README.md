@@ -149,7 +149,7 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=your-api-key
 
 # Model deployments (must match Azure deployment names)
-CHAT_MODEL=gpt-4o-mini                    # Chat, recipe extraction, titles
+CHAT_MODEL=gpt-4o-mini                    # Chat agent
 MULTIMODAL_MODEL=gpt-4o                   # Image-based recipe extraction
 TEXT_MODEL=gpt-4o-mini                    # Text-only generation
 EMBEDDING_MODEL=text-embedding-3-small    # Semantic search
@@ -159,7 +159,7 @@ AZURE_OPENAI_API_VERSION=2024-10-01-preview
 ```
 
 **Required Azure OpenAI Deployments:**
-- `gpt-4o-mini` or similar: Chat agent, URL recipe extraction, title generation
+- `gpt-4o-mini` or similar: Chat agent (CHAT_MODEL); URL recipe extraction and title generation (TEXT_MODEL)
 - `gpt-4o` or multimodal model: Image-based recipe extraction
 - `text-embedding-3-small`: Semantic search embeddings (configured for 768 dimensions)
 
