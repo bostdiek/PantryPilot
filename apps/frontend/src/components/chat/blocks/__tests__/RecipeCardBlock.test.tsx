@@ -16,6 +16,7 @@ import { RecipeCardBlock } from '../RecipeCardBlock';
 const mockEmitTelemetry = vi.fn();
 vi.mock('../../../../lib/telemetry', () => ({
   emitProductTelemetryEvent: (...args: any[]) => mockEmitTelemetry(...args),
+  createRequestId: () => 'test-request-id',
 }));
 
 // Wrapper to provide router context

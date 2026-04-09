@@ -423,12 +423,39 @@ export const useChatStore = create<ChatState>()(
         // Accumulated text for building TextBlock
         let accumulatedText = '';
 
+        // Create and expose the AbortController before streaming begins so
+        // cancelPendingAssistantReply() can abort the in-flight request.
+        const storeAbortController = new AbortController();
+        storeAbortController.signal.addEventListener(
+          'abort',
+          () => {
+            streamCancelled = true;
+            if (!streamCompleted && !streamErrored) {
+              emitProductTelemetryEvent(
+                'assistant_message_failed',
+                requestTelemetry,
+                {
+                  success: false,
+                  cancelled: true,
+                  streamed: true,
+                  latency_ms: getTelemetryLatencyMs(streamStartedAt),
+                  error_type: 'cancelled',
+                  tool_count: startedToolNames.length,
+                  tool_names: startedToolNames.slice(0, 10),
+                }
+              );
+            }
+          },
+          { once: true }
+        );
+        set({ _abortController: storeAbortController });
+
         // Stream the response
         // Get the conversation title to pass to backend for new conversations
         const conversation = get().conversations.find(
           (c) => c.id === conversationId
         );
-        const abortController = await streamChatMessage(
+        await streamChatMessage(
           conversationId,
           trimmed,
           {
@@ -701,34 +728,9 @@ export const useChatStore = create<ChatState>()(
             },
           },
           conversation?.title || undefined,
-          requestTelemetry
+          requestTelemetry,
+          storeAbortController.signal
         );
-
-        const storeAbortController = new AbortController();
-        const onAbort = () => {
-          streamCancelled = true;
-          abortController.abort();
-          if (!streamCompleted && !streamErrored) {
-            emitProductTelemetryEvent(
-              'assistant_message_failed',
-              requestTelemetry,
-              {
-                success: false,
-                cancelled: true,
-                streamed: true,
-                latency_ms: getTelemetryLatencyMs(streamStartedAt),
-                error_type: 'cancelled',
-                tool_count: startedToolNames.length,
-                tool_names: startedToolNames.slice(0, 10),
-              }
-            );
-          }
-        };
-        storeAbortController.signal.addEventListener('abort', onAbort, {
-          once: true,
-        });
-
-        set({ _abortController: storeAbortController });
       },
 
       cancelPendingAssistantReply: () => {

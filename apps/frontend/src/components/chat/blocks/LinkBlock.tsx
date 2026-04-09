@@ -7,18 +7,14 @@
 
 import { ExternalLink } from 'lucide-react';
 
-import { emitProductTelemetryEvent } from '../../../lib/telemetry';
+import {
+  emitProductTelemetryEvent,
+  createRequestId,
+} from '../../../lib/telemetry';
 import type { LinkBlock as LinkBlockType } from '../../../types/Chat';
 
 interface LinkBlockProps {
   block: LinkBlockType;
-}
-
-function createTelemetryRequestId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  );
 }
 
 /**
@@ -38,7 +34,7 @@ export function LinkBlock({ block }: LinkBlockProps) {
     emitProductTelemetryEvent(
       'recipe_search_result_clicked',
       {
-        requestId: createTelemetryRequestId(),
+        requestId: createRequestId(),
         featureName: 'recipe_search',
       },
       {

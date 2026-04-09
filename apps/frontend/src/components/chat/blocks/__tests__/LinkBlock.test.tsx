@@ -14,6 +14,7 @@ import { LinkBlock } from '../LinkBlock';
 const mockEmitTelemetry = vi.fn();
 vi.mock('../../../../lib/telemetry', () => ({
   emitProductTelemetryEvent: (...args: any[]) => mockEmitTelemetry(...args),
+  createRequestId: () => 'test-request-id',
 }));
 
 beforeEach(() => {

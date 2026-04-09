@@ -60,9 +60,11 @@ export async function streamChatMessage(
   content: string,
   callbacks: ChatStreamCallbacks,
   title?: string,
-  telemetryMetadata?: ProductTelemetryRequestMetadata
-): Promise<AbortController> {
-  const abortController = new AbortController();
+  telemetryMetadata?: ProductTelemetryRequestMetadata,
+  signal?: AbortSignal
+): Promise<void> {
+  const internalController = signal ? null : new AbortController();
+  const effectiveSignal = signal ?? internalController!.signal;
   const API_BASE_URL = getApiBaseUrl();
 
   // Build endpoint URL
@@ -94,7 +96,7 @@ export async function streamChatMessage(
           current_datetime: currentDatetime,
         },
       }),
-      signal: abortController.signal,
+      signal: effectiveSignal,
     });
 
     if (!response.ok) {
@@ -110,12 +112,12 @@ export async function streamChatMessage(
       }
 
       callbacks.onError?.('http_error', errorDetail);
-      return abortController;
+      return;
     }
 
     if (!response.body) {
       callbacks.onError?.('no_body', 'No response body');
-      return abortController;
+      return;
     }
 
     const reader = response.body.getReader();
@@ -162,7 +164,7 @@ export async function streamChatMessage(
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
       // Request was cancelled, don't call onError
-      return abortController;
+      return;
     }
 
     callbacks.onError?.(
@@ -170,8 +172,6 @@ export async function streamChatMessage(
       (err as Error).message || 'Stream request failed'
     );
   }
-
-  return abortController;
 }
 
 /**

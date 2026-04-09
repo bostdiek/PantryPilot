@@ -15,7 +15,10 @@
 import { ChefHat, ExternalLink, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
-import { emitProductTelemetryEvent } from '../../../lib/telemetry';
+import {
+  emitProductTelemetryEvent,
+  createRequestId,
+} from '../../../lib/telemetry';
 import type { RecipeCardBlock as RecipeCardBlockType } from '../../../types/Chat';
 
 interface RecipeCardBlockProps {
@@ -39,13 +42,6 @@ function isDraftLink(href: string): boolean {
   }
 }
 
-function createTelemetryRequestId(): string {
-  return (
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(16).slice(2)}`
-  );
-}
-
 /**
  * Renders a recipe card block with optional image and link.
  *
@@ -59,7 +55,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
     emitProductTelemetryEvent(
       'recipe_search_result_clicked',
       {
-        requestId: createTelemetryRequestId(),
+        requestId: createRequestId(),
         featureName: 'recipe_search',
       },
       {

@@ -431,7 +431,6 @@ describe('useChatStore', () => {
       async (_conversationId, _content, callbacks) => {
         // Simulate immediate completion
         callbacks.onDone?.();
-        return new AbortController();
       }
     );
 
@@ -449,7 +448,8 @@ describe('useChatStore', () => {
       expect.objectContaining({
         requestId: 'store-req-id',
         featureName: 'assistant',
-      })
+      }),
+      expect.any(AbortSignal)
     );
 
     // Should have user message and streaming assistant placeholder
@@ -475,11 +475,9 @@ describe('useChatStore', () => {
     const { result } = renderHook(() => useChatStore());
     const mocks = await getMocks();
 
-    const mockAbortController = new AbortController();
-
-    // Mock streaming that doesn't immediately complete
+    // Mock streaming that doesn't immediately call callbacks (simulates in-flight stream)
     mocks.streamChatMessage.mockImplementation(async () => {
-      return mockAbortController;
+      // resolve without calling onDone so streaming state is preserved
     });
 
     await act(async () => {
@@ -487,11 +485,11 @@ describe('useChatStore', () => {
       await result.current.sendMessage('Hello');
     });
 
-    // Manually set the abort controller as it would be after streamChatMessage
+    // The store sets _abortController and isStreaming=true before the stream starts.
+    // Manually set isStreaming to simulate an ongoing stream (mock resolved without onDone).
     act(() => {
       useChatStore.setState({
         isStreaming: true,
-        _abortController: mockAbortController,
       });
     });
 
@@ -514,7 +512,6 @@ describe('useChatStore', () => {
       async (_conversationId, _content, callbacks) => {
         callbacks.onToolStarted?.('search_recipes', {});
         callbacks.onDone?.();
-        return new AbortController();
       }
     );
 

@@ -80,9 +80,8 @@ describe('chat API endpoints', () => {
         .fn()
         .mockResolvedValueOnce({ ok: true, body: fakeBody });
 
-      const abortController = await streamChatMessage(null, 'Hello', callbacks);
+      await streamChatMessage(null, 'Hello', callbacks);
 
-      expect(abortController).toBeDefined();
       expect(global.fetch).toHaveBeenCalledWith(
         'http://api/api/v1/chat/stream',
         expect.objectContaining({
@@ -625,9 +624,8 @@ describe('chat API endpoints', () => {
       abortErr.name = 'AbortError';
       global.fetch = vi.fn().mockRejectedValueOnce(abortErr);
 
-      const abortController = await streamChatMessage(null, 'Hello', callbacks);
+      await streamChatMessage(null, 'Hello', callbacks);
 
-      expect(abortController).toBeDefined();
       expect(callbacks.onError).not.toHaveBeenCalled();
     });
 

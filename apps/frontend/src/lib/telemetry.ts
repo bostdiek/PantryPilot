@@ -48,7 +48,7 @@ export interface ProductTelemetryAttributes {
   url_length?: number;
 }
 
-function createRequestId(): string {
+export function createRequestId(): string {
   const generated = globalThis.crypto?.randomUUID?.();
   if (generated) {
     return generated;
@@ -124,12 +124,14 @@ export function emitProductTelemetryEvent(
   attributes: ProductTelemetryAttributes = {}
 ): void {
   const payload = compactAttributes({
+    ...attributes,
     event_name: eventName,
     request_id: metadata.requestId,
     feature_name: attributes.feature_name ?? metadata.featureName,
     conversation_id: attributes.conversation_id ?? metadata.conversationId,
-    ...attributes,
   });
 
-  logger.info('Product telemetry event', payload);
+  if (import.meta.env.DEV) {
+    logger.info('Product telemetry event', payload);
+  }
 }
