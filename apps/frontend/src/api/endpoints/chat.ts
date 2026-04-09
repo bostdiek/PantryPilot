@@ -6,6 +6,10 @@
  */
 
 import { logger } from '../../lib/logger';
+import {
+  buildTelemetryRequestHeaders,
+  type ProductTelemetryRequestMetadata,
+} from '../../lib/telemetry';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { ApiErrorImpl } from '../../types/api';
 import type {
@@ -55,9 +59,12 @@ export async function streamChatMessage(
   conversationId: string | null,
   content: string,
   callbacks: ChatStreamCallbacks,
-  title?: string
-): Promise<AbortController> {
-  const abortController = new AbortController();
+  title?: string,
+  telemetryMetadata?: ProductTelemetryRequestMetadata,
+  signal?: AbortSignal
+): Promise<void> {
+  const internalController = signal ? null : new AbortController();
+  const effectiveSignal = signal ?? internalController!.signal;
   const API_BASE_URL = getApiBaseUrl();
 
   // Build endpoint URL
@@ -71,11 +78,14 @@ export async function streamChatMessage(
   const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const currentDatetime = new Date().toISOString();
 
+  const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
+
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...telemetryHeaders,
         ...getAuthHeaders(),
       },
       body: JSON.stringify({
@@ -86,7 +96,7 @@ export async function streamChatMessage(
           current_datetime: currentDatetime,
         },
       }),
-      signal: abortController.signal,
+      signal: effectiveSignal,
     });
 
     if (!response.ok) {
@@ -102,12 +112,12 @@ export async function streamChatMessage(
       }
 
       callbacks.onError?.('http_error', errorDetail);
-      return abortController;
+      return;
     }
 
     if (!response.body) {
       callbacks.onError?.('no_body', 'No response body');
-      return abortController;
+      return;
     }
 
     const reader = response.body.getReader();
@@ -154,7 +164,7 @@ export async function streamChatMessage(
   } catch (err) {
     if ((err as Error).name === 'AbortError') {
       // Request was cancelled, don't call onError
-      return abortController;
+      return;
     }
 
     callbacks.onError?.(
@@ -162,8 +172,6 @@ export async function streamChatMessage(
       (err as Error).message || 'Stream request failed'
     );
   }
-
-  return abortController;
 }
 
 /**

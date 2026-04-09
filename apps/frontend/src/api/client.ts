@@ -1,4 +1,8 @@
 import { logger } from '../lib/logger';
+import {
+  buildTelemetryRequestHeaders,
+  type ProductTelemetryRequestMetadata,
+} from '../lib/telemetry';
 import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
@@ -35,6 +39,10 @@ export function getApiBaseUrl(): string {
 }
 
 // API client with proper error handling
+export interface ApiRequestOptions extends RequestInit {
+  telemetryMetadata?: ProductTelemetryRequestMetadata;
+}
+
 class ApiClient {
   private baseUrl: string;
 
@@ -47,12 +55,13 @@ class ApiClient {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  async request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  async request<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
     // Ensure endpoint starts with /
     const normalizedEndpoint = endpoint.startsWith('/')
       ? endpoint
       : `/${endpoint}`;
     const url = `${this.baseUrl}${normalizedEndpoint}`;
+    const { telemetryMetadata, ...requestOptions } = options ?? {};
 
     // Determine if this endpoint should skip logout on 401
     // Auth endpoints: 401 means wrong credentials, not session expiry
@@ -77,17 +86,19 @@ class ApiClient {
     const safeUrlForLogging = isDraftTokenEndpoint ? url.split('?')[0] : url;
 
     logger.debug(
-      `API Request: ${options?.method || 'GET'} ${safeUrlForLogging}`
+      `API Request: ${requestOptions.method || 'GET'} ${safeUrlForLogging}`
     );
 
     try {
+      const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
       const headers = {
         'Content-Type': 'application/json',
         ...this.getAuthHeaders(),
-        ...(options?.headers || {}),
+        ...telemetryHeaders,
+        ...(requestOptions.headers || {}),
       };
       const resp = await fetch(url, {
-        ...options,
+        ...requestOptions,
         headers,
       });
 
