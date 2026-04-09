@@ -13,8 +13,8 @@ from core.config import get_settings
 from core.error_handler import get_correlation_id
 from core.observability import (
     ProductTelemetryEventName,
-    build_product_telemetry_attributes,
     get_tracer,
+    record_product_telemetry_event,
 )
 
 
@@ -57,19 +57,20 @@ async def search_web(
     request_id = get_correlation_id()
     started_at = time.monotonic()
     with _tracer.start_as_current_span("recipe_search") as span:
-        for key, value in build_product_telemetry_attributes(
+        record_product_telemetry_event(
+            span,
             event=ProductTelemetryEventName.RECIPE_SEARCH_SUBMITTED,
             feature_name="assistant_search",
             request_id=request_id,
             provider="brave" if api_key else "none",
             streamed=True,
-        ).items():
-            span.set_attribute(key, value)
+        )
         span.set_attribute("search.query_length", len(query))
 
         if not api_key:
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.RECIPE_SEARCH_SUBMITTED,
                 feature_name="assistant_search",
                 request_id=request_id,
@@ -78,8 +79,7 @@ async def search_web(
                 latency_ms=latency_ms,
                 error_type="unconfigured",
                 streamed=True,
-            ).items():
-                span.set_attribute(key, value)
+            )
             return WebSearchOutcome(
                 status="unconfigured",
                 provider="none",
@@ -102,7 +102,8 @@ async def search_web(
 
             results = _parse_brave_results(payload, max_results)
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.RECIPE_SEARCH_RESULT_CLICKED,
                 feature_name="assistant_search",
                 request_id=request_id,
@@ -111,8 +112,7 @@ async def search_web(
                 latency_ms=latency_ms,
                 tool_count=len(results),
                 streamed=True,
-            ).items():
-                span.set_attribute(key, value)
+            )
             return WebSearchOutcome(status="ok", provider="brave", results=results)
         except httpx.HTTPError as exc:
             logger.warning(
@@ -130,7 +130,8 @@ async def search_web(
             error_type = type(exc).__name__
 
         latency_ms = int((time.monotonic() - started_at) * 1000)
-        for key, value in build_product_telemetry_attributes(
+        record_product_telemetry_event(
+            span,
             event=ProductTelemetryEventName.RECIPE_SEARCH_SUBMITTED,
             feature_name="assistant_search",
             request_id=request_id,
@@ -139,8 +140,7 @@ async def search_web(
             latency_ms=latency_ms,
             error_type=error_type,
             streamed=True,
-        ).items():
-            span.set_attribute(key, value)
+        )
 
         return WebSearchOutcome(
             status="error",

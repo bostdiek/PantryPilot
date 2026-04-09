@@ -37,6 +37,7 @@ from core.observability import (
     ProductTelemetryEventName,
     build_product_telemetry_attributes,
     get_tracer,
+    record_product_telemetry_event,
 )
 from core.ratelimit import check_rate_limit
 from crud.user_preferences import UserPreferencesCRUD
@@ -1370,6 +1371,18 @@ async def stream_chat_message(  # noqa: C901
 
     async def event_stream() -> AsyncGenerator[str, None]:  # noqa: C901
         request_id = get_correlation_id()
+        run_started_at = time.monotonic()
+        provider: str | None = None
+        model_name: str | None = None
+        tool_calls_by_id: dict[str, _ToolCallStart] = {}
+        # Counter for tool call ordering (use list for mutability in nested scope)
+        tool_call_order: list[int] = [0]
+        # Track memory update calls to detect excessive updates
+        memory_update_count = 0
+        raw_output: object | None = None
+        agent_result: object | None = None  # Avoid NameError if stream ends early
+        # Track blocks emitted from tool results (e.g., recipe cards)
+        tool_emitted_blocks: list[dict[str, Any]] = []
         yield ChatSseEvent(
             event="status",
             conversation_id=conversation_id,
@@ -1377,28 +1390,20 @@ async def stream_chat_message(  # noqa: C901
             data={"status": "thinking"},
         ).to_sse()
         try:
-            run_started_at = time.monotonic()
             settings = get_settings()
-            tool_calls_by_id: dict[str, _ToolCallStart] = {}
-            # Counter for tool call ordering (use list for mutability in nested scope)
-            tool_call_order: list[int] = [0]
-            # Track memory update calls to detect excessive updates
-            memory_update_count: int = 0
-            raw_output: object | None = None
-            agent_result: object | None = None  # Avoid NameError if stream ends early
-            # Track blocks emitted from tool results (e.g., recipe cards)
-            tool_emitted_blocks: list[dict[str, Any]] = []
+            provider = settings.LLM_PROVIDER
+            model_name = settings.CHAT_MODEL
             with _tracer.start_as_current_span("assistant_message") as message_span:
-                for key, value in build_product_telemetry_attributes(
+                record_product_telemetry_event(
+                    message_span,
                     event=ProductTelemetryEventName.ASSISTANT_MESSAGE_STARTED,
                     feature_name="assistant",
                     request_id=request_id,
                     conversation_id=str(conversation_id),
-                    provider=settings.LLM_PROVIDER,
-                    model_name=settings.CHAT_MODEL,
+                    provider=provider,
+                    model_name=model_name,
                     streamed=True,
-                ).items():
-                    message_span.set_attribute(key, value)
+                )
                 message_span.set_attribute("message_id", str(message_id))
 
                 # Extract timezone context from client
@@ -1556,20 +1561,20 @@ async def stream_chat_message(  # noqa: C901
                 await db.commit()
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
                 tool_names = sorted({tc.tool_name for tc in tool_calls_by_id.values()})
-                for key, value in build_product_telemetry_attributes(
+                record_product_telemetry_event(
+                    message_span,
                     event=ProductTelemetryEventName.ASSISTANT_MESSAGE_COMPLETED,
                     feature_name="assistant",
                     request_id=request_id,
                     conversation_id=str(conversation_id),
-                    provider=settings.LLM_PROVIDER,
-                    model_name=settings.CHAT_MODEL,
+                    provider=provider,
+                    model_name=model_name,
                     success=True,
                     latency_ms=latency_ms,
                     tool_count=len(tool_calls_by_id),
                     tool_names=tool_names,
                     streamed=True,
-                ).items():
-                    message_span.set_attribute(key, value)
+                )
 
                 yield ChatSseEvent(
                     event="message.complete",
@@ -1585,27 +1590,26 @@ async def stream_chat_message(  # noqa: C901
             except Exception:
                 logger.exception("Failed to rollback session after streaming error")
             try:
-                settings = get_settings()
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
-                for key, value in build_product_telemetry_attributes(
-                    event=ProductTelemetryEventName.ASSISTANT_MESSAGE_FAILED,
-                    feature_name="assistant",
-                    request_id=request_id,
-                    conversation_id=str(conversation_id),
-                    provider=settings.LLM_PROVIDER,
-                    model_name=settings.CHAT_MODEL,
-                    success=False,
-                    latency_ms=latency_ms,
-                    error_type=type(exc).__name__,
-                    tool_count=len(tool_calls_by_id),
-                    tool_names=sorted(
-                        {tc.tool_name for tc in tool_calls_by_id.values()}
-                    ),
-                    streamed=True,
-                ).items():
-                    _tracer.start_span("assistant_message_error").set_attribute(
-                        key, value
+                with _tracer.start_as_current_span("assistant_message_error") as span:
+                    record_product_telemetry_event(
+                        span,
+                        event=ProductTelemetryEventName.ASSISTANT_MESSAGE_FAILED,
+                        feature_name="assistant",
+                        request_id=request_id,
+                        conversation_id=str(conversation_id),
+                        provider=provider,
+                        model_name=model_name,
+                        success=False,
+                        latency_ms=latency_ms,
+                        error_type=type(exc).__name__,
+                        tool_count=len(tool_calls_by_id),
+                        tool_names=sorted(
+                            {tc.tool_name for tc in tool_calls_by_id.values()}
+                        ),
+                        streamed=True,
                     )
+                    span.record_exception(exc)
             except Exception:
                 logger.exception("Failed to emit assistant telemetry error attributes")
             # Mark orphaned placeholder message as failed to prevent dangling records

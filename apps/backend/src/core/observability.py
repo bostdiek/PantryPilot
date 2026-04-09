@@ -136,6 +136,54 @@ def build_product_telemetry_attributes(
     return attrs
 
 
+def record_product_telemetry_event(
+    span: Any,
+    *,
+    event: ProductTelemetryEventName,
+    feature_name: str,
+    request_id: str | None = None,
+    conversation_id: str | None = None,
+    provider: str | None = None,
+    model_name: str | None = None,
+    success: bool | None = None,
+    latency_ms: int | None = None,
+    error_type: str | None = None,
+    tool_count: int | None = None,
+    tool_names: list[str] | None = None,
+    streamed: bool | None = None,
+    cancelled: bool | None = None,
+) -> dict[str, bool | float | int | str]:
+    """Attach product telemetry metadata to a span and emit a lifecycle event.
+
+    The lifecycle event name is recorded via ``span.add_event(...)`` so multiple
+    events can be attached to the same span without later writes overwriting the
+    original ``product.telemetry.event`` value.
+    """
+    attrs = build_product_telemetry_attributes(
+        event=event,
+        feature_name=feature_name,
+        request_id=request_id,
+        conversation_id=conversation_id,
+        provider=provider,
+        model_name=model_name,
+        success=success,
+        latency_ms=latency_ms,
+        error_type=error_type,
+        tool_count=tool_count,
+        tool_names=tool_names,
+        streamed=streamed,
+        cancelled=cancelled,
+    )
+
+    for key, value in attrs.items():
+        if key == "product.telemetry.event":
+            continue
+        span.set_attribute(key, value)
+
+    span.add_event(event.value, attributes=attrs)
+    return attrs
+
+
 def _is_observability_enabled() -> bool:
     """Check if observability is enabled via environment variable.
 

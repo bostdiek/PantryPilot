@@ -15,6 +15,7 @@ from core.observability import (
     build_product_telemetry_attributes,
     configure_observability,
     get_tracer,
+    record_product_telemetry_event,
 )
 
 
@@ -314,6 +315,26 @@ class TestProductTelemetryContract:
         assert attrs["product.telemetry.tool_count"] == 2
         assert (
             attrs["product.telemetry.tool_names"] == "web_search,fetch_url_as_markdown"
+        )
+
+    def test_record_event_keeps_event_name_off_span_attributes(self) -> None:
+        span = MagicMock()
+
+        attrs = record_product_telemetry_event(
+            span,
+            event=ProductTelemetryEventName.URL_IMPORT_COMPLETED,
+            feature_name="url_import",
+            request_id="req-789",
+            success=True,
+        )
+
+        set_attribute_keys = [
+            call.args[0] for call in span.set_attribute.call_args_list
+        ]
+        assert "product.telemetry.event" not in set_attribute_keys
+        span.add_event.assert_called_once_with(
+            "url_import_completed",
+            attributes=attrs,
         )
 
 

@@ -25,8 +25,8 @@ from core.config import get_settings
 from core.error_handler import get_correlation_id
 from core.observability import (
     ProductTelemetryEventName,
-    build_product_telemetry_attributes,
     get_tracer,
+    record_product_telemetry_event,
 )
 from core.ratelimit import check_rate_limit
 from crud.ai_drafts import get_draft_by_id
@@ -123,15 +123,15 @@ async def extract_recipe_from_url(
     settings = get_settings()
 
     with _tracer.start_as_current_span("extract_recipe_from_url") as span:
-        for key, value in build_product_telemetry_attributes(
+        record_product_telemetry_event(
+            span,
             event=ProductTelemetryEventName.URL_IMPORT_STARTED,
             feature_name="url_import",
             request_id=request_id,
             provider=settings.LLM_PROVIDER,
             model_name=settings.TEXT_MODEL,
             streamed=False,
-        ).items():
-            span.set_attribute(key, value)
+        )
 
         try:
             logger.debug(
@@ -162,7 +162,8 @@ async def extract_recipe_from_url(
                 ttl_seconds=DRAFT_TTL_SECONDS,
             )
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.URL_IMPORT_COMPLETED
                 if success
                 else ProductTelemetryEventName.URL_IMPORT_FAILED,
@@ -174,8 +175,7 @@ async def extract_recipe_from_url(
                 latency_ms=latency_ms,
                 error_type=outcome.message if not success else None,
                 streamed=False,
-            ).items():
-                span.set_attribute(key, value)
+            )
             return ApiResponse(
                 success=bool(success),
                 data=response_data,
@@ -190,7 +190,8 @@ async def extract_recipe_from_url(
                 getattr(e, "detail", None),
             )
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.URL_IMPORT_FAILED,
                 feature_name="url_import",
                 request_id=request_id,
@@ -200,8 +201,7 @@ async def extract_recipe_from_url(
                 latency_ms=latency_ms,
                 error_type=f"http_{e.status_code}",
                 streamed=False,
-            ).items():
-                span.set_attribute(key, value)
+            )
             if e.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR:
                 message = e.detail if isinstance(e.detail, str) else "Internal AI error"
                 return JSONResponse(
@@ -217,7 +217,8 @@ async def extract_recipe_from_url(
         except Exception as e:  # pragma: no cover - unexpected
             logger.error("Unexpected error in recipe extraction: %s", e)
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.URL_IMPORT_FAILED,
                 feature_name="url_import",
                 request_id=request_id,
@@ -227,8 +228,7 @@ async def extract_recipe_from_url(
                 latency_ms=latency_ms,
                 error_type=type(e).__name__,
                 streamed=False,
-            ).items():
-                span.set_attribute(key, value)
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="An unexpected error occurred during recipe extraction",
@@ -266,15 +266,15 @@ async def extract_recipe_from_image(  # noqa: C901
     settings = get_settings()
 
     with _tracer.start_as_current_span("extract_recipe_from_image") as span:
-        for key, value in build_product_telemetry_attributes(
+        record_product_telemetry_event(
+            span,
             event=ProductTelemetryEventName.IMAGE_IMPORT_STARTED,
             feature_name="image_import",
             request_id=request_id,
             provider=settings.LLM_PROVIDER,
             model_name=settings.MULTIMODAL_MODEL,
             streamed=False,
-        ).items():
-            span.set_attribute(key, value)
+        )
 
         try:
             # Validate and collect file data
@@ -337,7 +337,8 @@ async def extract_recipe_from_image(  # noqa: C901
                 ttl_seconds=DRAFT_TTL_SECONDS,
             )
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.IMAGE_IMPORT_COMPLETED
                 if success
                 else ProductTelemetryEventName.IMAGE_IMPORT_FAILED,
@@ -349,8 +350,7 @@ async def extract_recipe_from_image(  # noqa: C901
                 latency_ms=latency_ms,
                 error_type=outcome.message if not success else None,
                 streamed=False,
-            ).items():
-                span.set_attribute(key, value)
+            )
 
             return ApiResponse(
                 success=bool(success),
@@ -364,7 +364,8 @@ async def extract_recipe_from_image(  # noqa: C901
 
         except HTTPException as e:
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.IMAGE_IMPORT_FAILED,
                 feature_name="image_import",
                 request_id=request_id,
@@ -374,15 +375,15 @@ async def extract_recipe_from_image(  # noqa: C901
                 latency_ms=latency_ms,
                 error_type=f"http_{e.status_code}",
                 streamed=False,
-            ).items():
-                span.set_attribute(key, value)
+            )
             raise
         except Exception as e:  # pragma: no cover - unexpected
             logger.error(
                 "Unexpected error in image recipe extraction: %s", e, exc_info=True
             )
             latency_ms = int((time.monotonic() - started_at) * 1000)
-            for key, value in build_product_telemetry_attributes(
+            record_product_telemetry_event(
+                span,
                 event=ProductTelemetryEventName.IMAGE_IMPORT_FAILED,
                 feature_name="image_import",
                 request_id=request_id,
@@ -392,8 +393,7 @@ async def extract_recipe_from_image(  # noqa: C901
                 latency_ms=latency_ms,
                 error_type=type(e).__name__,
                 streamed=False,
-            ).items():
-                span.set_attribute(key, value)
+            )
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="An unexpected error occurred during image recipe extraction",
