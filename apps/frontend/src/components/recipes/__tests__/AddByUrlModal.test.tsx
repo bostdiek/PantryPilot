@@ -25,6 +25,15 @@ vi.mock('../../../stores/useRecipeStore', () => ({
 vi.mock('../../../lib/logger', () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+vi.mock('../../../lib/telemetry', () => ({
+  createProductTelemetryRequestMetadata: vi.fn(() => ({
+    requestId: 'test-url-req-id',
+    featureName: 'url_import',
+  })),
+  emitProductTelemetryEvent: vi.fn(),
+  getTelemetryLatencyMs: vi.fn(() => 42),
+  classifyTelemetryError: vi.fn(() => 'mock_error'),
+}));
 
 // Mock aiDrafts endpoints
 const mockExtractStream = vi.fn();
@@ -122,6 +131,16 @@ describe('AddByUrlModal', () => {
       expect(mockSetFormFromSuggestion).toHaveBeenCalledWith({
         title: 'AI Recipe',
       });
+      expect(mockExtractStream).toHaveBeenCalledWith(
+        'https://example.com/recipe',
+        undefined,
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+        expect.objectContaining({
+          featureName: 'url_import',
+        })
+      );
       expect(mockNavigate).toHaveBeenCalledWith('/recipes/new?ai=1');
       expect(onClose).toHaveBeenCalled();
     });
@@ -151,7 +170,10 @@ describe('AddByUrlModal', () => {
     await waitFor(() => {
       expect(mockExtractPost).toHaveBeenCalledWith(
         'https://example.com/recipe',
-        undefined
+        undefined,
+        expect.objectContaining({
+          featureName: 'url_import',
+        })
       );
       expect(mockNavigate).toHaveBeenCalledWith('/signed/redirect');
       expect(onClose).toHaveBeenCalled();

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from typing import cast
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.chat import _handle_agent_stream_event
+from api.v1.chat import _handle_agent_stream_event, _ToolCallStart
 from models.chat_tool_calls import ChatToolCall
 
 
@@ -36,7 +38,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     user_id = uuid4()
 
     db = _FakeDb()
-    tool_calls_by_id = {}
+    tool_calls_by_id: dict[str, _ToolCallStart] = {}
     tool_call_order = [0]
 
     call_part = ToolCallPart(
@@ -51,9 +53,10 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=user_id,
-        db=db,
+        db=cast(AsyncSession, db),
         tool_calls_by_id=tool_calls_by_id,
         tool_call_order=tool_call_order,
+        request_id="req-1",
     )
 
     assert output_started is None
@@ -75,9 +78,10 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=user_id,
-        db=db,
+        db=cast(AsyncSession, db),
         tool_calls_by_id=tool_calls_by_id,
         tool_call_order=tool_call_order,
+        request_id="req-1",
     )
 
     assert output_result is None
@@ -98,7 +102,9 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     assert db.commits == 1
 
 
-def test_extract_tool_name_logs_warning_on_unknown(caplog) -> None:
+def test_extract_tool_name_logs_warning_on_unknown(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     from api.v1.chat import _extract_tool_name
 
     class _Part:

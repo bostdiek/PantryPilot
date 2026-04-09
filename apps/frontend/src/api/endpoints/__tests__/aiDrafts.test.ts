@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createProductTelemetryRequestMetadata } from '../../../lib/telemetry';
 
 // Mocks for modules used by aiDrafts
 vi.mock('../../../lib/logger', () => ({
@@ -58,6 +59,31 @@ describe('aiDrafts endpoints', () => {
     );
     // Should return whatever apiClient returned
     expect(res).toEqual({ signed_url: '/s' });
+  });
+
+  it('extractRecipeFromUrl passes telemetry metadata through apiClient', async () => {
+    const mockRequest = await getMockRequest();
+    mockRequest!.mockResolvedValueOnce({ signed_url: '/s' });
+    const telemetryMetadata = createProductTelemetryRequestMetadata({
+      featureName: 'url_import',
+      requestId: 'draft-url-req-1',
+    });
+
+    await extractRecipeFromUrl(
+      'https://site/recipe',
+      undefined,
+      telemetryMetadata
+    );
+
+    expect(mockRequest).toHaveBeenCalledWith(
+      '/api/v1/ai/extract-recipe-from-url',
+      expect.objectContaining({
+        telemetryMetadata: expect.objectContaining({
+          requestId: 'draft-url-req-1',
+          featureName: 'url_import',
+        }),
+      })
+    );
   });
 
   it('getDraftById and getDraftByIdOwner call apiClient with proper routes', async () => {
@@ -193,6 +219,54 @@ describe('aiDrafts endpoints', () => {
     expect(global.fetch).toHaveBeenCalled();
     expect(onProgress).toHaveBeenCalled();
     expect(onComplete).toHaveBeenCalledWith('', 'd-123');
+  });
+
+  it('extractRecipeStreamFetch includes telemetry correlation header when provided', async () => {
+    const onProgress = vi.fn();
+    const onComplete = vi.fn();
+    const onError = vi.fn();
+    const telemetryMetadata = createProductTelemetryRequestMetadata({
+      featureName: 'url_import',
+      requestId: 'stream-req-1',
+    });
+
+    const encoder = new TextEncoder();
+    const chunk = encoder.encode(
+      `data: ${JSON.stringify({ status: 'complete', draft_id: 'd-321' })}\n\n`
+    );
+    let readCalls = 0;
+    const reader = {
+      read: async () => {
+        readCalls += 1;
+        if (readCalls === 1) return { value: chunk, done: false };
+        return { value: undefined, done: true };
+      },
+      cancel: vi.fn(),
+    };
+    // @ts-ignore
+    global.fetch = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, body: { getReader: () => reader } });
+
+    await extractRecipeStreamFetch(
+      'https://site',
+      undefined,
+      onProgress,
+      onComplete,
+      onError,
+      telemetryMetadata
+    );
+
+    // @ts-ignore
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+          'X-Correlation-ID': 'stream-req-1',
+        }),
+      })
+    );
   });
 
   it('extractRecipeStreamFetch handles HTTP error and no-body', async () => {

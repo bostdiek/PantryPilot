@@ -222,7 +222,16 @@ describe('MealPlanPage', () => {
     const user = userEvent.setup();
     const loadSpy = vi
       .spyOn(useMealPlanStore.getState(), 'loadWeek')
-      .mockResolvedValue(undefined);
+      .mockImplementation(async (weekStartDate: string) => {
+        // Simulate real loadWeek behavior by updating the store's currentWeek.weekStartDate
+        useMealPlanStore.setState((state: any) => ({
+          ...state,
+          currentWeek: {
+            ...state.currentWeek,
+            weekStartDate,
+          },
+        }));
+      });
 
     render(<MealPlanPage />);
 
@@ -230,7 +239,63 @@ describe('MealPlanPage', () => {
     await user.click(prevBtns[0]); // Click the first one (desktop or mobile)
 
     // Given weekStartDate is 2025-01-12 in beforeEach, previous week is 2025-01-05
-    expect(loadSpy).toHaveBeenCalledWith('2025-01-05');
+    await waitFor(() => {
+      expect(loadSpy).toHaveBeenCalledTimes(1);
+      expect(loadSpy).toHaveBeenCalledWith('2025-01-05');
+    });
+
+    // Allow any effects reacting to currentWeek.weekStartDate to run
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Ensure we did not reset back to the original current week (2025-01-12)
+    expect(loadSpy).toHaveBeenCalledTimes(1);
+    expect(loadSpy).not.toHaveBeenCalledWith('2025-01-12');
+    expect(useMealPlanStore.getState().currentWeek?.weekStartDate).toBe(
+      '2025-01-05'
+    );
+  });
+
+  it('does not reset back to current week after navigating to another week', async () => {
+    const user = userEvent.setup();
+    const loadSpy = vi
+      .spyOn(useMealPlanStore.getState(), 'loadWeek')
+      .mockImplementation(async (weekStartDate: string) => {
+        // Simulate real loadWeek behavior by updating the store's currentWeek.weekStartDate
+        useMealPlanStore.setState((state: any) => ({
+          ...state,
+          currentWeek: {
+            ...state.currentWeek,
+            weekStartDate,
+          },
+        }));
+      });
+
+    render(<MealPlanPage />);
+
+    // Wait for initial load call on mount
+    await waitFor(() => {
+      expect(loadSpy).toHaveBeenCalled();
+    });
+    const initialCalls = loadSpy.mock.calls.length;
+
+    const nextBtns = screen.getAllByRole('button', { name: /Next week/i });
+    await user.click(nextBtns[0]);
+
+    // Given weekStartDate is 2025-01-12 in beforeEach, next week is 2025-01-19
+    await waitFor(() => {
+      expect(loadSpy).toHaveBeenCalledTimes(initialCalls + 1);
+      expect(loadSpy).toHaveBeenCalledWith('2025-01-19');
+    });
+
+    // Allow any effects reacting to currentWeek.weekStartDate to run
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Ensure we did not reset back to the original current week (2025-01-12)
+    expect(loadSpy).toHaveBeenCalledTimes(initialCalls + 1);
+    expect(loadSpy).not.toHaveBeenCalledWith('2025-01-12');
+    expect(useMealPlanStore.getState().currentWeek?.weekStartDate).toBe(
+      '2025-01-19'
+    );
   });
 
   it('opens recipe preview when clicking on recipe name', async () => {

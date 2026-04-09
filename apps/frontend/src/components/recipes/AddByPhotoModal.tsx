@@ -9,6 +9,12 @@ import {
 import { useImageSelection } from '../../hooks/useImageSelection';
 import { useIsMobile } from '../../hooks/useMediaQuery';
 import { logger } from '../../lib/logger';
+import {
+  classifyTelemetryError,
+  createProductTelemetryRequestMetadata,
+  emitProductTelemetryEvent,
+  getTelemetryLatencyMs,
+} from '../../lib/telemetry';
 import { useAuthStore, useIsAuthenticated } from '../../stores/useAuthStore';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
@@ -125,6 +131,17 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     setError(null);
     setProgressMessages([]);
     setIsLoading(true);
+    const telemetryMetadata = createProductTelemetryRequestMetadata({
+      featureName: 'image_import',
+    });
+    const requestStartedAt = Date.now();
+    let completed = false;
+
+    emitProductTelemetryEvent('image_import_started', telemetryMetadata, {
+      success: true,
+      streamed: USE_STREAMING,
+      file_count: selectedFiles.length,
+    });
 
     // Try streaming first using fetch-based approach (supports auth headers)
     if (USE_STREAMING) {
@@ -144,6 +161,19 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
               'signed_url:',
               signedUrl
             );
+            if (!completed) {
+              completed = true;
+              emitProductTelemetryEvent(
+                'image_import_completed',
+                telemetryMetadata,
+                {
+                  success: true,
+                  streamed: true,
+                  file_count: selectedFiles.length,
+                  latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                }
+              );
+            }
 
             // Validate signed URL before navigation for security
             if (signedUrl && isSafeInternalPath(signedUrl)) {
@@ -174,6 +204,17 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
                 handleClose();
               } catch (err) {
                 logger.error('Failed to fetch draft after streaming:', err);
+                emitProductTelemetryEvent(
+                  'image_import_failed',
+                  telemetryMetadata,
+                  {
+                    success: false,
+                    streamed: true,
+                    file_count: selectedFiles.length,
+                    latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                    error_type: classifyTelemetryError(err),
+                  }
+                );
                 setError(
                   'Recipe extracted but failed to load. Please try again.'
                 );
@@ -183,6 +224,17 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
           },
           (err: ApiErrorImpl) => {
             logger.error('Stream extraction error:', err);
+            emitProductTelemetryEvent(
+              'image_import_failed',
+              telemetryMetadata,
+              {
+                success: false,
+                streamed: true,
+                file_count: selectedFiles.length,
+                latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                error_type: classifyTelemetryError(err),
+              }
+            );
             // If unauthorized, force logout and redirect to login to re-authenticate
             // Only show 'expired' message if the user was actually logged in
             if (err?.status === 401) {
@@ -202,7 +254,8 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
 
             setError(err.message || 'Failed to extract recipe from image');
             setIsLoading(false);
-          }
+          },
+          telemetryMetadata
         );
 
         setAbortController(controller);
@@ -216,8 +269,20 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
     // Fallback to POST request
     try {
       logger.debug('Using POST fallback for image extraction');
-      const response = await extractRecipeFromImage(selectedFiles);
+      const response = await extractRecipeFromImage(
+        selectedFiles,
+        telemetryMetadata
+      );
       logger.debug('POST extraction response:', response);
+      if (!completed) {
+        completed = true;
+        emitProductTelemetryEvent('image_import_completed', telemetryMetadata, {
+          success: true,
+          streamed: false,
+          file_count: selectedFiles.length,
+          latency_ms: getTelemetryLatencyMs(requestStartedAt),
+        });
+      }
 
       // Validate and navigate to the signed URL
       if (response.signed_url && isSafeInternalPath(response.signed_url)) {
@@ -239,6 +304,13 @@ export const AddByPhotoModal: FC<AddByPhotoModalProps> = ({
       }
     } catch (err) {
       logger.error('POST extraction error:', err);
+      emitProductTelemetryEvent('image_import_failed', telemetryMetadata, {
+        success: false,
+        streamed: false,
+        file_count: selectedFiles.length,
+        latency_ms: getTelemetryLatencyMs(requestStartedAt),
+        error_type: classifyTelemetryError(err),
+      });
       if (err instanceof ApiErrorImpl) {
         // If unauthorized, logout and redirect to login
         // Only show 'expired' message if the user was actually logged in

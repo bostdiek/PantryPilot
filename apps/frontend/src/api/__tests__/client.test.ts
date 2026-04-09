@@ -2,6 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
 import type { AuthState } from '../../types/auth';
 import { apiClient } from '../client';
+import {
+  createProductTelemetryRequestMetadata,
+  type ProductTelemetryRequestMetadata,
+} from '../../lib/telemetry';
 
 // Mock the auth store's getState to control token presence
 vi.mock('../../stores/useAuthStore', () => ({
@@ -62,6 +66,41 @@ describe('ApiClient (unit)', () => {
       expect.stringContaining('/secure'),
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer tok' }),
+      })
+    );
+  });
+
+  it('includes X-Correlation-ID when telemetry metadata is provided', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      text: () =>
+        Promise.resolve(
+          JSON.stringify({
+            success: true,
+            data: { ok: true },
+            message: 'Success',
+          })
+        ),
+      status: 200,
+    });
+
+    const telemetryMetadata: ProductTelemetryRequestMetadata =
+      createProductTelemetryRequestMetadata({
+        featureName: 'assistant',
+        requestId: 'req-123',
+      });
+
+    await apiClient.request('/telemetry', {
+      method: 'GET',
+      telemetryMetadata,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/telemetry'),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          'X-Correlation-ID': 'req-123',
+        }),
       })
     );
   });

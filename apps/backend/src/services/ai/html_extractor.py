@@ -14,6 +14,56 @@ from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
 
+type IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
+
+
+def _is_blocked_ip_address(ip: IPAddress) -> bool:
+    """Return True when an IP address should be blocked for outbound fetches.
+
+    Some providers return unusual IPv6 answers that Python marks as reserved
+    even though they are globally routable. We allow globally routable IPs and
+    block addresses that are clearly unsafe for SSRF purposes.
+    """
+    if ip.is_global:
+        return False
+
+    return any(
+        (
+            ip.is_private,
+            ip.is_loopback,
+            ip.is_link_local,
+            ip.is_multicast,
+            ip.is_reserved,
+            ip.is_unspecified,
+        )
+    )
+
+
+def _is_bot_protection_challenge(response: httpx.Response) -> bool:
+    """Detect common anti-bot challenge responses from recipe sites."""
+    if response.status_code not in {403, 429, 503}:
+        return False
+
+    cf_mitigated = response.headers.get("cf-mitigated", "").lower()
+    server = response.headers.get("server", "").lower()
+    content_type = response.headers.get("content-type", "").lower()
+    body = response.text[:2000].lower()
+
+    if cf_mitigated == "challenge":
+        return True
+
+    if "cloudflare" in server and "text/html" in content_type:
+        challenge_markers = (
+            "attention required",
+            "just a moment",
+            "cf-browser-verification",
+            "cf-challenge",
+            "captcha",
+        )
+        return any(marker in body for marker in challenge_markers)
+
+    return False
+
 
 class HTMLExtractionService:
     """Service for fetching and sanitizing HTML content from recipe URLs."""
@@ -106,6 +156,22 @@ class HTMLExtractionService:
         self.timeout = timeout
         self.max_size = max_size
 
+    def _build_request_headers(self) -> dict[str, str]:
+        """Build outbound headers for recipe page fetches."""
+        return {
+            "User-Agent": (
+                "Mozilla/5.0 (compatible; PantryPilot-RecipeBot/1.0; "
+                "+https://github.com/bostdiek/PantryPilot)"
+            ),
+            "Accept": (
+                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            ),
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate",
+            "DNT": "1",
+            "Connection": "keep-alive",
+        }
+
     async def fetch_and_sanitize(self, url: str) -> str:
         """Fetch HTML from URL and return sanitized content.
 
@@ -186,11 +252,13 @@ class HTMLExtractionService:
                 # Skip non-IP results
                 continue
 
-            if parsed_ip.is_private or parsed_ip.is_loopback or parsed_ip.is_reserved:
+            if _is_blocked_ip_address(parsed_ip):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
-                        "Cannot fetch from localhost, private, or reserved IP addresses"
+                        "Cannot fetch from a non-globally-routable IP address "
+                        "(loopback, private, link-local, multicast, reserved, "
+                        "or unspecified)"
                     ),
                 )
 
@@ -206,17 +274,7 @@ class HTMLExtractionService:
         Raises:
             HTTPException: If fetch fails
         """
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (compatible; PantryPilot-RecipeBot/1.0; "
-                "+https://github.com/bostdiek/PantryPilot)"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.5",
-            "Accept-Encoding": "gzip, deflate",
-            "DNT": "1",
-            "Connection": "keep-alive",
-        }
+        headers = self._build_request_headers()
 
         try:
             # Disable automatic redirects so we can inspect each location for SSRF
@@ -225,41 +283,8 @@ class HTMLExtractionService:
                 follow_redirects=False,
                 limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
             ) as client:
-                response = await client.get(url, headers=headers)
-
-                # If redirect, validate the Location header and follow manually
-                # up to a small limit
-                redirects_remaining = 5
-                while response.is_redirect and redirects_remaining > 0:
-                    loc = response.headers.get("location")
-                    if not loc:
-                        break
-
-                    # Resolve relative locations
-                    next_url = urljoin(str(response.url), loc)
-                    # Validate the next_url before fetching
-                    self._validate_url(next_url)
-
-                    response = await client.get(next_url, headers=headers)
-                    redirects_remaining -= 1
-
-                response.raise_for_status()
-
-                # Check content length
-                if len(response.content) > self.max_size:
-                    raise HTTPException(
-                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail=f"Response too large: {len(response.content)} bytes",
-                    )
-
-                # Check content type
-                content_type = response.headers.get("content-type", "").lower()
-                if "html" not in content_type:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=f"Expected HTML content, got: {content_type}",
-                    )
-
+                response = await self._fetch_with_safe_redirects(client, url, headers)
+                self._validate_http_response(response)
                 return response.text
 
         except httpx.HTTPStatusError as e:
@@ -279,12 +304,62 @@ class HTMLExtractionService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Network error: {str(e)}",
             ) from e
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Unexpected error fetching {url}: {e}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to fetch content",
             ) from e
+
+    async def _fetch_with_safe_redirects(
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        headers: dict[str, str],
+    ) -> httpx.Response:
+        """Fetch a URL and manually follow a small number of validated redirects."""
+        response = await client.get(url, headers=headers)
+        redirects_remaining = 5
+
+        while response.is_redirect and redirects_remaining > 0:
+            loc = response.headers.get("location")
+            if not loc:
+                break
+
+            next_url = urljoin(str(response.url), loc)
+            self._validate_url(next_url)
+            response = await client.get(next_url, headers=headers)
+            redirects_remaining -= 1
+
+        return response
+
+    def _validate_http_response(self, response: httpx.Response) -> None:
+        """Validate the fetched HTTP response before returning its HTML."""
+        if _is_bot_protection_challenge(response):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This website is blocking automated access. "
+                    "Try a different recipe site or add the recipe manually."
+                ),
+            )
+
+        response.raise_for_status()
+
+        if len(response.content) > self.max_size:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Response too large: {len(response.content)} bytes",
+            )
+
+        content_type = response.headers.get("content-type", "").lower()
+        if "html" not in content_type:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Expected HTML content, got: {content_type}",
+            )
 
     def _sanitize_html(self, html: str, base_url: str) -> str:
         """Sanitize HTML content and extract recipe-relevant sections.

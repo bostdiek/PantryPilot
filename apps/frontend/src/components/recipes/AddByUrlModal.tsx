@@ -6,6 +6,12 @@ import {
   getDraftByIdOwner,
 } from '../../api/endpoints/aiDrafts';
 import { logger } from '../../lib/logger';
+import {
+  classifyTelemetryError,
+  createProductTelemetryRequestMetadata,
+  emitProductTelemetryEvent,
+  getTelemetryLatencyMs,
+} from '../../lib/telemetry';
 import { useRecipeStore } from '../../stores/useRecipeStore';
 import type { SSEEvent } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
@@ -75,6 +81,17 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
     }
 
     setIsLoading(true);
+    const telemetryMetadata = createProductTelemetryRequestMetadata({
+      featureName: 'url_import',
+    });
+    const requestStartedAt = Date.now();
+    let completed = false;
+
+    emitProductTelemetryEvent('url_import_started', telemetryMetadata, {
+      success: true,
+      streamed: useStreaming,
+      url_length: url.length,
+    });
 
     // Try streaming first using fetch-based approach (supports auth headers)
     if (useStreaming) {
@@ -94,6 +111,18 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
             // POST returns signed_url directly
             if (signedUrl) {
               // POST endpoint case - navigate to signed URL
+              if (!completed) {
+                completed = true;
+                emitProductTelemetryEvent(
+                  'url_import_completed',
+                  telemetryMetadata,
+                  {
+                    success: true,
+                    streamed: true,
+                    latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                  }
+                );
+              }
               navigate(signedUrl);
             } else if (draftId) {
               // Streaming endpoint case - fetch draft and navigate to new recipe page
@@ -112,8 +141,30 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
                 if (mealPlanDayLabel)
                   params.set('mealPlanDayLabel', mealPlanDayLabel);
                 navigate(`/recipes/new?${params.toString()}`);
+                if (!completed) {
+                  completed = true;
+                  emitProductTelemetryEvent(
+                    'url_import_completed',
+                    telemetryMetadata,
+                    {
+                      success: true,
+                      streamed: true,
+                      latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                    }
+                  );
+                }
               } catch (err) {
                 logger.error('Failed to fetch draft after streaming:', err);
+                emitProductTelemetryEvent(
+                  'url_import_failed',
+                  telemetryMetadata,
+                  {
+                    success: false,
+                    streamed: true,
+                    latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                    error_type: classifyTelemetryError(err),
+                  }
+                );
                 setError('Failed to load extracted recipe. Please try again.');
                 setIsLoading(false);
                 return;
@@ -124,33 +175,78 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
           (err: ApiErrorImpl) => {
             // Streaming failed, try fallback to POST
             logger.warn('Streaming failed, falling back to POST:', err);
+            emitProductTelemetryEvent(
+              'url_import_stream_fallback',
+              telemetryMetadata,
+              {
+                success: false,
+                streamed: true,
+                latency_ms: getTelemetryLatencyMs(requestStartedAt),
+                error_type: classifyTelemetryError(err),
+              }
+            );
             setProgressMessages((prev) => [
               ...prev,
               'Switching to fallback method...',
             ]);
-            fallbackToPost();
-          }
+            void fallbackToPost(telemetryMetadata, requestStartedAt, completed);
+          },
+          telemetryMetadata
         );
         setAbortController(controller);
       } catch (err) {
         logger.error('Failed to establish streaming connection:', err);
-        fallbackToPost();
+        emitProductTelemetryEvent(
+          'url_import_stream_fallback',
+          telemetryMetadata,
+          {
+            success: false,
+            streamed: true,
+            latency_ms: getTelemetryLatencyMs(requestStartedAt),
+            error_type: classifyTelemetryError(err),
+          }
+        );
+        await fallbackToPost(telemetryMetadata, requestStartedAt, completed);
       }
     } else {
-      await fallbackToPost();
+      await fallbackToPost(telemetryMetadata, requestStartedAt, completed);
     }
   };
 
-  const fallbackToPost = async () => {
+  const fallbackToPost = async (
+    telemetryMetadata = createProductTelemetryRequestMetadata({
+      featureName: 'url_import',
+    }),
+    requestStartedAt = Date.now(),
+    alreadyCompleted = false
+  ) => {
     try {
       setProgressMessages((prev) => [...prev, 'Extracting recipe...']);
-      const response = await extractRecipeFromUrl(url, undefined);
+      const response = await extractRecipeFromUrl(
+        url,
+        undefined,
+        telemetryMetadata
+      );
+
+      if (!alreadyCompleted) {
+        emitProductTelemetryEvent('url_import_completed', telemetryMetadata, {
+          success: true,
+          streamed: false,
+          latency_ms: getTelemetryLatencyMs(requestStartedAt),
+        });
+      }
 
       // Navigate to the signed URL
       navigate(response.signed_url);
       handleClose();
     } catch (err) {
       logger.error('POST extraction failed:', err);
+      emitProductTelemetryEvent('url_import_failed', telemetryMetadata, {
+        success: false,
+        streamed: false,
+        latency_ms: getTelemetryLatencyMs(requestStartedAt),
+        error_type: classifyTelemetryError(err),
+      });
       const apiError = err as ApiErrorImpl;
       setError(
         apiError.message || 'Failed to extract recipe. Please try again.'
