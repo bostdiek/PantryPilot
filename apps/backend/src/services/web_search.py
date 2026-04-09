@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import httpx
 
 from core.config import get_settings
+from core.error_handler import get_correlation_id
+from core.observability import (
+    ProductTelemetryEventName,
+    get_tracer,
+    record_product_telemetry_event,
+)
 
 
 logger = logging.getLogger(__name__)
+_tracer = get_tracer(__name__)
 
 BRAVE_SEARCH_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
 SEARCH_RESULT_LIMIT = 3
@@ -46,48 +54,100 @@ async def search_web(
     """
     max_results = min(max_results, SEARCH_RESULT_LIMIT)
     api_key = _get_api_key()
-    if not api_key:
-        return WebSearchOutcome(
-            status="unconfigured",
-            provider="none",
-            results=[],
-            message="Brave Search API key is not configured.",
+    request_id = get_correlation_id()
+    started_at = time.monotonic()
+    with _tracer.start_as_current_span("recipe_search") as span:
+        record_product_telemetry_event(
+            span,
+            event=ProductTelemetryEventName.RECIPE_SEARCH_SUBMITTED,
+            feature_name="assistant_search",
+            request_id=request_id,
+            provider="brave" if api_key else "none",
+            streamed=True,
         )
+        span.set_attribute("search.query_length", len(query))
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                BRAVE_SEARCH_ENDPOINT,
-                params={"q": query, "count": max_results},
-                headers={
-                    "Accept": "application/json",
-                    "X-Subscription-Token": api_key,
-                },
+        if not api_key:
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            record_product_telemetry_event(
+                span,
+                event=ProductTelemetryEventName.RECIPE_SEARCH_SUBMITTED,
+                feature_name="assistant_search",
+                request_id=request_id,
+                provider="none",
+                success=False,
+                latency_ms=latency_ms,
+                error_type="unconfigured",
+                streamed=True,
             )
-            response.raise_for_status()
-            payload = response.json()
+            return WebSearchOutcome(
+                status="unconfigured",
+                provider="none",
+                results=[],
+                message="Brave Search API key is not configured.",
+            )
 
-        results = _parse_brave_results(payload, max_results)
-        return WebSearchOutcome(status="ok", provider="brave", results=results)
-    except httpx.HTTPError as exc:
-        logger.warning(
-            "Brave search request failed: %s - %s",
-            type(exc).__name__,
-            str(exc),
-        )
-    except (KeyError, TypeError, ValueError) as exc:
-        logger.warning(
-            "Brave search parse failed: %s - %s",
-            type(exc).__name__,
-            str(exc),
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    BRAVE_SEARCH_ENDPOINT,
+                    params={"q": query, "count": max_results},
+                    headers={
+                        "Accept": "application/json",
+                        "X-Subscription-Token": api_key,
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+
+            results = _parse_brave_results(payload, max_results)
+            latency_ms = int((time.monotonic() - started_at) * 1000)
+            record_product_telemetry_event(
+                span,
+                event=ProductTelemetryEventName.RECIPE_SEARCH_RESULT_CLICKED,
+                feature_name="assistant_search",
+                request_id=request_id,
+                provider="brave",
+                success=True,
+                latency_ms=latency_ms,
+                tool_count=len(results),
+                streamed=True,
+            )
+            return WebSearchOutcome(status="ok", provider="brave", results=results)
+        except httpx.HTTPError as exc:
+            logger.warning(
+                "Brave search request failed: %s - %s",
+                type(exc).__name__,
+                str(exc),
+            )
+            error_type = type(exc).__name__
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning(
+                "Brave search parse failed: %s - %s",
+                type(exc).__name__,
+                str(exc),
+            )
+            error_type = type(exc).__name__
+
+        latency_ms = int((time.monotonic() - started_at) * 1000)
+        record_product_telemetry_event(
+            span,
+            event=ProductTelemetryEventName.RECIPE_SEARCH_SUBMITTED,
+            feature_name="assistant_search",
+            request_id=request_id,
+            provider="brave",
+            success=False,
+            latency_ms=latency_ms,
+            error_type=error_type,
+            streamed=True,
         )
 
-    return WebSearchOutcome(
-        status="error",
-        provider="brave",
-        results=[],
-        message="Unable to fetch search results right now.",
-    )
+        return WebSearchOutcome(
+            status="error",
+            provider="brave",
+            results=[],
+            message="Unable to fetch search results right now.",
+        )
 
 
 def _parse_brave_results(
