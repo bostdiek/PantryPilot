@@ -20,6 +20,16 @@ vi.mock('../../lib/logger', () => ({
     error: vi.fn(),
   },
 }));
+vi.mock('../../lib/telemetry', () => ({
+  createProductTelemetryRequestMetadata: vi.fn((input) => ({
+    requestId: 'store-req-id',
+    featureName: input.featureName,
+    conversationId: input.conversationId,
+  })),
+  emitProductTelemetryEvent: vi.fn(),
+  getTelemetryLatencyMs: vi.fn(() => 10),
+  classifyTelemetryError: vi.fn(() => 'mock_error'),
+}));
 
 // Get the mocked functions
 const getMocks = async () => {
@@ -421,7 +431,6 @@ describe('useChatStore', () => {
       async (_conversationId, _content, callbacks) => {
         // Simulate immediate completion
         callbacks.onDone?.();
-        return new AbortController();
       }
     );
 
@@ -431,6 +440,17 @@ describe('useChatStore', () => {
 
     const conversationId = useChatStore.getState().activeConversationId;
     expect(conversationId).not.toBeNull();
+    expect(mocks.streamChatMessage).toHaveBeenCalledWith(
+      expect.any(String),
+      'Hello',
+      expect.any(Object),
+      expect.anything(),
+      expect.objectContaining({
+        requestId: 'store-req-id',
+        featureName: 'assistant',
+      }),
+      expect.any(AbortSignal)
+    );
 
     // Should have user message and streaming assistant placeholder
     const messages =
@@ -455,11 +475,9 @@ describe('useChatStore', () => {
     const { result } = renderHook(() => useChatStore());
     const mocks = await getMocks();
 
-    const mockAbortController = new AbortController();
-
-    // Mock streaming that doesn't immediately complete
+    // Mock streaming that doesn't immediately call callbacks (simulates in-flight stream)
     mocks.streamChatMessage.mockImplementation(async () => {
-      return mockAbortController;
+      // resolve without calling onDone so streaming state is preserved
     });
 
     await act(async () => {
@@ -467,11 +485,11 @@ describe('useChatStore', () => {
       await result.current.sendMessage('Hello');
     });
 
-    // Manually set the abort controller as it would be after streamChatMessage
+    // The store sets _abortController and isStreaming=true before the stream starts.
+    // Manually set isStreaming to simulate an ongoing stream (mock resolved without onDone).
     act(() => {
       useChatStore.setState({
         isStreaming: true,
-        _abortController: mockAbortController,
       });
     });
 
@@ -483,6 +501,34 @@ describe('useChatStore', () => {
 
     expect(useChatStore.getState().isLoading).toBe(false);
     expect(useChatStore.getState().isStreaming).toBe(false);
+  });
+
+  test('sendMessage emits recipe_search_submitted when search tools start', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const telemetry = await import('../../lib/telemetry');
+
+    mocks.streamChatMessage.mockImplementation(
+      async (_conversationId, _content, callbacks) => {
+        callbacks.onToolStarted?.('search_recipes', {});
+        callbacks.onDone?.();
+      }
+    );
+
+    await act(async () => {
+      await result.current.sendMessage('Find chicken recipes');
+    });
+
+    const emitSpy = telemetry.emitProductTelemetryEvent as ReturnType<
+      typeof vi.fn
+    >;
+    expect(emitSpy).toHaveBeenCalledWith(
+      'recipe_search_submitted',
+      expect.any(Object),
+      expect.objectContaining({
+        tool_names: ['search_recipes'],
+      })
+    );
   });
 
   test('clearConversation clears messages for the given conversation', async () => {

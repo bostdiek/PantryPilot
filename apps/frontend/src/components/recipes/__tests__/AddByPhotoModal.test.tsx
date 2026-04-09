@@ -24,6 +24,15 @@ vi.mock('../../../hooks/useMediaQuery', () => ({ useIsMobile: () => false }));
 vi.mock('../../../lib/logger', () => ({
   logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+vi.mock('../../../lib/telemetry', () => ({
+  createProductTelemetryRequestMetadata: vi.fn(() => ({
+    requestId: 'test-req-id',
+    featureName: 'image_import',
+  })),
+  emitProductTelemetryEvent: vi.fn(),
+  getTelemetryLatencyMs: vi.fn(() => 42),
+  classifyTelemetryError: vi.fn(() => 'mock_error'),
+}));
 vi.mock('../../../utils/generateImageThumbnail', () => ({
   generateImageThumbnail: vi.fn().mockResolvedValue(null),
 }));
@@ -115,6 +124,15 @@ describe('AddByPhotoModal (focused)', () => {
     await userEvent.click(btn);
 
     await waitFor(() => {
+      expect(mockExtractStream).toHaveBeenCalledWith(
+        expect.any(Array),
+        expect.any(Function),
+        expect.any(Function),
+        expect.any(Function),
+        expect.objectContaining({
+          featureName: 'image_import',
+        })
+      );
       expect(mockNavigate).toHaveBeenCalledWith(
         '/recipes/new?ai=1&draftId=abc'
       );

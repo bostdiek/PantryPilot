@@ -7,12 +7,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from core.observability import (
+    ProductTelemetryEventName,
     _get_connection_string,
     _is_observability_enabled,
     _NoOpSpan,
     _NoOpTracer,
+    build_product_telemetry_attributes,
     configure_observability,
     get_tracer,
+    record_product_telemetry_event,
 )
 
 
@@ -257,3 +260,96 @@ class TestNoOpSpan:
             span.set_attribute("test", "value")
             span.add_event("test_event")
         # Should complete without error
+
+
+class TestProductTelemetryContract:
+    """Tests for metadata-only product telemetry contract helpers."""
+
+    def test_build_attributes_includes_required_fields(self) -> None:
+        attrs = build_product_telemetry_attributes(
+            event=ProductTelemetryEventName.ASSISTANT_MESSAGE_STARTED,
+            feature_name="assistant",
+            request_id="req-123",
+            conversation_id="conv-1",
+            provider="google",
+            model_name="gemini-3-flash-preview",
+            streamed=True,
+        )
+
+        assert attrs["product.telemetry.event"] == "assistant_message_started"
+        assert attrs["product.telemetry.feature_name"] == "assistant"
+        assert attrs["product.telemetry.request_id"] == "req-123"
+        assert attrs["product.telemetry.conversation_id"] == "conv-1"
+        assert attrs["product.telemetry.provider"] == "google"
+        assert attrs["product.telemetry.model_name"] == "gemini-3-flash-preview"
+        assert attrs["product.telemetry.streamed"] is True
+
+    def test_build_attributes_uses_context_correlation_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "core.observability.get_correlation_id",
+            lambda: "corr-from-context",
+        )
+
+        attrs = build_product_telemetry_attributes(
+            event=ProductTelemetryEventName.URL_IMPORT_FAILED,
+            feature_name="ai_import",
+            error_type="http_500",
+            success=False,
+        )
+
+        assert attrs["product.telemetry.request_id"] == "corr-from-context"
+        assert attrs["product.telemetry.error_type"] == "http_500"
+        assert attrs["product.telemetry.success"] is False
+
+    def test_build_attributes_joins_tool_names(self) -> None:
+        attrs = build_product_telemetry_attributes(
+            event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
+            feature_name="assistant",
+            request_id="req-456",
+            tool_count=2,
+            tool_names=["web_search", "fetch_url_as_markdown"],
+        )
+
+        assert attrs["product.telemetry.tool_count"] == 2
+        assert (
+            attrs["product.telemetry.tool_names"] == "web_search,fetch_url_as_markdown"
+        )
+
+    def test_record_event_keeps_event_name_off_span_attributes(self) -> None:
+        span = MagicMock()
+
+        attrs = record_product_telemetry_event(
+            span,
+            event=ProductTelemetryEventName.URL_IMPORT_COMPLETED,
+            feature_name="url_import",
+            request_id="req-789",
+            success=True,
+        )
+
+        set_attribute_keys = [
+            call.args[0] for call in span.set_attribute.call_args_list
+        ]
+        assert "product.telemetry.event" not in set_attribute_keys
+        span.add_event.assert_called_once_with(
+            "url_import_completed",
+            attributes=attrs,
+        )
+
+
+class TestMainStartupObservabilityWiring:
+    """Tests that app startup imports wire observability bootstrap."""
+
+    def test_main_import_calls_configure_observability(self) -> None:
+        import importlib
+
+        import main
+
+        with patch(
+            "core.observability.configure_observability", return_value=False
+        ) as mock_configure:
+            importlib.reload(main)
+            assert mock_configure.called
+
+        importlib.reload(main)

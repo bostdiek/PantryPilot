@@ -25,6 +25,7 @@ vi.mock('../../../stores/useAuthStore', () => ({
   },
 }));
 
+import { createProductTelemetryRequestMetadata } from '../../../lib/telemetry';
 import { ApiErrorImpl } from '../../../types/api';
 import {
   acceptAction,
@@ -79,9 +80,8 @@ describe('chat API endpoints', () => {
         .fn()
         .mockResolvedValueOnce({ ok: true, body: fakeBody });
 
-      const abortController = await streamChatMessage(null, 'Hello', callbacks);
+      await streamChatMessage(null, 'Hello', callbacks);
 
-      expect(abortController).toBeDefined();
       expect(global.fetch).toHaveBeenCalledWith(
         'http://api/api/v1/chat/stream',
         expect.objectContaining({
@@ -101,6 +101,57 @@ describe('chat API endpoints', () => {
       expect(body.client_context.user_timezone).toBeDefined();
       expect(body.client_context.current_datetime).toBeDefined();
       expect(callbacks.onDone).toHaveBeenCalled();
+    });
+
+    it('includes correlation header when telemetry metadata is provided', async () => {
+      const callbacks = {
+        onDone: vi.fn(),
+      };
+
+      const telemetryMetadata = createProductTelemetryRequestMetadata({
+        featureName: 'assistant',
+        requestId: 'telemetry-req-1',
+      });
+
+      const encoder = new TextEncoder();
+      const doneEvent = {
+        event: 'done',
+        conversation_id: 'conv-123',
+        message_id: null,
+        data: {},
+      };
+      const chunk = encoder.encode(`data: ${JSON.stringify(doneEvent)}\n\n`);
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: true, body: { getReader: () => reader } });
+
+      await streamChatMessage(
+        null,
+        'Hello',
+        callbacks,
+        undefined,
+        telemetryMetadata
+      );
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://api/api/v1/chat/stream',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Correlation-ID': 'telemetry-req-1',
+          }),
+        })
+      );
     });
 
     it('sends POST to correct endpoint for existing conversation', async () => {
@@ -136,6 +187,55 @@ describe('chat API endpoints', () => {
       expect(global.fetch).toHaveBeenCalledWith(
         'http://api/api/v1/chat/conversations/conv-456/messages/stream',
         expect.anything()
+      );
+    });
+
+    it('includes X-Correlation-ID header when telemetry metadata is provided', async () => {
+      const callbacks = { onDone: vi.fn() };
+      const telemetryMetadata = createProductTelemetryRequestMetadata({
+        featureName: 'assistant',
+        requestId: 'corr-123',
+      });
+
+      const encoder = new TextEncoder();
+      const doneEvent = {
+        event: 'done',
+        conversation_id: 'conv-456',
+        message_id: null,
+        data: {},
+      };
+      const chunk = encoder.encode(`data: ${JSON.stringify(doneEvent)}\n\n`);
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: { getReader: () => reader },
+      });
+
+      await streamChatMessage(
+        'conv-456',
+        'Hello',
+        callbacks,
+        undefined,
+        telemetryMetadata
+      );
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://api/api/v1/chat/conversations/conv-456/messages/stream',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'X-Correlation-ID': 'corr-123',
+          }),
+        })
       );
     });
 
@@ -524,9 +624,8 @@ describe('chat API endpoints', () => {
       abortErr.name = 'AbortError';
       global.fetch = vi.fn().mockRejectedValueOnce(abortErr);
 
-      const abortController = await streamChatMessage(null, 'Hello', callbacks);
+      await streamChatMessage(null, 'Hello', callbacks);
 
-      expect(abortController).toBeDefined();
       expect(callbacks.onError).not.toHaveBeenCalled();
     });
 

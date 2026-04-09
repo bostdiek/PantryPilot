@@ -15,6 +15,10 @@
 import { ChefHat, ExternalLink, Plus } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import {
+  emitProductTelemetryEvent,
+  createRequestId,
+} from '../../../lib/telemetry';
 import type { RecipeCardBlock as RecipeCardBlockType } from '../../../types/Chat';
 
 interface RecipeCardBlockProps {
@@ -47,6 +51,20 @@ function isDraftLink(href: string): boolean {
 export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
   const hasDraftLink = block.href ? isDraftLink(block.href) : false;
   const hasSourceUrl = !!block.source_url;
+  const emitSearchClick = () => {
+    emitProductTelemetryEvent(
+      'recipe_search_result_clicked',
+      {
+        requestId: createRequestId(),
+        featureName: 'recipe_search',
+      },
+      {
+        success: true,
+        result_count: 1,
+        url_length: block.source_url?.length,
+      }
+    );
+  };
 
   // For AI suggestions with source URL: split clickable areas
   if (hasDraftLink && hasSourceUrl) {
@@ -57,6 +75,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
           href={block.source_url!}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={emitSearchClick}
           className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden"
           aria-label={`View ${block.title} on external site`}
         >
@@ -204,6 +223,7 @@ export function RecipeCardBlock({ block }: RecipeCardBlockProps) {
         href={block.href}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={emitSearchClick}
         className="block"
         aria-label={`View ${block.title} on external site`}
       >
