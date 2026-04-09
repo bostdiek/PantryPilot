@@ -27,7 +27,15 @@ def mock_recipe_html() -> str:
         """
 
 
-def test_validate_url_good_and_bad():
+def test_validate_url_good_and_bad(monkeypatch: pytest.MonkeyPatch):
+    def fake_getaddrinfo(host: str, *args: object, **kwargs: object):
+        # Keep localhost resolving to loopback so validation still blocks it
+        if host == "localhost":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
     extractor = HTMLExtractionService()
     extractor._validate_url("https://example.com/recipe")
     extractor._validate_url("http://example.com/recipe")
