@@ -329,9 +329,9 @@ module containerApps 'modules/containerapps.bicep' = {
     azureOpenAIApiKey: useAzureOpenAI ? resolvedAzureOpenAIApiKey : ''
     llmProvider: useAzureOpenAI ? 'azure_openai' : 'gemini'
     // Model names - for Azure OpenAI, these must match deployment names on the target resource.
-    chatModel: useAzureOpenAI ? azureChatModel : 'gemini-2.5-flash'
-    multimodalModel: useAzureOpenAI ? azureMultimodalModel : 'gemini-2.5-flash-lite'
-    textModel: useAzureOpenAI ? azureTextModel : 'gemini-2.5-flash-lite'
+    chatModel: useAzureOpenAI ? azureChatModel : 'gemini-3-flash-preview'
+    multimodalModel: useAzureOpenAI ? azureMultimodalModel : 'gemini-3.1-flash-lite-preview'
+    textModel: useAzureOpenAI ? azureTextModel : 'gemini-3.1-flash-lite-preview'
     embeddingModel: useAzureOpenAI ? azureEmbeddingModel : 'gemini-embedding-001'
     enableObservability: true
     tags: commonTags
