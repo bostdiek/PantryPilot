@@ -9,6 +9,20 @@ const createMealEntryMock = vi.hoisted(() => vi.fn());
 const navigateMock = vi.hoisted(() => vi.fn());
 const clearDuplicateMock = vi.hoisted(() => vi.fn());
 
+// Mutable state shared between the hook mock and getState() so addRecipe can
+// simulate setting duplicateInfo (as the real Zustand store does on 409).
+const recipeStoreState = vi.hoisted(
+  () =>
+    ({
+      duplicateInfo: null,
+    }) as {
+      duplicateInfo: {
+        existing_recipe_id: string;
+        similar_recipes: unknown[];
+      } | null;
+    }
+);
+
 // Basic stable mocks for modules used by the page
 vi.mock('../../stores/useRecipeStore', () => ({
   useRecipeStore: () => ({
@@ -32,12 +46,24 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
 vi.mock('../../components/ui/useToast', () => ({
-  useToast: () => ({ success: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), info: vi.fn() }),
 }));
 vi.mock('../../hooks/usePasteSplit', () => ({
   usePasteSplit: () => ({
     pasteSplitModal: { isOpen: false, candidateSteps: [], originalContent: '' },
   }),
+}));
+vi.mock('../../stores/useChatStore', () => ({
+  useChatStore: Object.assign(() => ({}), {
+    getState: () => ({ appendLocalAssistantMessage: vi.fn() }),
+  }),
+}));
+vi.mock('../../utils/mealProposalStatus', () => ({
+  markMealProposalSavedToBook: vi.fn(),
+  markMealProposalAddedToPlan: vi.fn(),
+}));
+vi.mock('../../api/endpoints/recipes', () => ({
+  getRecipeById: vi.fn().mockResolvedValue(null),
 }));
 
 // Shared AI suggestion used by tests that mock the recipe store
@@ -145,8 +171,10 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     vi.resetModules();
     vi.clearAllMocks();
     navigateMock.mockReset();
+    clearDuplicateMock.mockReset();
     createMealEntryMock.mockReset();
     createMealEntryMock.mockResolvedValue({ id: 'meal-1' });
+    recipeStoreState.duplicateInfo = null;
     try {
       window.localStorage.clear();
       window.sessionStorage.clear();
@@ -156,22 +184,30 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
   });
 
   it('proceeds with meal plan entry using existing_recipe_id when in assistant flow (409 duplicate)', async () => {
-    vi.doMock('../../stores/useRecipeStore', () => ({
-      useRecipeStore: () => ({
-        addRecipe: vi.fn().mockResolvedValue(null), // 409 → null
+    // addRecipe simulates a 409: sets duplicateInfo in the shared store state
+    // and returns null so the component reads duplicateInfo via getState().
+    const addRecipeMock = vi.fn().mockImplementation(async () => {
+      recipeStoreState.duplicateInfo = {
+        existing_recipe_id: 'existing-uuid-123',
+        similar_recipes: [],
+      };
+      return null;
+    });
+
+    vi.doMock('../../stores/useRecipeStore', () => {
+      const useRecipeStore: any = () => ({
+        addRecipe: addRecipeMock,
         formSuggestion: null,
         isAISuggestion: false,
         clearFormSuggestion: vi.fn(),
-        duplicateInfo: {
-          existing_recipe_id: 'existing-uuid-123',
-          similar_recipes: [],
-        },
+        duplicateInfo: null, // null on mount so the modal does not open immediately
         forceCreateRecipe: vi.fn(),
         clearDuplicateState: vi.fn(),
-      }),
-      // Static getState used inside the handler
-      __esModule: true,
-    }));
+      });
+      // getState() returns the live state so the submit handler sees the 409 duplicate info
+      useRecipeStore.getState = () => recipeStoreState;
+      return { useRecipeStore };
+    });
     vi.doMock('../../api/endpoints/mealPlans', () => ({
       createMealEntry: createMealEntryMock,
     }));
@@ -186,27 +222,55 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     const { default: Page } = await import('../RecipesNewPage');
     render((<Page />) as any);
 
-    // The page should not show the duplicate modal (auto-proceed path taken)
+    // Fill required fields and submit
+    await userEvent.type(screen.getByLabelText(/Recipe Name/i), 'Test Recipe');
+    await userEvent.type(screen.getByLabelText(/Ingredient 1/i), 'Flour');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /Step 1/i }),
+      'Mix everything'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save recipe/i }));
+
+    // The submit handler should use the existing_recipe_id from the 409 response
+    // to call createMealEntry, then navigate away.
     await waitFor(() => {
-      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(createMealEntryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipeId: 'existing-uuid-123',
+          plannedForDate: '2026-04-14',
+        })
+      );
     });
+    expect(navigateMock).toHaveBeenCalled();
+    // Duplicate modal should not be shown (auto-proceed path taken)
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('shows duplicate modal when NOT in assistant flow (no proposalKey, no mealPlanDate)', async () => {
-    vi.doMock('../../stores/useRecipeStore', () => ({
-      useRecipeStore: () => ({
-        addRecipe: vi.fn().mockResolvedValue(null),
+  it('does not auto-proceed when NOT in assistant flow (no proposalKey, no mealPlanDate)', async () => {
+    // addRecipe simulates a 409: sets duplicateInfo and returns null.
+    const addRecipeMock = vi.fn().mockImplementation(async () => {
+      recipeStoreState.duplicateInfo = {
+        existing_recipe_id: 'existing-uuid-456',
+        similar_recipes: [],
+      };
+      return null;
+    });
+
+    vi.doMock('../../stores/useRecipeStore', () => {
+      const useRecipeStore: any = () => ({
+        addRecipe: addRecipeMock,
         formSuggestion: null,
         isAISuggestion: false,
         clearFormSuggestion: vi.fn(),
-        duplicateInfo: {
-          existing_recipe_id: 'existing-uuid-456',
-          similar_recipes: [],
-        },
+        duplicateInfo: null,
         forceCreateRecipe: vi.fn(),
         clearDuplicateState: clearDuplicateMock,
-      }),
-      __esModule: true,
+      });
+      useRecipeStore.getState = () => recipeStoreState;
+      return { useRecipeStore };
+    });
+    vi.doMock('../../api/endpoints/mealPlans', () => ({
+      createMealEntry: createMealEntryMock,
     }));
     vi.doMock('react-router-dom', () => ({
       useNavigate: () => navigateMock,
@@ -217,9 +281,21 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     const { default: Page } = await import('../RecipesNewPage');
     render((<Page />) as any);
 
-    // Should NOT navigate away — duplicate modal should take over
+    // Fill required fields and submit
+    await userEvent.type(screen.getByLabelText(/Recipe Name/i), 'Test Recipe');
+    await userEvent.type(screen.getByLabelText(/Ingredient 1/i), 'Flour');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /Step 1/i }),
+      'Mix everything'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save recipe/i }));
+
+    // Without assistant flow params, the auto-proceed path is NOT taken:
+    // createMealEntry must not be called and the page must not navigate away.
     await waitFor(() => {
-      expect(navigateMock).not.toHaveBeenCalled();
+      expect(addRecipeMock).toHaveBeenCalled();
     });
+    expect(createMealEntryMock).not.toHaveBeenCalled();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });
