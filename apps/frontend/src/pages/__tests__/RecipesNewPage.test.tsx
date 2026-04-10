@@ -132,3 +132,91 @@ describe('RecipesNewPage (minimal)', () => {
     expect(screen.getByDisplayValue('Do this')).toBeTruthy();
   });
 });
+
+describe('RecipesNewPage - duplicate recipe handling', () => {
+  const navigateMock = vi.fn();
+  const createMealEntryMock = vi.fn().mockResolvedValue({ id: 'meal-1' });
+
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    navigateMock.mockReset();
+    createMealEntryMock.mockReset();
+    createMealEntryMock.mockResolvedValue({ id: 'meal-1' });
+    try {
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it('proceeds with meal plan entry using existing_recipe_id when in assistant flow (409 duplicate)', async () => {
+    vi.mock('../../stores/useRecipeStore', () => ({
+      useRecipeStore: () => ({
+        addRecipe: vi.fn().mockResolvedValue(null), // 409 → null
+        formSuggestion: null,
+        isAISuggestion: false,
+        clearFormSuggestion: vi.fn(),
+        duplicateInfo: {
+          existing_recipe_id: 'existing-uuid-123',
+          similar_recipes: [],
+        },
+        forceCreateRecipe: vi.fn(),
+        clearDuplicateState: vi.fn(),
+      }),
+      // Static getState used inside the handler
+      __esModule: true,
+    }));
+    vi.mock('../../api/endpoints/mealPlans', () => ({
+      createMealEntry: createMealEntryMock,
+    }));
+    vi.mock('react-router-dom', () => ({
+      useNavigate: () => navigateMock,
+      useSearchParams: () => [
+        new URLSearchParams('proposalKey=test-key&mealPlanDate=2026-04-14'),
+        vi.fn(),
+      ],
+    }));
+
+    const { default: Page } = await import('../RecipesNewPage');
+    render((<Page />) as any);
+
+    // The page should not show the duplicate modal (auto-proceed path taken)
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+  });
+
+  it('shows duplicate modal when NOT in assistant flow (no proposalKey, no mealPlanDate)', async () => {
+    const clearDuplicateMock = vi.fn();
+    vi.mock('../../stores/useRecipeStore', () => ({
+      useRecipeStore: () => ({
+        addRecipe: vi.fn().mockResolvedValue(null),
+        formSuggestion: null,
+        isAISuggestion: false,
+        clearFormSuggestion: vi.fn(),
+        duplicateInfo: {
+          existing_recipe_id: 'existing-uuid-456',
+          similar_recipes: [],
+        },
+        forceCreateRecipe: vi.fn(),
+        clearDuplicateState: clearDuplicateMock,
+      }),
+      __esModule: true,
+    }));
+    vi.mock('react-router-dom', () => ({
+      useNavigate: () => navigateMock,
+      // No proposalKey, no mealPlanDate → normal duplicate flow
+      useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    }));
+
+    const { default: Page } = await import('../RecipesNewPage');
+    render((<Page />) as any);
+
+    // Should NOT navigate away — duplicate modal should take over
+    await waitFor(() => {
+      expect(navigateMock).not.toHaveBeenCalled();
+    });
+  });
+});
