@@ -482,12 +482,19 @@ const RecipesNewPage: FC = () => {
       // Use the store to add the recipe
       const result = await addRecipe(recipeData);
 
-      if (result) {
-        const createdRecipeId =
-          result && typeof result === 'object' && 'id' in result
-            ? ((result as { id?: string | null }).id ?? undefined)
-            : undefined;
+      // Re-read duplicateInfo from the store: set when addRecipe encounters a 409.
+      const currentDuplicateInfo = useRecipeStore.getState().duplicateInfo;
 
+      // Resolve the recipe ID: newly created, or an exact-duplicate's existing ID so
+      // the meal plan flow can still proceed without user friction.
+      const createdRecipeId: string | undefined =
+        result && typeof result === 'object' && 'id' in result
+          ? ((result as { id?: string | null }).id ?? undefined)
+          : (currentDuplicateInfo?.existing_recipe_id ?? undefined);
+
+      const isExistingDuplicate = !result && !!createdRecipeId;
+
+      if (result || isExistingDuplicate) {
         const proposalKey = searchParams.get('proposalKey');
         const chatConversationId =
           searchParams.get('chatConversationId') ?? undefined;
@@ -501,7 +508,9 @@ const RecipesNewPage: FC = () => {
           useChatStore
             .getState()
             .appendLocalAssistantMessage(
-              'Recipe saved to your recipe book. If you selected a meal plan day, I’ll add it next.',
+              isExistingDuplicate
+                ? 'This recipe is already in your recipe book. Adding it to your meal plan now.'
+                : 'Recipe saved to your recipe book. If you selected a meal plan day, I\u2019ll add it next.',
               chatConversationId
             );
         }
@@ -529,7 +538,9 @@ const RecipesNewPage: FC = () => {
                 );
             }
             success(
-              `Recipe created and added to meal plan for ${mealPlanDayLabel || mealPlanDate}!`
+              isExistingDuplicate
+                ? `Recipe already existed and was added to meal plan for ${mealPlanDayLabel || mealPlanDate}!`
+                : `Recipe created and added to meal plan for ${mealPlanDayLabel || mealPlanDate}!`
             );
 
             if (returnToAssistant && chatConversationId) {
@@ -538,13 +549,13 @@ const RecipesNewPage: FC = () => {
             }
           } catch (mealPlanErr) {
             logger.error('Failed to add recipe to meal plan:', mealPlanErr);
-            // Still show success for recipe creation, but warn about meal plan
             success(
-              'Recipe created! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
+              isExistingDuplicate
+                ? 'Recipe already exists! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
+                : 'Recipe created! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
             );
           }
-        } else {
-          // Show success toast for just recipe creation
+        } else if (result) {
           success('Recipe created successfully!');
         }
 
