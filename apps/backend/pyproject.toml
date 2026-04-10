@@ -31,6 +31,7 @@ dependencies = [
     "numpy>=2.4.3",
     "google-genai>=1.69.0",
     "apscheduler>=3.11.2",
+    "azure-monitor-opentelemetry>=1.8.2",
 ]
 
 [dependency-groups]
