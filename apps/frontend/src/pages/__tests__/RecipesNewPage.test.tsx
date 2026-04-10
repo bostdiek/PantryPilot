@@ -2,6 +2,13 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// vi.mock factories are hoisted to the top of the file by Vitest's transform.
+// Variables used inside those factories must be declared with vi.hoisted so
+// they're initialised before the hoisted mock registrations run.
+const createMealEntryMock = vi.hoisted(() => vi.fn());
+const navigateMock = vi.hoisted(() => vi.fn());
+const clearDuplicateMock = vi.hoisted(() => vi.fn());
+
 // Basic stable mocks for modules used by the page
 vi.mock('../../stores/useRecipeStore', () => ({
   useRecipeStore: () => ({
@@ -68,7 +75,7 @@ describe('RecipesNewPage (minimal)', () => {
   it('shows validation alert when submitting without ingredients', async () => {
     // Ensure we have a fresh module instance without any AI suggestion
     vi.resetModules();
-    vi.mock('../../stores/useRecipeStore', () => ({
+    vi.doMock('../../stores/useRecipeStore', () => ({
       useRecipeStore: () => ({
         addRecipe: vi.fn().mockResolvedValue(true),
         formSuggestion: null,
@@ -112,7 +119,7 @@ describe('RecipesNewPage (minimal)', () => {
     vi.resetModules();
 
     // use the module-scoped `suggestion` defined above
-    vi.mock('../../stores/useRecipeStore', () => ({
+    vi.doMock('../../stores/useRecipeStore', () => ({
       useRecipeStore: () => ({
         addRecipe: vi.fn().mockResolvedValue(true),
         formSuggestion: suggestion,
@@ -134,9 +141,6 @@ describe('RecipesNewPage (minimal)', () => {
 });
 
 describe('RecipesNewPage - duplicate recipe handling', () => {
-  const navigateMock = vi.fn();
-  const createMealEntryMock = vi.fn().mockResolvedValue({ id: 'meal-1' });
-
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
@@ -152,7 +156,7 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
   });
 
   it('proceeds with meal plan entry using existing_recipe_id when in assistant flow (409 duplicate)', async () => {
-    vi.mock('../../stores/useRecipeStore', () => ({
+    vi.doMock('../../stores/useRecipeStore', () => ({
       useRecipeStore: () => ({
         addRecipe: vi.fn().mockResolvedValue(null), // 409 → null
         formSuggestion: null,
@@ -168,10 +172,10 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
       // Static getState used inside the handler
       __esModule: true,
     }));
-    vi.mock('../../api/endpoints/mealPlans', () => ({
+    vi.doMock('../../api/endpoints/mealPlans', () => ({
       createMealEntry: createMealEntryMock,
     }));
-    vi.mock('react-router-dom', () => ({
+    vi.doMock('react-router-dom', () => ({
       useNavigate: () => navigateMock,
       useSearchParams: () => [
         new URLSearchParams('proposalKey=test-key&mealPlanDate=2026-04-14'),
@@ -189,8 +193,7 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
   });
 
   it('shows duplicate modal when NOT in assistant flow (no proposalKey, no mealPlanDate)', async () => {
-    const clearDuplicateMock = vi.fn();
-    vi.mock('../../stores/useRecipeStore', () => ({
+    vi.doMock('../../stores/useRecipeStore', () => ({
       useRecipeStore: () => ({
         addRecipe: vi.fn().mockResolvedValue(null),
         formSuggestion: null,
@@ -205,7 +208,7 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
       }),
       __esModule: true,
     }));
-    vi.mock('react-router-dom', () => ({
+    vi.doMock('react-router-dom', () => ({
       useNavigate: () => navigateMock,
       // No proposalKey, no mealPlanDate → normal duplicate flow
       useSearchParams: () => [new URLSearchParams(), vi.fn()],
