@@ -89,7 +89,7 @@ export async function createMealEntry(
   payload: MealEntryIn
 ): Promise<MealEntry> {
   const snake = toSnakeEntryIn(payload);
-  const resp = await apiClient.request<any>('/api/v1/meals', {
+  const resp = await apiClient.request<any>('/api/v1/meals/', {
     method: 'POST',
     body: JSON.stringify(snake),
   });
