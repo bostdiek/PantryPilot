@@ -7,7 +7,7 @@ services:
     env_file:
       - .env.dev
     ports:
-      - "5432:5432" # Expose database port for development tools
+      - "${POSTGRES_PORT:-5432}:5432" # Expose database port for development tools
     environment:
       POSTGRES_LOG_STATEMENT: all # Log all SQL statements for debugging
       POSTGRES_LOG_MIN_DURATION_STATEMENT: 0 # Log all queries
