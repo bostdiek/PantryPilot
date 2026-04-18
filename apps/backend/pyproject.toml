@@ -46,7 +46,7 @@ dev = [
     "mypy>=1.14.2",
     "python-json-logger>=2.0.4",
     "detect-secrets>=1.5.0",
-    "pydantic-ai-slim[web]>=1.73.0",
+    "pydantic-ai-slim[web]>=1.84.0",
     "pip-audit>=2.10.0",
     "tiktoken>=0.8.0",
 ]
