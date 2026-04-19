@@ -317,12 +317,27 @@ def _extract_usage_metrics(
     if agent_result is None:
         return (None, None, None)
 
+    def _total_tokens(
+        prompt_tokens: int | None, completion_tokens: int | None
+    ) -> int | None:
+        if prompt_tokens is not None and completion_tokens is not None:
+            return prompt_tokens + completion_tokens
+        if prompt_tokens is not None:
+            return prompt_tokens
+        if completion_tokens is not None:
+            return completion_tokens
+        return None
+
     # Try direct usage access first
     usage = getattr(agent_result, "usage", None)
     if usage is not None:
         prompt_tokens, completion_tokens = _get_tokens_from_usage(usage)
         if prompt_tokens is not None or completion_tokens is not None:
-            return (prompt_tokens, completion_tokens, None)
+            return (
+                prompt_tokens,
+                completion_tokens,
+                _total_tokens(prompt_tokens, completion_tokens),
+            )
 
     # Fallback: sum usage from all ModelResponse messages (streaming)
     try:
@@ -331,7 +346,10 @@ def _extract_usage_metrics(
             return (
                 total_input if total_input > 0 else None,
                 total_output if total_output > 0 else None,
-                None,
+                _total_tokens(
+                    total_input if total_input > 0 else None,
+                    total_output if total_output > 0 else None,
+                ),
             )
     except Exception as exc:
         logger.debug(f"Failed to extract usage from all_messages: {exc}")
@@ -1534,11 +1552,55 @@ async def stream_chat_message(  # noqa: C901
                         raw_output
                     )
 
-                    prompt_tokens, completion_tokens, _ = _extract_usage_metrics(
-                        agent_result
+                    prompt_tokens, completion_tokens, total_tokens = (
+                        _extract_usage_metrics(agent_result)
                     )
                     model_name, model_version = _extract_model_metadata(agent_result)
                     latency_ms = int((time.monotonic() - run_started_at) * 1000)
+
+                    # Add LLM usage metadata to the main assistant span so traces
+                    # surface actionable token/model details in App Insights.
+                    message_span.set_attribute("gen_ai.request.model", model_name)
+                    message_span.set_attribute("gen_ai.request.streaming", True)
+                    if model_version is not None:
+                        message_span.set_attribute(
+                            "gen_ai.response.model_version", model_version
+                        )
+                    if prompt_tokens is not None:
+                        message_span.set_attribute(
+                            "gen_ai.usage.input_tokens", prompt_tokens
+                        )
+                    if completion_tokens is not None:
+                        message_span.set_attribute(
+                            "gen_ai.usage.output_tokens", completion_tokens
+                        )
+                    if total_tokens is not None:
+                        message_span.set_attribute(
+                            "gen_ai.usage.total_tokens", total_tokens
+                        )
+
+                    usage_event_attributes: dict[str, str | int] = {
+                        "gen_ai.request.model": model_name,
+                    }
+                    if model_version is not None:
+                        usage_event_attributes["gen_ai.response.model_version"] = (
+                            model_version
+                        )
+                    if prompt_tokens is not None:
+                        usage_event_attributes["gen_ai.usage.input_tokens"] = (
+                            prompt_tokens
+                        )
+                    if completion_tokens is not None:
+                        usage_event_attributes["gen_ai.usage.output_tokens"] = (
+                            completion_tokens
+                        )
+                    if total_tokens is not None:
+                        usage_event_attributes["gen_ai.usage.total_tokens"] = (
+                            total_tokens
+                        )
+                    message_span.add_event(
+                        "assistant_usage", attributes=usage_event_attributes
+                    )
 
                     await capture_training_sample(
                         db,
@@ -1561,6 +1623,14 @@ async def stream_chat_message(  # noqa: C901
                 await db.commit()
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
                 tool_names = sorted({tc.tool_name for tc in tool_calls_by_id.values()})
+
+                message_span.set_attribute(
+                    "assistant.output_block_count", len(all_blocks)
+                )
+                message_span.set_attribute(
+                    "assistant.tool_emitted_block_count", len(tool_emitted_blocks)
+                )
+
                 record_product_telemetry_event(
                     message_span,
                     event=ProductTelemetryEventName.ASSISTANT_MESSAGE_COMPLETED,

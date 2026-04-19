@@ -485,7 +485,7 @@ class TestExtractUsageMetrics:
 
         result = _extract_usage_metrics(mock_result)
 
-        assert result == (100, 50, None)
+        assert result == (100, 50, 150)
 
     def test_falls_back_to_message_sum(self) -> None:
         """Test falling back to summing from messages."""
@@ -502,7 +502,58 @@ class TestExtractUsageMetrics:
 
         result = _extract_usage_metrics(mock_result)
 
-        assert result == (100, 50, None)
+        assert result == (100, 50, 150)
+
+    def test_total_tokens_with_only_prompt_tokens(self) -> None:
+        """Test total_tokens when only prompt_tokens is available."""
+        from api.v1.chat import _extract_usage_metrics
+
+        usage = MagicMock()
+        usage.prompt_tokens = 100
+        usage.completion_tokens = None
+        usage.input_tokens = None
+        usage.output_tokens = None
+
+        mock_result = MagicMock()
+        mock_result.usage = usage
+
+        result = _extract_usage_metrics(mock_result)
+
+        assert result == (100, None, 100)
+
+    def test_total_tokens_with_only_completion_tokens(self) -> None:
+        """Test total_tokens when only completion_tokens is available."""
+        from api.v1.chat import _extract_usage_metrics
+
+        usage = MagicMock()
+        usage.prompt_tokens = None
+        usage.completion_tokens = 50
+        usage.input_tokens = None
+        usage.output_tokens = None
+
+        mock_result = MagicMock()
+        mock_result.usage = usage
+
+        result = _extract_usage_metrics(mock_result)
+
+        assert result == (None, 50, 50)
+
+    def test_total_tokens_with_both_none(self) -> None:
+        """Test total_tokens when both are None."""
+        from api.v1.chat import _extract_usage_metrics
+
+        usage = MagicMock()
+        usage.prompt_tokens = None
+        usage.completion_tokens = None
+        usage.input_tokens = None
+        usage.output_tokens = None
+
+        mock_result = MagicMock()
+        mock_result.usage = usage
+
+        result = _extract_usage_metrics(mock_result)
+
+        assert result == (None, None, None)
 
 
 class TestExtractModelMetadata:

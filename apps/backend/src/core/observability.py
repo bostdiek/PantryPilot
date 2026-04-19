@@ -35,6 +35,7 @@ For production (Azure):
 
 from __future__ import annotations
 
+import importlib.metadata as importlib_metadata
 import logging
 import os
 from collections.abc import Iterator
@@ -199,6 +200,14 @@ def _get_connection_string() -> str | None:
     return os.getenv(_ENV_APP_INSIGHTS_CONN_STRING)
 
 
+def _get_installed_version(package_name: str) -> str:
+    """Return installed package version for observability diagnostics."""
+    try:
+        return importlib_metadata.version(package_name)
+    except importlib_metadata.PackageNotFoundError:
+        return "not-installed"
+
+
 @lru_cache
 def configure_observability() -> bool:
     """Configure OpenTelemetry with Azure Monitor for production observability.
@@ -263,10 +272,23 @@ def configure_observability() -> bool:
         )
         return True
 
-    except ImportError:
+    except ImportError as exc:
+        installed_versions = {
+            "azure-monitor-opentelemetry": _get_installed_version(
+                "azure-monitor-opentelemetry"
+            ),
+            "azure-monitor-opentelemetry-exporter": _get_installed_version(
+                "azure-monitor-opentelemetry-exporter"
+            ),
+            "opentelemetry-api": _get_installed_version("opentelemetry-api"),
+            "opentelemetry-sdk": _get_installed_version("opentelemetry-sdk"),
+        }
         logger.warning(
-            "azure-monitor-opentelemetry package not installed. "
-            "Install with: uv add azure-monitor-opentelemetry"
+            "Failed to import Azure Monitor OpenTelemetry dependencies: %s. "
+            "Installed versions: %s. Ensure compatible opentelemetry-* versions "
+            "are installed (known-safe range for this app is <1.39).",
+            exc,
+            installed_versions,
         )
         return False
     except Exception as e:
