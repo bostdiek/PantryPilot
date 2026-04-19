@@ -33,9 +33,19 @@ export default defineConfig(({ mode }) => {
     build: {
       rollupOptions: {
         output: {
-          manualChunks: {
-            react: ['react', 'react-dom'],
-            state: ['zustand'],
+          manualChunks(id: string) {
+            if (
+              id.includes('react-dom') ||
+              id.includes('node_modules/react/')
+            ) {
+              return 'react';
+            }
+
+            if (id.includes('node_modules/zustand/')) {
+              return 'state';
+            }
+
+            return undefined;
           },
         },
       },

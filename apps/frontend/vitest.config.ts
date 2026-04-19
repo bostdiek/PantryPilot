@@ -1,6 +1,6 @@
-import { webcrypto as nodeWebcrypto } from 'node:crypto';
-import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import { webcrypto as nodeWebcrypto } from 'node:crypto';
 import svgr from 'vite-plugin-svgr';
 
 // Provide Web Crypto globally before Vite/Vitest server bootstraps.
@@ -32,7 +32,7 @@ export default mergeConfig(
     test: {
       globals: true,
       environment: 'jsdom',
-      setupFiles: ['./src/test/setup.ts', './src/setupTests.ts'],
+      setupFiles: ['./src/test/setup.ts', './src/test/setupTests.ts'],
       include: ['**/*.{test,spec}.{js,mjs,cjs,ts,mts,cts,jsx,tsx}'],
       exclude: ['**/e2e/**', '**/node_modules/**'],
       css: true,
