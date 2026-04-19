@@ -484,18 +484,31 @@ const RecipesNewPage: FC = () => {
 
       // Re-read duplicateInfo from the store: set when addRecipe encounters a 409.
       const currentDuplicateInfo = useRecipeStore.getState().duplicateInfo;
+      const existingDuplicateRecipeId =
+        currentDuplicateInfo?.existing_recipe_id ?? undefined;
 
-      // Resolve the recipe ID: newly created, or an exact-duplicate's existing ID so
-      // the meal plan flow can still proceed without user friction.
+      // Resolve the recipe ID: newly created, or an exact-duplicate's existing ID.
       const createdRecipeId: string | undefined =
         result && typeof result === 'object' && 'id' in result
           ? ((result as { id?: string | null }).id ?? undefined)
-          : (currentDuplicateInfo?.existing_recipe_id ?? undefined);
+          : existingDuplicateRecipeId;
 
-      const isExistingDuplicate = !result && !!createdRecipeId;
+      // Only auto-proceed through the duplicate path when in the assistant / meal-plan
+      // flow (proposalKey or mealPlanDate present). Outside that context let the
+      // existing duplicate modal handle the UX as before.
+      const proposalKey = searchParams.get('proposalKey');
+      const mealPlanDate = searchParams.get('mealPlanDate');
+      const isAssistantFlow = !!proposalKey || !!mealPlanDate;
+      const isExistingDuplicate =
+        !result && !!existingDuplicateRecipeId && isAssistantFlow;
 
       if (result || isExistingDuplicate) {
-        const proposalKey = searchParams.get('proposalKey');
+        // Clear duplicate state before navigating to prevent the duplicate-details
+        // useEffect from firing after unmount and briefly opening the modal.
+        if (isExistingDuplicate) {
+          clearDuplicateState();
+        }
+
         const chatConversationId =
           searchParams.get('chatConversationId') ?? undefined;
         const returnToAssistant =
@@ -504,24 +517,22 @@ const RecipesNewPage: FC = () => {
           markMealProposalSavedToBook(proposalKey);
         }
 
-        if (proposalKey) {
-          useChatStore
-            .getState()
-            .appendLocalAssistantMessage(
-              isExistingDuplicate
-                ? 'This recipe is already in your recipe book. Adding it to your meal plan now.'
-                : 'Recipe saved to your recipe book. If you selected a meal plan day, I\u2019ll add it next.',
-              chatConversationId
-            );
-        }
-
-        // Check if we should add this recipe to a meal plan
-        const mealPlanDate = searchParams.get('mealPlanDate');
         const mealPlanDayLabel = searchParams.get('mealPlanDayLabel');
-
         let nextPath: string = '/recipes';
 
         if (mealPlanDate && createdRecipeId) {
+          // Send assistant message before attempting the meal entry so the user
+          // sees accurate messaging about what is actually happening.
+          if (proposalKey) {
+            useChatStore
+              .getState()
+              .appendLocalAssistantMessage(
+                isExistingDuplicate
+                  ? 'This recipe is already in your recipe book. Adding it to your meal plan now.'
+                  : 'Recipe saved to your recipe book. Adding it to your meal plan now.',
+                chatConversationId
+              );
+          }
           try {
             await createMealEntry({
               plannedForDate: mealPlanDate,
@@ -555,8 +566,21 @@ const RecipesNewPage: FC = () => {
                 : 'Recipe created! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
             );
           }
-        } else if (result) {
-          success('Recipe created successfully!');
+        } else {
+          // No meal plan date — just save the recipe.
+          if (proposalKey) {
+            useChatStore
+              .getState()
+              .appendLocalAssistantMessage(
+                isExistingDuplicate
+                  ? 'This recipe is already in your recipe book.'
+                  : 'Recipe saved to your recipe book. If you selected a meal plan day, I’ll add it next.',
+                chatConversationId
+              );
+          }
+          if (result) {
+            success('Recipe created successfully!');
+          }
         }
 
         navigate(nextPath);
