@@ -57,7 +57,7 @@ export function mockMatchMedia(
 mockAnimationsApi();
 
 // Mock the useToast hook
-vi.mock('./components/ui/useToast', () => ({
+vi.mock('../components/ui/useToast', () => ({
   useToast: () => ({
     toastList: [],
     removeToast: vi.fn(),
@@ -69,8 +69,8 @@ vi.mock('./components/ui/useToast', () => ({
 }));
 
 // Also mock from the Toast import path since some components import from there
-vi.mock('./components/ui/Toast', async () => {
-  const actual = await vi.importActual('./components/ui/Toast');
+vi.mock('../components/ui/Toast', async () => {
+  const actual = await vi.importActual('../components/ui/Toast');
   return {
     ...actual,
     useToast: () => ({
