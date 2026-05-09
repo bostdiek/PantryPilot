@@ -105,7 +105,16 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off',
     },
   },
-  reactHooks.configs['recommended-latest'],
+  reactHooks.configs.flat.recommended,
+  {
+    rules: {
+      'react-hooks/error-boundaries': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/purity': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
   reactRefresh.configs.vite({
     extraHOCs: ['withErrorBoundary', 'lazy'],
     allowConstantExport: true,
