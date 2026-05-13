@@ -179,8 +179,8 @@ GEMINI_API_KEY=your-gemini-api-key
 # Assistant standard tier
 CHAT_MODEL=gemini-3-flash-preview
 # URL + image import tier
-MULTIMODAL_MODEL=gemini-3.1-flash-lite-preview
-TEXT_MODEL=gemini-3.1-flash-lite-preview
+MULTIMODAL_MODEL=gemini-3.1-flash-lite
+TEXT_MODEL=gemini-3.1-flash-lite
 EMBEDDING_MODEL=gemini-embedding-001
 ```
 
@@ -199,10 +199,10 @@ When `LLM_PROVIDER=azure_openai`, the following features use Azure OpenAI:
 | Feature | Configuration Variable | Default (Gemini) |
 |---------|----------------------|------------------|
 | Chat Agent | `CHAT_MODEL` | gemini-3-flash-preview |
-| Recipe Extraction (URL) | `TEXT_MODEL` | gemini-3.1-flash-lite-preview |
-| Recipe Extraction (Image) | `MULTIMODAL_MODEL` | gemini-3.1-flash-lite-preview |
-| Title Generation | `TEXT_MODEL` | gemini-3.1-flash-lite-preview |
-| Context Generation | `TEXT_MODEL` | gemini-3.1-flash-lite-preview |
+| Recipe Extraction (URL) | `TEXT_MODEL` | gemini-3.1-flash-lite |
+| Recipe Extraction (Image) | `MULTIMODAL_MODEL` | gemini-3.1-flash-lite |
+| Title Generation | `TEXT_MODEL` | gemini-3.1-flash-lite |
+| Context Generation | `TEXT_MODEL` | gemini-3.1-flash-lite |
 | Semantic Search | `EMBEDDING_MODEL` | gemini-embedding-001 |
 
 All providers support tool calling and structured outputs.

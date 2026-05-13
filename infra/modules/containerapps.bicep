@@ -76,10 +76,10 @@ param llmProvider string = 'gemini'
 param chatModel string = 'gemini-3-flash-preview'
 
 @description('Multimodal model name for image/vision tasks')
-param multimodalModel string = 'gemini-3.1-flash-lite-preview'
+param multimodalModel string = 'gemini-3.1-flash-lite'
 
 @description('Text model name for fast text tasks')
-param textModel string = 'gemini-3.1-flash-lite-preview'
+param textModel string = 'gemini-3.1-flash-lite'
 
 @description('Embedding model name for semantic search')
 param embeddingModel string = 'gemini-embedding-001'
