@@ -443,6 +443,11 @@ class HTMLExtractionService:
         combined_selector = ",".join(self.BOILERPLATE_SELECTORS)
         try:
             for element in soup.select(combined_selector):
+                # Broad substring selectors like [class*='sidebar'] can match
+                # structural containers (for example <body class="has-sidebar">)
+                # and wipe the entire document. Preserve root/content wrappers.
+                if element.name in {"html", "body", "main", "article"}:
+                    continue
                 element.decompose()
         except Exception as e:
             # Log and continue if selector processing fails

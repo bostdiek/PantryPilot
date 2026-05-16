@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import httpx
 import pytest
+from bs4 import BeautifulSoup
 from fastapi import HTTPException
 
 from services.ai.html_extractor import HTMLExtractionService
@@ -154,3 +155,34 @@ async def test_empty_response():
         mock_async.get.return_value = mock_resp
         result = await extractor.fetch_and_sanitize("https://example.com/empty")
         assert result == ""
+
+
+def test_remove_boilerplate_preserves_structural_containers() -> None:
+    extractor = HTMLExtractionService()
+    html = """
+        <html>
+            <body class="has-sidebar single-post">
+                <main>
+                    <article>
+                        <div class="entry-content">
+                            <h1>Creamy Mediterranean Chicken</h1>
+                            <p>Chicken, cream, tomatoes, and spinach.</p>
+                        </div>
+                        <aside class="recipe-sidebar">
+                            <p>Newsletter signup</p>
+                        </aside>
+                    </article>
+                </main>
+            </body>
+        </html>
+        """
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    extractor._remove_boilerplate(soup)
+
+    result = str(soup)
+    assert "Creamy Mediterranean Chicken" in result
+    assert "Chicken, cream, tomatoes, and spinach." in result
+    assert "Newsletter signup" not in result
+    assert soup.body is not None
