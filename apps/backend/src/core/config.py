@@ -42,17 +42,17 @@ class Settings(BaseSettings):
     # IMPORTANT: When using Azure OpenAI, override ALL model names to match
     # your Azure deployment names (e.g., gpt-4o-mini, text-embedding-3-small)
     # The defaults below are Gemini-specific and will not work with Azure.
-    # Gemini 3 preview defaults:
+    # Gemini 3 defaults:
     # - assistant/chat uses gemini-3-flash-preview
-    # - URL/image extraction uses gemini-3.1-flash-lite-preview
-    # Stable rollback pair if preview quality/rate limits regress:
+    # - URL/image extraction uses gemini-3.1-flash-lite
+    # Stable rollback pair if quality/rate limits regress:
     # - CHAT_MODEL=gemini-2.5-pro
     # - TEXT_MODEL=gemini-2.5-flash-lite
     # - MULTIMODAL_MODEL=gemini-2.5-flash-lite
     CHAT_MODEL: str = "gemini-3-flash-preview"  # General chat/completion model
-    MULTIMODAL_MODEL: str = "gemini-3.1-flash-lite-preview"  # Image/vision tasks
+    MULTIMODAL_MODEL: str = "gemini-3.1-flash-lite"  # Image/vision tasks
     EMBEDDING_MODEL: str = "gemini-embedding-001"  # Semantic embeddings
-    TEXT_MODEL: str = "gemini-3.1-flash-lite-preview"  # Fast text tasks (context gen)
+    TEXT_MODEL: str = "gemini-3.1-flash-lite"  # Fast text tasks (context gen)
 
     # Provider-specific API credentials
     # Gemini configuration
