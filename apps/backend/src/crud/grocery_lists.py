@@ -85,8 +85,6 @@ class GroceryListCRUD:
                     RecipeIngredient.is_optional.is_(False),
                     # Must have quantity
                     RecipeIngredient.quantity_value.is_not(None),
-                    # Must have unit
-                    RecipeIngredient.quantity_unit.is_not(None),
                 )
             )
         )
@@ -105,7 +103,8 @@ class GroceryListCRUD:
         )
 
         for row in ingredient_rows:
-            key = (row.ingredient_id, row.quantity_unit)
+            quantity_unit = row.quantity_unit or ""
+            key = (row.ingredient_id, quantity_unit)
             agg = aggregated[key]
 
             # Add to quantity (convert to float for aggregation)

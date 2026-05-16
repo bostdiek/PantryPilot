@@ -247,6 +247,81 @@ class TestGroceryListAPI:
         assert "Test Recipe" in tomato_ingredient["recipes"]
 
     @pytest.mark.asyncio
+    async def test_generate_grocery_list_includes_unitless_ingredients(
+        self, grocery_client
+    ):
+        """Test that ingredients without units still appear in the grocery list."""
+        client, session = grocery_client
+
+        demo_user = User(
+            id=uuid4(),
+            username="demo",
+            email="demo@tests.local",
+            hashed_password="x",
+        )
+        session.add(demo_user)
+        await session.commit()
+
+        recipe = Recipe(
+            id=uuid4(),
+            user_id=demo_user.id,
+            name="Unitless Recipe",
+            prep_time_minutes=10,
+            cook_time_minutes=15,
+        )
+        session.add(recipe)
+
+        ingredient = Ingredient(
+            id=uuid4(),
+            user_id=demo_user.id,
+            ingredient_name="Eggplant",
+        )
+        session.add(ingredient)
+
+        recipe_ingredient = RecipeIngredient(
+            id=uuid4(),
+            recipe_id=recipe.id,
+            ingredient_id=ingredient.id,
+            quantity_value=1.0,
+            quantity_unit=None,
+            is_optional=False,
+        )
+        session.add(recipe_ingredient)
+
+        today = date.today()
+        meal = Meal(
+            id=uuid4(),
+            user_id=demo_user.id,
+            recipe_id=recipe.id,
+            planned_for_date=today,
+            meal_type="dinner",
+            is_leftover=False,
+            is_eating_out=False,
+        )
+        session.add(meal)
+        await session.commit()
+
+        response = await client.post(
+            "/api/v1/grocery-lists",
+            json={
+                "start_date": today.isoformat(),
+                "end_date": today.isoformat(),
+            },
+        )
+
+        assert response.status_code == 200
+        grocery_list = response.json()["data"]
+
+        assert grocery_list["total_meals"] == 1
+        assert len(grocery_list["ingredients"]) == 1
+
+        unitless_ingredient = grocery_list["ingredients"][0]
+        assert unitless_ingredient["name"] == "Eggplant"
+        assert unitless_ingredient["quantity_value"] == 1.0
+        assert unitless_ingredient["quantity_unit"] == ""
+        assert unitless_ingredient["recipes"] == ["Unitless Recipe"]
+
+    @pytest.mark.asyncio
     async def test_generate_grocery_list_empty_date_range(self, grocery_client):
         """Test grocery list generation with no meals in date range."""
         client, session = grocery_client
