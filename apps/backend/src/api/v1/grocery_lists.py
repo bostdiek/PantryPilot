@@ -28,7 +28,8 @@ logger = logging.getLogger(__name__)
         "Generate a grocery list for the authenticated user based on their meal plan "
         "within the specified date range. Aggregates ingredients from all recipes "
         "planned for the given period, excluding optional ingredients and meals "
-        "marked as 'eating out'."
+        "marked as 'eating out'. Ingredients without a stored unit are included "
+        "with an empty quantity_unit string so the response contract remains stable."
     ),
     responses={
         200: {"description": "Grocery list generated successfully"},
