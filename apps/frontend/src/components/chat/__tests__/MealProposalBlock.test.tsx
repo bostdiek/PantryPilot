@@ -35,11 +35,21 @@ vi.mock('../../../stores/useChatStore', () => ({
 }));
 
 vi.mock('../../../utils/mealProposalStatus', () => ({
+  getMealProposalInstanceId: () => 'test-proposal-123',
   getMealProposalStatus: () => ({
+    version: 1,
+    phase: 'pending',
+    updatedAt: undefined,
+    proposalInstanceId: undefined,
+    recipeId: undefined,
+    returnContext: undefined,
+    lastError: undefined,
     savedToBook: false,
     addedToPlan: false,
     rejected: false,
+    canRetryAdd: false,
   }),
+  invalidateMealProposalStatus: vi.fn(),
   markMealProposalSavedToBook: vi.fn(),
   markMealProposalAddedToPlan: vi.fn(),
   markMealProposalRejected: vi.fn(),

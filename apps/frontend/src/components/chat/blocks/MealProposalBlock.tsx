@@ -30,6 +30,7 @@ import { useChatStore } from '../../../stores/useChatStore';
 import type { MealProposalBlock as MealProposalBlockType } from '../../../types/Chat';
 import {
   getMealProposalStatus,
+  invalidateMealProposalStatus,
   markMealProposalAddedToPlan,
   markMealProposalRejected,
 } from '../../../utils/mealProposalStatus';
@@ -43,8 +44,35 @@ type ProposalState =
   | 'accepted'
   | 'rejected'
   | 'saving_to_book'
-  | 'saved_to_book'
+  | 'recipe_saved'
+  | 'retryable_add_failure'
   | 'needs_save_warning';
+
+function getProposalState(
+  status: ReturnType<typeof getMealProposalStatus>
+): ProposalState {
+  if (status.addedToPlan) {
+    return 'accepted';
+  }
+
+  if (status.rejected) {
+    return 'rejected';
+  }
+
+  if (status.phase === 'saving_recipe') {
+    return 'saving_to_book';
+  }
+
+  if (status.phase === 'retryable_add_failure') {
+    return 'retryable_add_failure';
+  }
+
+  if (status.phase === 'recipe_saved' || status.phase === 'adding_to_plan') {
+    return 'recipe_saved';
+  }
+
+  return 'pending';
+}
 
 function parseIsoDateAsLocal(isoDate: string): Date | null {
   // Avoid JS Date parsing quirks where "YYYY-MM-DD" is treated as UTC,
@@ -91,22 +119,18 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
     block.is_leftover,
     block.is_eating_out,
   ]);
+  const proposalInstanceId = block.proposal_id;
 
   const [persistedStatus, setPersistedStatus] = useState(() =>
     getMealProposalStatus(proposalKey)
   );
 
   useEffect(() => {
+    invalidateMealProposalStatus(proposalKey, proposalInstanceId);
     const status = getMealProposalStatus(proposalKey);
     setPersistedStatus(status);
-    if (status.addedToPlan) {
-      setState('accepted');
-    } else if (status.rejected) {
-      setState('rejected');
-    } else if (status.savedToBook) {
-      setState('saved_to_book');
-    }
-  }, [proposalKey]);
+    setState(getProposalState(status));
+  }, [proposalInstanceId, proposalKey]);
 
   const newRecipeSourceUrl = block.new_recipe?.source_url ?? undefined;
 
@@ -123,7 +147,7 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
         isEatingOut: block.is_eating_out || false,
         notes: block.notes ?? undefined,
       });
-      markMealProposalAddedToPlan(proposalKey);
+      markMealProposalAddedToPlan(proposalKey, { proposalInstanceId });
       setPersistedStatus((prev) => ({ ...prev, addedToPlan: true }));
       setState('accepted');
 
@@ -186,8 +210,8 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
       return;
     }
 
-    if (persistedStatus.savedToBook) {
-      setState('saved_to_book');
+    if (persistedStatus.canRetryAdd) {
+      handleSaveToRecipeBook();
       return;
     }
 
@@ -212,7 +236,7 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
         isEatingOut: block.is_eating_out || false,
         notes: block.notes ?? undefined,
       });
-      markMealProposalAddedToPlan(proposalKey);
+      markMealProposalAddedToPlan(proposalKey, { proposalInstanceId });
       setPersistedStatus((prev) => ({ ...prev, addedToPlan: true }));
       setState('accepted');
 
@@ -239,7 +263,7 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
   };
 
   const handleReject = () => {
-    markMealProposalRejected(proposalKey);
+    markMealProposalRejected(proposalKey, { proposalInstanceId });
     setPersistedStatus((prev) => ({ ...prev, rejected: true }));
     setState('rejected');
   };
@@ -289,17 +313,47 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
     );
   }
 
-  if (state === 'saved_to_book') {
+  if (state === 'recipe_saved') {
     return (
       <div className="my-2 rounded-lg border border-blue-200 bg-blue-50 p-4">
         <div className="flex items-center gap-2 text-blue-700">
           <BookOpen className="h-5 w-5" />
-          <span className="font-medium">Saved to your recipe book</span>
+          <span className="font-medium">Recipe saved to your recipe book</span>
         </div>
         <p className="mt-2 text-sm text-blue-600">
-          If you chose “Add to Meal Plan”, it should now appear on{' '}
+          Continue the assistant flow to finish adding it to {block.day_label}.
+        </p>
+        <button
+          onClick={handleSaveToRecipeBook}
+          className="mt-4 inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700"
+        >
+          <Calendar className="h-4 w-4" />
+          Continue to Meal Plan
+        </button>
+      </div>
+    );
+  }
+
+  if (state === 'retryable_add_failure') {
+    return (
+      <div className="my-2 rounded-lg border border-amber-300 bg-amber-50 p-4">
+        <div className="flex items-center gap-2 text-amber-800">
+          <Calendar className="h-5 w-5" />
+          <span className="font-medium">
+            Add to meal plan needs one more try
+          </span>
+        </div>
+        <p className="mt-2 text-sm text-amber-700">
+          The recipe was saved, but we could not finish adding it to{' '}
           {block.day_label}.
         </p>
+        <button
+          onClick={handleSaveToRecipeBook}
+          className="mt-4 inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 font-medium text-white transition-colors hover:bg-amber-700"
+        >
+          <Calendar className="h-4 w-4" />
+          Retry Add to Meal Plan
+        </button>
       </div>
     );
   }
@@ -490,27 +544,27 @@ export function MealProposalBlock({ block }: MealProposalBlockProps) {
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <button
                 onClick={handleSaveToRecipeBook}
-                disabled={
-                  isLoading ||
-                  persistedStatus.savedToBook ||
-                  persistedStatus.addedToPlan
-                }
+                disabled={isLoading || persistedStatus.addedToPlan}
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-400"
               >
                 <BookOpen className="h-4 w-4" />
-                {persistedStatus.savedToBook ? 'Saved' : 'Save to Recipe Book'}
+                {persistedStatus.canRetryAdd
+                  ? 'Continue Saved Recipe'
+                  : persistedStatus.savedToBook
+                    ? 'Saved'
+                    : 'Save to Recipe Book'}
               </button>
               <button
                 onClick={handleAddNewToMealPlan}
-                disabled={
-                  isLoading ||
-                  persistedStatus.savedToBook ||
-                  persistedStatus.addedToPlan
-                }
+                disabled={isLoading || persistedStatus.addedToPlan}
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-gray-400"
               >
                 <Calendar className="h-4 w-4" />
-                {persistedStatus.addedToPlan ? 'Added' : 'Add to Meal Plan'}
+                {persistedStatus.addedToPlan
+                  ? 'Added'
+                  : persistedStatus.canRetryAdd
+                    ? 'Continue to Meal Plan'
+                    : 'Add to Meal Plan'}
               </button>
             </div>
             <button

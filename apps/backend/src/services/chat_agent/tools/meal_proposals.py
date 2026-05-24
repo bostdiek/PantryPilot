@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from uuid import uuid4
 
 from pydantic_ai import RunContext
 
@@ -67,7 +68,7 @@ async def tool_propose_meal_for_day(
         "type": "meal_proposal",
         "date": date,
         "day_label": day_label,
-        "proposal_id": f"{date}-proposal",
+        "proposal_id": f"{date}-proposal-{uuid4().hex}",
         "existing_recipe": None,
         "new_recipe": None,
         "is_leftover": is_leftover,

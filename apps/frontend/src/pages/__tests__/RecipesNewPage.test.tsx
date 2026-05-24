@@ -8,6 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const createMealEntryMock = vi.hoisted(() => vi.fn());
 const navigateMock = vi.hoisted(() => vi.fn());
 const clearDuplicateMock = vi.hoisted(() => vi.fn());
+const getMealProposalInstanceIdMock = vi.hoisted(() => vi.fn());
+const markMealProposalSavedToBookMock = vi.hoisted(() => vi.fn());
+const markMealProposalAddedToPlanMock = vi.hoisted(() => vi.fn());
+const markMealProposalRetryableAddFailureMock = vi.hoisted(() => vi.fn());
 
 // Mutable state shared between the hook mock and getState() so addRecipe can
 // simulate setting duplicateInfo (as the real Zustand store does on 409).
@@ -59,8 +63,10 @@ vi.mock('../../stores/useChatStore', () => ({
   }),
 }));
 vi.mock('../../utils/mealProposalStatus', () => ({
-  markMealProposalSavedToBook: vi.fn(),
-  markMealProposalAddedToPlan: vi.fn(),
+  getMealProposalInstanceId: getMealProposalInstanceIdMock,
+  markMealProposalSavedToBook: markMealProposalSavedToBookMock,
+  markMealProposalAddedToPlan: markMealProposalAddedToPlanMock,
+  markMealProposalRetryableAddFailure: markMealProposalRetryableAddFailureMock,
 }));
 vi.mock('../../api/endpoints/recipes', () => ({
   getRecipeById: vi.fn().mockResolvedValue(null),
@@ -174,6 +180,13 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     clearDuplicateMock.mockReset();
     createMealEntryMock.mockReset();
     createMealEntryMock.mockResolvedValue({ id: 'meal-1' });
+    getMealProposalInstanceIdMock.mockReset();
+    getMealProposalInstanceIdMock.mockImplementation(
+      (proposalKey: string) => proposalKey
+    );
+    markMealProposalSavedToBookMock.mockReset();
+    markMealProposalAddedToPlanMock.mockReset();
+    markMealProposalRetryableAddFailureMock.mockReset();
     recipeStoreState.duplicateInfo = null;
     try {
       window.localStorage.clear();
@@ -241,6 +254,19 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
         })
       );
     });
+    expect(markMealProposalSavedToBookMock).not.toHaveBeenCalled();
+    expect(markMealProposalAddedToPlanMock).toHaveBeenCalledWith(
+      'test-key',
+      expect.objectContaining({
+        proposalInstanceId: 'test-key',
+        recipeId: 'existing-uuid-123',
+        returnContext: expect.objectContaining({
+          proposalKey: 'test-key',
+          mealPlanDate: '2026-04-14',
+        }),
+      })
+    );
+    expect(markMealProposalRetryableAddFailureMock).not.toHaveBeenCalled();
     expect(navigateMock).toHaveBeenCalled();
     // Duplicate modal should not be shown (auto-proceed path taken)
     expect(screen.queryByRole('dialog')).toBeNull();

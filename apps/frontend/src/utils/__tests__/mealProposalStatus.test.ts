@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getMealProposalInstanceId,
   getMealProposalStatus,
+  invalidateMealProposalStatus,
   markMealProposalAddedToPlan,
   markMealProposalRejected,
   markMealProposalSavedToBook,
@@ -15,43 +17,65 @@ describe('mealProposalStatus', () => {
     it('returns all false for unknown proposal', () => {
       const status = getMealProposalStatus('unknown-proposal');
       expect(status).toEqual({
+        version: 1,
+        phase: 'pending',
+        updatedAt: undefined,
+        proposalInstanceId: undefined,
+        recipeId: undefined,
+        returnContext: undefined,
+        lastError: undefined,
         savedToBook: false,
         addedToPlan: false,
         rejected: false,
+        canRetryAdd: false,
       });
     });
 
     it('returns correct status after marking savedToBook', () => {
-      markMealProposalSavedToBook('test-proposal');
+      markMealProposalSavedToBook('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+      });
       const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('recipe_saved');
+      expect(status.proposalInstanceId).toBe('proposal-1');
       expect(status.savedToBook).toBe(true);
       expect(status.addedToPlan).toBe(false);
       expect(status.rejected).toBe(false);
+      expect(status.canRetryAdd).toBe(true);
     });
 
     it('returns correct status after marking addedToPlan', () => {
-      markMealProposalAddedToPlan('test-proposal');
+      markMealProposalAddedToPlan('test-proposal', {
+        proposalInstanceId: 'proposal-2',
+      });
       const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('added_to_plan');
+      expect(status.proposalInstanceId).toBe('proposal-2');
       expect(status.savedToBook).toBe(false);
       expect(status.addedToPlan).toBe(true);
       expect(status.rejected).toBe(false);
+      expect(status.canRetryAdd).toBe(false);
     });
 
     it('returns correct status after marking rejected', () => {
       markMealProposalRejected('test-proposal');
       const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('rejected');
       expect(status.savedToBook).toBe(false);
       expect(status.addedToPlan).toBe(false);
       expect(status.rejected).toBe(true);
+      expect(status.canRetryAdd).toBe(false);
     });
 
     it('handles multiple flags being set', () => {
       markMealProposalSavedToBook('test-proposal');
       markMealProposalAddedToPlan('test-proposal');
       const status = getMealProposalStatus('test-proposal');
-      expect(status.savedToBook).toBe(true);
+      expect(status.phase).toBe('added_to_plan');
+      expect(status.savedToBook).toBe(false);
       expect(status.addedToPlan).toBe(true);
       expect(status.rejected).toBe(false);
+      expect(status.canRetryAdd).toBe(false);
     });
 
     it('handles different proposals independently', () => {
@@ -71,6 +95,22 @@ describe('mealProposalStatus', () => {
   });
 
   describe('error handling', () => {
+    it('extracts the proposal instance from the persisted proposal key', () => {
+      expect(
+        getMealProposalInstanceId('proposal-123|url:https://example.com')
+      ).toBe('proposal-123');
+    });
+
+    it('clears stale persisted state when the proposal instance changes', () => {
+      markMealProposalSavedToBook('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+      });
+
+      invalidateMealProposalStatus('test-proposal', 'proposal-2');
+
+      expect(getMealProposalStatus('test-proposal').phase).toBe('pending');
+    });
+
     it('returns false when localStorage throws on read', () => {
       const getItemSpy = vi
         .spyOn(Storage.prototype, 'getItem')
@@ -80,9 +120,17 @@ describe('mealProposalStatus', () => {
 
       const status = getMealProposalStatus('test-proposal');
       expect(status).toEqual({
+        version: 1,
+        phase: 'pending',
+        updatedAt: undefined,
+        proposalInstanceId: undefined,
+        recipeId: undefined,
+        returnContext: undefined,
+        lastError: undefined,
         savedToBook: false,
         addedToPlan: false,
         rejected: false,
+        canRetryAdd: false,
       });
 
       getItemSpy.mockRestore();
