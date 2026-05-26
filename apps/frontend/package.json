@@ -42,10 +42,10 @@
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
-    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.53.1",
     "@vitejs/plugin-react": "^6.0.2",
-    "@vitest/coverage-v8": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.7",
     "@vitest/ui": "^4.0.17",
     "eslint": "^10.4.0",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -60,7 +60,7 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.1.18",
     "typescript": "~6.0.2",
-    "vite": "^8.0.13",
+    "vite": "^8.0.14",
     "vite-plugin-svgr": "^5.2.0",
     "vitest": "^4.0.17"
   }
