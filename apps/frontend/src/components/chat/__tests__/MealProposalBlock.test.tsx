@@ -34,15 +34,24 @@ vi.mock('../../../stores/useChatStore', () => ({
   },
 }));
 
+const mockGetMealProposalStatus = vi.fn();
+const mockInvalidateMealProposalStatus = vi.fn();
+const mockMarkMealProposalSavedToBook = vi.fn();
+const mockMarkMealProposalAddedToPlan = vi.fn();
+const mockMarkMealProposalRejected = vi.fn();
+
 vi.mock('../../../utils/mealProposalStatus', () => ({
-  getMealProposalStatus: () => ({
-    savedToBook: false,
-    addedToPlan: false,
-    rejected: false,
-  }),
-  markMealProposalSavedToBook: vi.fn(),
-  markMealProposalAddedToPlan: vi.fn(),
-  markMealProposalRejected: vi.fn(),
+  getMealProposalInstanceId: () => 'test-proposal-123',
+  getMealProposalStatus: (...args: unknown[]) =>
+    mockGetMealProposalStatus(...args),
+  invalidateMealProposalStatus: (...args: unknown[]) =>
+    mockInvalidateMealProposalStatus(...args),
+  markMealProposalSavedToBook: (...args: unknown[]) =>
+    mockMarkMealProposalSavedToBook(...args),
+  markMealProposalAddedToPlan: (...args: unknown[]) =>
+    mockMarkMealProposalAddedToPlan(...args),
+  markMealProposalRejected: (...args: unknown[]) =>
+    mockMarkMealProposalRejected(...args),
 }));
 
 import { MealProposalBlock } from '../blocks/MealProposalBlock';
@@ -55,6 +64,19 @@ describe('MealProposalBlock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    mockGetMealProposalStatus.mockReturnValue({
+      version: 1,
+      phase: 'pending',
+      updatedAt: undefined,
+      proposalInstanceId: undefined,
+      recipeId: undefined,
+      returnContext: undefined,
+      lastError: undefined,
+      savedToBook: false,
+      addedToPlan: false,
+      rejected: false,
+      canRetryAdd: false,
+    });
   });
 
   const baseBlock: MealProposalBlockType = {
@@ -284,6 +306,147 @@ describe('MealProposalBlock', () => {
 
       // Should show "Sat, Jan 25" not the previous day
       expect(screen.getByText(/Jan 25/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('persisted state recovery', () => {
+    it('renders recipe_saved state with continue button', () => {
+      mockGetMealProposalStatus.mockReturnValue({
+        version: 1,
+        phase: 'recipe_saved',
+        updatedAt: '2026-01-25T10:00:00Z',
+        proposalInstanceId: 'test-proposal-123',
+        recipeId: 'recipe-abc',
+        returnContext: undefined,
+        lastError: undefined,
+        savedToBook: true,
+        addedToPlan: false,
+        rejected: false,
+        canRetryAdd: true,
+      });
+
+      const block: MealProposalBlockType = {
+        ...baseBlock,
+        new_recipe: {
+          title: 'Beef Bourguignon',
+          source_url: 'https://example.com/beef',
+        },
+      };
+
+      renderWithRouter(<MealProposalBlock block={block} />);
+
+      expect(
+        screen.getByText(/Recipe saved to your recipe book/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Continue to Meal Plan/i })
+      ).toBeInTheDocument();
+    });
+
+    it('renders retryable_add_failure state with retry button', () => {
+      mockGetMealProposalStatus.mockReturnValue({
+        version: 1,
+        phase: 'retryable_add_failure',
+        updatedAt: '2026-01-25T10:00:00Z',
+        proposalInstanceId: 'test-proposal-123',
+        recipeId: 'recipe-abc',
+        returnContext: undefined,
+        lastError: 'meal_entry_create_failed',
+        savedToBook: true,
+        addedToPlan: false,
+        rejected: false,
+        canRetryAdd: true,
+      });
+
+      const block: MealProposalBlockType = {
+        ...baseBlock,
+        new_recipe: {
+          title: 'Beef Bourguignon',
+          source_url: 'https://example.com/beef',
+        },
+      };
+
+      renderWithRouter(<MealProposalBlock block={block} />);
+
+      expect(
+        screen.getByText(/Add to meal plan needs one more try/i)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: /Retry Add to Meal Plan/i })
+      ).toBeInTheDocument();
+    });
+
+    it('renders added_to_plan (accepted) state', () => {
+      mockGetMealProposalStatus.mockReturnValue({
+        version: 1,
+        phase: 'added_to_plan',
+        updatedAt: '2026-01-25T10:00:00Z',
+        proposalInstanceId: 'test-proposal-123',
+        recipeId: 'recipe-abc',
+        returnContext: undefined,
+        lastError: undefined,
+        savedToBook: false,
+        addedToPlan: true,
+        rejected: false,
+        canRetryAdd: false,
+      });
+
+      const block: MealProposalBlockType = {
+        ...baseBlock,
+        existing_recipe: {
+          id: 'recipe-123',
+          title: 'Classic Lasagna',
+        },
+      };
+
+      renderWithRouter(<MealProposalBlock block={block} />);
+
+      expect(screen.getByText(/Added to Saturday/i)).toBeInTheDocument();
+    });
+
+    it('renders rejected state', () => {
+      mockGetMealProposalStatus.mockReturnValue({
+        version: 1,
+        phase: 'rejected',
+        updatedAt: '2026-01-25T10:00:00Z',
+        proposalInstanceId: 'test-proposal-123',
+        recipeId: undefined,
+        returnContext: undefined,
+        lastError: undefined,
+        savedToBook: false,
+        addedToPlan: false,
+        rejected: true,
+        canRetryAdd: false,
+      });
+
+      const block: MealProposalBlockType = {
+        ...baseBlock,
+        existing_recipe: {
+          id: 'recipe-123',
+          title: 'Classic Lasagna',
+        },
+      };
+
+      renderWithRouter(<MealProposalBlock block={block} />);
+
+      expect(screen.getByText(/Rejected/i)).toBeInTheDocument();
+    });
+
+    it('calls invalidateMealProposalStatus on mount', () => {
+      const block: MealProposalBlockType = {
+        ...baseBlock,
+        existing_recipe: {
+          id: 'recipe-123',
+          title: 'Classic Lasagna',
+        },
+      };
+
+      renderWithRouter(<MealProposalBlock block={block} />);
+
+      expect(mockInvalidateMealProposalStatus).toHaveBeenCalledWith(
+        expect.any(String),
+        'test-proposal-123'
+      );
     });
   });
 });

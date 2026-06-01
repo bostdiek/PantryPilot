@@ -33,7 +33,9 @@ import {
   type RecipeDifficulty,
 } from '../types/Recipe';
 import {
+  getMealProposalInstanceId,
   markMealProposalAddedToPlan,
+  markMealProposalRetryableAddFailure,
   markMealProposalSavedToBook,
 } from '../utils/mealProposalStatus';
 import { saveRecipeOffline } from '../utils/offlineSync';
@@ -501,6 +503,9 @@ const RecipesNewPage: FC = () => {
       const isAssistantFlow = !!proposalKey || !!mealPlanDate;
       const isExistingDuplicate =
         !result && !!existingDuplicateRecipeId && isAssistantFlow;
+      const proposalInstanceId = proposalKey
+        ? getMealProposalInstanceId(proposalKey)
+        : undefined;
 
       if (result || isExistingDuplicate) {
         // Clear duplicate state before navigating to prevent the duplicate-details
@@ -513,11 +518,17 @@ const RecipesNewPage: FC = () => {
           searchParams.get('chatConversationId') ?? undefined;
         const returnToAssistant =
           searchParams.get('returnToAssistant') === '1' ? true : false;
-        if (proposalKey) {
-          markMealProposalSavedToBook(proposalKey);
-        }
-
         const mealPlanDayLabel = searchParams.get('mealPlanDayLabel');
+        const proposalReturnContext = proposalKey
+          ? {
+              proposalKey,
+              returnToAssistant:
+                searchParams.get('returnToAssistant') ?? undefined,
+              chatConversationId,
+              mealPlanDate: mealPlanDate ?? undefined,
+              mealPlanDayLabel: mealPlanDayLabel ?? undefined,
+            }
+          : undefined;
         let nextPath: string = '/recipes';
 
         if (mealPlanDate && createdRecipeId) {
@@ -540,7 +551,11 @@ const RecipesNewPage: FC = () => {
               recipeId: createdRecipeId,
             });
             if (proposalKey) {
-              markMealProposalAddedToPlan(proposalKey);
+              markMealProposalAddedToPlan(proposalKey, {
+                proposalInstanceId,
+                recipeId: createdRecipeId,
+                returnContext: proposalReturnContext,
+              });
               useChatStore
                 .getState()
                 .appendLocalAssistantMessage(
@@ -560,15 +575,39 @@ const RecipesNewPage: FC = () => {
             }
           } catch (mealPlanErr) {
             logger.error('Failed to add recipe to meal plan:', mealPlanErr);
+            if (proposalKey) {
+              markMealProposalRetryableAddFailure(proposalKey, {
+                proposalInstanceId,
+                recipeId: createdRecipeId,
+                returnContext: proposalReturnContext,
+                lastError: 'meal_entry_create_failed',
+              });
+              useChatStore
+                .getState()
+                .appendLocalAssistantMessage(
+                  `I saved the recipe, but I couldn't add it to ${mealPlanDayLabel || mealPlanDate}. You can retry from the proposal card.`,
+                  chatConversationId
+                );
+            }
             success(
               isExistingDuplicate
-                ? 'Recipe already exists! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
-                : 'Recipe created! However, we could not add it to your meal plan. You can add it manually from the Meal Plan page.'
+                ? 'Recipe already exists! However, we could not add it to your meal plan. You can retry from the assistant or add it manually from the Meal Plan page.'
+                : 'Recipe created! However, we could not add it to your meal plan. You can retry from the assistant or add it manually from the Meal Plan page.'
             );
+
+            if (returnToAssistant && chatConversationId) {
+              info('Returning you to chat…');
+              nextPath = `/assistant?conversationId=${encodeURIComponent(chatConversationId)}`;
+            }
           }
         } else {
           // No meal plan date — just save the recipe.
           if (proposalKey) {
+            markMealProposalSavedToBook(proposalKey, {
+              proposalInstanceId,
+              recipeId: createdRecipeId,
+              returnContext: proposalReturnContext,
+            });
             useChatStore
               .getState()
               .appendLocalAssistantMessage(

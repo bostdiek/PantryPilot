@@ -422,6 +422,63 @@ export const useChatStore = create<ChatState>()(
 
         // Accumulated text for building TextBlock
         let accumulatedText = '';
+        let serverMessageId: string | undefined;
+        const finalizeStreamingState = (options?: {
+          errorDetail?: string;
+          clearError?: boolean;
+          messageId?: string;
+        }) => {
+          set((state) => {
+            const messages =
+              state.messagesByConversationId[conversationId] ?? [];
+            const targetMessageId = options?.messageId ?? serverMessageId;
+            const updatedMessages = messages.map((message) => {
+              if (
+                message.id === assistantMessageId ||
+                (targetMessageId && message.id === targetMessageId)
+              ) {
+                const hasContent =
+                  (message.blocks && message.blocks.length > 0) ||
+                  accumulatedText.length > 0;
+
+                if (options?.errorDetail && !hasContent) {
+                  const errorBlock: ChatContentBlock = {
+                    type: 'text',
+                    text: `Sorry, I encountered an error: ${options.errorDetail}`,
+                  };
+                  return {
+                    ...message,
+                    blocks: [errorBlock],
+                    isStreaming: false,
+                    statusText: undefined,
+                  };
+                }
+
+                return {
+                  ...message,
+                  isStreaming: false,
+                  statusText: undefined,
+                };
+              }
+
+              return message;
+            });
+
+            return {
+              isLoading: false,
+              isStreaming: false,
+              streamingMessageId: null,
+              _abortController: null,
+              error:
+                options?.errorDetail ??
+                (options?.clearError ? null : state.error),
+              messagesByConversationId: {
+                ...state.messagesByConversationId,
+                [conversationId]: updatedMessages,
+              },
+            };
+          });
+        };
 
         // Create and expose the AbortController before streaming begins so
         // cancelPendingAssistantReply() can abort the in-flight request.
@@ -461,6 +518,9 @@ export const useChatStore = create<ChatState>()(
           {
             onDelta: (delta, messageId) => {
               accumulatedText += delta;
+              if (messageId && !serverMessageId) {
+                serverMessageId = messageId;
+              }
               set((state) => {
                 const messages =
                   state.messagesByConversationId[conversationId] ?? [];
@@ -494,6 +554,9 @@ export const useChatStore = create<ChatState>()(
             },
 
             onBlocksAppend: (blocks, messageId) => {
+              if (messageId && !serverMessageId) {
+                serverMessageId = messageId;
+              }
               set((state) => {
                 const messages =
                   state.messagesByConversationId[conversationId] ?? [];
@@ -574,42 +637,7 @@ export const useChatStore = create<ChatState>()(
                   }
                 );
               }
-              set((state) => {
-                const messages =
-                  state.messagesByConversationId[conversationId] ?? [];
-                const updatedMessages = messages.map((m) => {
-                  if (m.id === assistantMessageId) {
-                    // Keep partial content if any, mark as not streaming
-                    const hasContent =
-                      (m.blocks && m.blocks.length > 0) ||
-                      accumulatedText.length > 0;
-                    if (!hasContent) {
-                      // Add error block
-                      const errorBlock: ChatContentBlock = {
-                        type: 'text',
-                        text: `Sorry, I encountered an error: ${detail}`,
-                      };
-                      return {
-                        ...m,
-                        blocks: [errorBlock],
-                        isStreaming: false,
-                      };
-                    }
-                    return { ...m, isStreaming: false };
-                  }
-                  return m;
-                });
-                return {
-                  isLoading: false,
-                  isStreaming: false,
-                  streamingMessageId: null,
-                  error: detail,
-                  messagesByConversationId: {
-                    ...state.messagesByConversationId,
-                    [conversationId]: updatedMessages,
-                  },
-                };
-              });
+              finalizeStreamingState({ errorDetail: detail });
             },
 
             onDone: () => {
@@ -627,12 +655,7 @@ export const useChatStore = create<ChatState>()(
                   }
                 );
               }
-              set({
-                isLoading: false,
-                isStreaming: false,
-                streamingMessageId: null,
-                _abortController: null,
-              });
+              finalizeStreamingState({ clearError: true });
             },
 
             onStatus: (status, detail) => {
@@ -731,6 +754,30 @@ export const useChatStore = create<ChatState>()(
           requestTelemetry,
           storeAbortController.signal
         );
+
+        if (!streamCompleted && !streamErrored) {
+          if (streamCancelled) {
+            finalizeStreamingState({ clearError: true });
+          } else {
+            streamErrored = true;
+            emitProductTelemetryEvent(
+              'assistant_message_failed',
+              requestTelemetry,
+              {
+                success: false,
+                streamed: true,
+                latency_ms: getTelemetryLatencyMs(streamStartedAt),
+                error_type: 'stream_terminated',
+                tool_count: startedToolNames.length,
+                tool_names: startedToolNames.slice(0, 10),
+              }
+            );
+            finalizeStreamingState({
+              errorDetail:
+                'The assistant connection closed unexpectedly. Please try again.',
+            });
+          }
+        }
       },
 
       cancelPendingAssistantReply: () => {

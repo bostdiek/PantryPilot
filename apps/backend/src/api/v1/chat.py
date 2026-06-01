@@ -1691,7 +1691,11 @@ async def stream_chat_message(  # noqa: C901
                 event="error",
                 conversation_id=conversation_id,
                 message_id=message_id,
-                data={"message": error_message},
+                data={
+                    "error_code": "assistant_error",
+                    "detail": error_message,
+                    "message": error_message,
+                },
             ).to_sse()
         finally:
             yield ChatSseEvent(

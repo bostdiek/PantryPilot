@@ -49,8 +49,13 @@ vi.mock('../../../api/endpoints/aiDrafts', () => ({
 import { AddByUrlModal } from '../AddByUrlModal';
 
 // Helper to render with router context
-const renderWithRouter = (ui: React.ReactElement) => {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+const renderWithRouter = (
+  ui: React.ReactElement,
+  initialEntries: string[] = ['/']
+) => {
+  return render(
+    <MemoryRouter initialEntries={initialEntries}>{ui}</MemoryRouter>
+  );
 };
 
 describe('AddByUrlModal', () => {
@@ -116,7 +121,9 @@ describe('AddByUrlModal', () => {
     // getDraftByIdOwner should return a draft-like payload
     mockGetDraft.mockResolvedValue({ payload: { title: 'AI Recipe' } });
 
-    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />, [
+      '/recipes/new?proposalKey=test-key&returnToAssistant=1&chatConversationId=chat-123&mealPlanDate=2026-01-25&mealPlanDayLabel=Saturday',
+    ]);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -141,7 +148,9 @@ describe('AddByUrlModal', () => {
           featureName: 'url_import',
         })
       );
-      expect(mockNavigate).toHaveBeenCalledWith('/recipes/new?ai=1');
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/recipes/new?proposalKey=test-key&returnToAssistant=1&chatConversationId=chat-123&mealPlanDate=2026-01-25&mealPlanDayLabel=Saturday&ai=1'
+      );
       expect(onClose).toHaveBeenCalled();
     });
   });
@@ -158,7 +167,9 @@ describe('AddByUrlModal', () => {
     // Fallback POST should return signed_url
     mockExtractPost.mockResolvedValue({ signed_url: '/signed/redirect' });
 
-    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />, [
+      '/recipes/new?proposalKey=test-key&returnToAssistant=1&chatConversationId=chat-123&mealPlanDate=2026-01-25&mealPlanDayLabel=Saturday',
+    ]);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -175,7 +186,9 @@ describe('AddByUrlModal', () => {
           featureName: 'url_import',
         })
       );
-      expect(mockNavigate).toHaveBeenCalledWith('/signed/redirect');
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/signed/redirect?proposalKey=test-key&returnToAssistant=1&chatConversationId=chat-123&mealPlanDate=2026-01-25&mealPlanDayLabel=Saturday'
+      );
       expect(onClose).toHaveBeenCalled();
     });
   });
@@ -199,7 +212,9 @@ describe('AddByUrlModal', () => {
       }
     );
 
-    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />);
+    renderWithRouter(<AddByUrlModal isOpen={true} onClose={onClose} />, [
+      '/recipes/new?proposalKey=test-key&returnToAssistant=1&chatConversationId=chat-123&mealPlanDate=2026-01-25&mealPlanDayLabel=Saturday',
+    ]);
 
     await user.type(
       screen.getByLabelText(/Recipe URL/i),
@@ -209,7 +224,9 @@ describe('AddByUrlModal', () => {
     fireEvent.submit(form);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith('/signed/stream-redirect');
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/signed/stream-redirect?proposalKey=test-key&returnToAssistant=1&chatConversationId=chat-123&mealPlanDate=2026-01-25&mealPlanDayLabel=Saturday'
+      );
       expect(onClose).toHaveBeenCalled();
     });
   });
