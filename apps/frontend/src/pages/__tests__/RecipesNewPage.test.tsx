@@ -324,4 +324,119 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     expect(createMealEntryMock).not.toHaveBeenCalled();
     expect(navigateMock).not.toHaveBeenCalled();
   });
+
+  it('marks retryable add failure when createMealEntry rejects in assistant flow', async () => {
+    const addRecipeMock = vi.fn().mockImplementation(async () => {
+      recipeStoreState.duplicateInfo = {
+        existing_recipe_id: 'existing-uuid-789',
+        similar_recipes: [],
+      };
+      return null;
+    });
+    createMealEntryMock.mockRejectedValue(new Error('Network error'));
+
+    vi.doMock('../../stores/useRecipeStore', () => {
+      const useRecipeStore: any = () => ({
+        addRecipe: addRecipeMock,
+        formSuggestion: null,
+        isAISuggestion: false,
+        clearFormSuggestion: vi.fn(),
+        duplicateInfo: null,
+        forceCreateRecipe: vi.fn(),
+        clearDuplicateState: vi.fn(),
+      });
+      useRecipeStore.getState = () => recipeStoreState;
+      return { useRecipeStore };
+    });
+    vi.doMock('../../api/endpoints/mealPlans', () => ({
+      createMealEntry: createMealEntryMock,
+    }));
+    vi.doMock('react-router-dom', () => ({
+      useNavigate: () => navigateMock,
+      useSearchParams: () => [
+        new URLSearchParams(
+          'proposalKey=test-key&mealPlanDate=2026-04-14&mealPlanDayLabel=Monday'
+        ),
+        vi.fn(),
+      ],
+    }));
+
+    const { default: Page } = await import('../RecipesNewPage');
+    render((<Page />) as any);
+
+    await userEvent.type(screen.getByLabelText(/Recipe Name/i), 'Test Recipe');
+    await userEvent.type(screen.getByLabelText(/Ingredient 1/i), 'Flour');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /Step 1/i }),
+      'Mix everything'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save recipe/i }));
+
+    await waitFor(() => {
+      expect(createMealEntryMock).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(markMealProposalRetryableAddFailureMock).toHaveBeenCalledWith(
+        'test-key',
+        expect.objectContaining({
+          proposalInstanceId: 'test-key',
+          recipeId: 'existing-uuid-789',
+          lastError: 'meal_entry_create_failed',
+        })
+      );
+    });
+    expect(markMealProposalAddedToPlanMock).not.toHaveBeenCalled();
+  });
+
+  it('marks saved to book when no mealPlanDate in assistant flow', async () => {
+    const addRecipeMock = vi.fn().mockResolvedValue({ id: 'new-recipe-id' });
+
+    vi.doMock('../../stores/useRecipeStore', () => {
+      const useRecipeStore: any = () => ({
+        addRecipe: addRecipeMock,
+        formSuggestion: null,
+        isAISuggestion: false,
+        clearFormSuggestion: vi.fn(),
+        duplicateInfo: null,
+        forceCreateRecipe: vi.fn(),
+        clearDuplicateState: vi.fn(),
+      });
+      useRecipeStore.getState = () => recipeStoreState;
+      return { useRecipeStore };
+    });
+    vi.doMock('../../api/endpoints/mealPlans', () => ({
+      createMealEntry: createMealEntryMock,
+    }));
+    vi.doMock('react-router-dom', () => ({
+      useNavigate: () => navigateMock,
+      useSearchParams: () => [
+        new URLSearchParams('proposalKey=test-key'),
+        vi.fn(),
+      ],
+    }));
+
+    const { default: Page } = await import('../RecipesNewPage');
+    render((<Page />) as any);
+
+    await userEvent.type(screen.getByLabelText(/Recipe Name/i), 'Test Recipe');
+    await userEvent.type(screen.getByLabelText(/Ingredient 1/i), 'Flour');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /Step 1/i }),
+      'Mix everything'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save recipe/i }));
+
+    await waitFor(() => {
+      expect(markMealProposalSavedToBookMock).toHaveBeenCalledWith(
+        'test-key',
+        expect.objectContaining({
+          proposalInstanceId: 'test-key',
+          recipeId: 'new-recipe-id',
+        })
+      );
+    });
+    expect(createMealEntryMock).not.toHaveBeenCalled();
+    expect(markMealProposalAddedToPlanMock).not.toHaveBeenCalled();
+  });
 });

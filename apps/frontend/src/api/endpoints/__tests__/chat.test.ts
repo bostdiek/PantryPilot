@@ -643,6 +643,195 @@ describe('chat API endpoints', () => {
         'Network error'
       );
     });
+
+    it('calls onError with stream_closed when stream ends without terminal event', async () => {
+      const callbacks = {
+        onError: vi.fn(),
+        onDelta: vi.fn(),
+      };
+
+      const encoder = new TextEncoder();
+      const deltaEvent = {
+        event: 'message.delta',
+        conversation_id: 'conv-123',
+        message_id: 'msg-123',
+        data: { delta: 'partial' },
+      };
+      const chunk = encoder.encode(
+        'data: ' + JSON.stringify(deltaEvent) + '\n\n'
+      );
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          // Stream ends without done/error event
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: { getReader: () => reader },
+      });
+
+      await streamChatMessage(null, 'Hello', callbacks);
+
+      expect(callbacks.onDelta).toHaveBeenCalledWith('partial', 'msg-123');
+      expect(callbacks.onError).toHaveBeenCalledWith(
+        'stream_closed',
+        'The assistant connection closed unexpectedly. Please try again.'
+      );
+    });
+
+    it('does not call onError with stream_closed when terminal event was received', async () => {
+      const callbacks = {
+        onError: vi.fn(),
+        onDone: vi.fn(),
+      };
+
+      const encoder = new TextEncoder();
+      const doneEvent = {
+        event: 'done',
+        conversation_id: 'conv-123',
+        message_id: null,
+        data: {},
+      };
+      const chunk = encoder.encode(
+        'data: ' + JSON.stringify(doneEvent) + '\n\n'
+      );
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: { getReader: () => reader },
+      });
+
+      await streamChatMessage(null, 'Hello', callbacks);
+
+      expect(callbacks.onDone).toHaveBeenCalled();
+      expect(callbacks.onError).not.toHaveBeenCalled();
+    });
+
+    it('calls onError with parse_error when SSE message is malformed', async () => {
+      const callbacks = {
+        onError: vi.fn(),
+      };
+
+      const encoder = new TextEncoder();
+      const chunk = encoder.encode('data: {invalid json\n\n');
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: { getReader: () => reader },
+      });
+
+      await streamChatMessage(null, 'Hello', callbacks);
+
+      expect(callbacks.onError).toHaveBeenCalledWith(
+        'parse_error',
+        'Failed to process the assistant response. Please try again.'
+      );
+    });
+
+    it('uses fallback error fields when error_code/detail are missing', async () => {
+      const callbacks = {
+        onError: vi.fn(),
+      };
+
+      const encoder = new TextEncoder();
+      const errorEvent = {
+        event: 'error',
+        conversation_id: 'conv-123',
+        message_id: null,
+        data: { message: 'Something went wrong' },
+      };
+      const chunk = encoder.encode(
+        'data: ' + JSON.stringify(errorEvent) + '\n\n'
+      );
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: { getReader: () => reader },
+      });
+
+      await streamChatMessage(null, 'Hello', callbacks);
+
+      expect(callbacks.onError).toHaveBeenCalledWith(
+        'assistant_error',
+        'Something went wrong'
+      );
+    });
+
+    it('uses code field as fallback for error_code', async () => {
+      const callbacks = {
+        onError: vi.fn(),
+      };
+
+      const encoder = new TextEncoder();
+      const errorEvent = {
+        event: 'error',
+        conversation_id: 'conv-123',
+        message_id: null,
+        data: { code: 'timeout', error: 'Request timed out' },
+      };
+      const chunk = encoder.encode(
+        'data: ' + JSON.stringify(errorEvent) + '\n\n'
+      );
+
+      let readCalls = 0;
+      const reader = {
+        read: async () => {
+          readCalls += 1;
+          if (readCalls === 1) return { value: chunk, done: false };
+          return { value: undefined, done: true };
+        },
+        cancel: vi.fn(),
+      };
+
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        body: { getReader: () => reader },
+      });
+
+      await streamChatMessage(null, 'Hello', callbacks);
+
+      expect(callbacks.onError).toHaveBeenCalledWith(
+        'timeout',
+        'Request timed out'
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------

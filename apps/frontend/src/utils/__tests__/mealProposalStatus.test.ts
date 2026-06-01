@@ -5,7 +5,10 @@ import {
   invalidateMealProposalStatus,
   markMealProposalAddedToPlan,
   markMealProposalRejected,
+  markMealProposalRetryableAddFailure,
   markMealProposalSavedToBook,
+  resetMealProposalStatus,
+  setMealProposalStatus,
 } from '../mealProposalStatus';
 
 describe('mealProposalStatus', () => {
@@ -149,6 +152,185 @@ describe('mealProposalStatus', () => {
       expect(() => markMealProposalRejected('test-proposal')).not.toThrow();
 
       setItemSpy.mockRestore();
+    });
+
+    it('does not throw when localStorage throws on remove', () => {
+      markMealProposalSavedToBook('test-proposal');
+      const removeItemSpy = vi
+        .spyOn(Storage.prototype, 'removeItem')
+        .mockImplementation(() => {
+          throw new Error('Storage unavailable');
+        });
+
+      expect(() => resetMealProposalStatus('test-proposal')).not.toThrow();
+
+      removeItemSpy.mockRestore();
+    });
+  });
+
+  describe('retryable add failure', () => {
+    it('marks proposal as retryable_add_failure', () => {
+      markMealProposalRetryableAddFailure('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+        recipeId: 'recipe-123',
+        lastError: 'meal_entry_create_failed',
+      });
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('retryable_add_failure');
+      expect(status.proposalInstanceId).toBe('proposal-1');
+      expect(status.recipeId).toBe('recipe-123');
+      expect(status.lastError).toBe('meal_entry_create_failed');
+      expect(status.savedToBook).toBe(true);
+      expect(status.canRetryAdd).toBe(true);
+      expect(status.addedToPlan).toBe(false);
+    });
+
+    it('transitions from retryable_add_failure to added_to_plan', () => {
+      markMealProposalRetryableAddFailure('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+        lastError: 'meal_entry_create_failed',
+      });
+      markMealProposalAddedToPlan('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+      });
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('added_to_plan');
+      expect(status.canRetryAdd).toBe(false);
+      expect(status.lastError).toBeUndefined();
+    });
+  });
+
+  describe('setMealProposalStatus', () => {
+    it('merges update with existing status', () => {
+      markMealProposalSavedToBook('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+      });
+      setMealProposalStatus('test-proposal', {
+        phase: 'adding_to_plan',
+        proposalInstanceId: 'proposal-1',
+      });
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('adding_to_plan');
+      expect(status.proposalInstanceId).toBe('proposal-1');
+    });
+
+    it('stores and retrieves returnContext', () => {
+      markMealProposalSavedToBook('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+        returnContext: {
+          proposalKey: 'test-proposal',
+          chatConversationId: 'chat-1',
+          mealPlanDate: '2026-01-26',
+          mealPlanDayLabel: 'Monday',
+        },
+      });
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.returnContext).toEqual({
+        proposalKey: 'test-proposal',
+        chatConversationId: 'chat-1',
+        mealPlanDate: '2026-01-26',
+        mealPlanDayLabel: 'Monday',
+      });
+    });
+  });
+
+  describe('resetMealProposalStatus', () => {
+    it('clears persisted status back to pending', () => {
+      markMealProposalAddedToPlan('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+      });
+      resetMealProposalStatus('test-proposal');
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('pending');
+      expect(status.addedToPlan).toBe(false);
+    });
+  });
+
+  describe('invalidateMealProposalStatus', () => {
+    it('does not clear status when instance matches', () => {
+      markMealProposalSavedToBook('test-proposal', {
+        proposalInstanceId: 'proposal-1',
+      });
+      invalidateMealProposalStatus('test-proposal', 'proposal-1');
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('recipe_saved');
+    });
+
+    it('does not clear status when no persisted state exists', () => {
+      invalidateMealProposalStatus('test-proposal', 'proposal-1');
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('pending');
+    });
+  });
+
+  describe('getMealProposalInstanceId', () => {
+    it('returns full key when no pipe separator present', () => {
+      expect(getMealProposalInstanceId('proposal-123')).toBe('proposal-123');
+    });
+  });
+
+  describe('legacy migration', () => {
+    it('migrates legacy savedToBook flag to recipe_saved phase', () => {
+      localStorage.setItem(
+        'pantrypilot_meal_proposal:test-proposal:savedToBook',
+        '1'
+      );
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('recipe_saved');
+      expect(status.savedToBook).toBe(true);
+      // Legacy key should be cleaned up
+      expect(
+        localStorage.getItem(
+          'pantrypilot_meal_proposal:test-proposal:savedToBook'
+        )
+      ).toBeNull();
+    });
+
+    it('migrates legacy addedToPlan flag to added_to_plan phase', () => {
+      localStorage.setItem(
+        'pantrypilot_meal_proposal:test-proposal:addedToPlan',
+        '1'
+      );
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('added_to_plan');
+      expect(status.addedToPlan).toBe(true);
+    });
+
+    it('migrates legacy rejected flag to rejected phase', () => {
+      localStorage.setItem(
+        'pantrypilot_meal_proposal:test-proposal:rejected',
+        '1'
+      );
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('rejected');
+      expect(status.rejected).toBe(true);
+    });
+
+    it('resets corrupted persisted status', () => {
+      localStorage.setItem(
+        'pantrypilot_meal_proposal:test-proposal:status',
+        JSON.stringify({ version: 1, phase: 'invalid_phase' })
+      );
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('pending');
+    });
+
+    it('resets persisted status with wrong version', () => {
+      localStorage.setItem(
+        'pantrypilot_meal_proposal:test-proposal:status',
+        JSON.stringify({ version: 99, phase: 'pending' })
+      );
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('pending');
+    });
+
+    it('resets unparseable JSON in storage', () => {
+      localStorage.setItem(
+        'pantrypilot_meal_proposal:test-proposal:status',
+        'not-json-at-all'
+      );
+      const status = getMealProposalStatus('test-proposal');
+      expect(status.phase).toBe('pending');
     });
   });
 });

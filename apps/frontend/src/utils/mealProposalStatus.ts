@@ -208,7 +208,13 @@ function toStatusView(
     persistedStatus.phase === 'retryable_add_failure';
 
   return {
-    ...persistedStatus,
+    version: persistedStatus.version,
+    phase: persistedStatus.phase,
+    updatedAt: persistedStatus.updatedAt,
+    proposalInstanceId: persistedStatus.proposalInstanceId,
+    recipeId: persistedStatus.recipeId,
+    returnContext: persistedStatus.returnContext,
+    lastError: persistedStatus.lastError,
     savedToBook,
     addedToPlan: persistedStatus.phase === 'added_to_plan',
     rejected: persistedStatus.phase === 'rejected',

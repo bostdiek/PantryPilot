@@ -422,6 +422,7 @@ export const useChatStore = create<ChatState>()(
 
         // Accumulated text for building TextBlock
         let accumulatedText = '';
+        let serverMessageId: string | undefined;
         const finalizeStreamingState = (options?: {
           errorDetail?: string;
           clearError?: boolean;
@@ -430,7 +431,7 @@ export const useChatStore = create<ChatState>()(
           set((state) => {
             const messages =
               state.messagesByConversationId[conversationId] ?? [];
-            const targetMessageId = options?.messageId;
+            const targetMessageId = options?.messageId ?? serverMessageId;
             const updatedMessages = messages.map((message) => {
               if (
                 message.id === assistantMessageId ||
@@ -517,6 +518,9 @@ export const useChatStore = create<ChatState>()(
           {
             onDelta: (delta, messageId) => {
               accumulatedText += delta;
+              if (messageId && !serverMessageId) {
+                serverMessageId = messageId;
+              }
               set((state) => {
                 const messages =
                   state.messagesByConversationId[conversationId] ?? [];
@@ -550,6 +554,9 @@ export const useChatStore = create<ChatState>()(
             },
 
             onBlocksAppend: (blocks, messageId) => {
+              if (messageId && !serverMessageId) {
+                serverMessageId = messageId;
+              }
               set((state) => {
                 const messages =
                   state.messagesByConversationId[conversationId] ?? [];
