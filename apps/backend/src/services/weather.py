@@ -96,6 +96,18 @@ async def get_daily_forecast_for_user(
 ) -> dict[str, Any]:
     """Fetch daily forecast data for the user's saved location."""
     preferences = await user_preferences_crud.get_by_user_id(db, user_id)
+    return await get_daily_forecast_for_preferences(
+        user_id=user_id,
+        preferences=preferences,
+    )
+
+
+async def get_daily_forecast_for_preferences(
+    *,
+    user_id: UUID,
+    preferences: UserPreferences | None,
+) -> dict[str, Any]:
+    """Fetch daily forecast data for already-loaded user preferences."""
     if preferences is None:
         return {
             "status": "missing_location",

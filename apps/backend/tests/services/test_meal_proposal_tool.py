@@ -74,7 +74,7 @@ class TestProposeMealForDayTool:
         assert proposal["type"] == "meal_proposal"
         assert proposal["date"] == "2026-01-26"
         assert proposal["day_label"] == "Sunday"
-        assert proposal["proposal_id"] == "2026-01-26-proposal"
+        assert proposal["proposal_id"].startswith("2026-01-26-proposal-")
         assert proposal["existing_recipe"]["id"] == recipe_id
         assert proposal["existing_recipe"]["title"] == "Mom's Lasagna"
         assert (
@@ -215,7 +215,19 @@ class TestProposeMealForDayTool:
 
         # Assert
         proposal = result["meal_proposal"]
-        assert proposal["proposal_id"] == "2026-02-01-proposal"
+        second_result = await tool_propose_meal_for_day(
+            ctx=ctx,
+            date="2026-02-01",
+            day_label="Saturday",
+            new_recipe_title="Test Recipe",
+            new_recipe_source_url="https://example.com/test",
+        )
+
+        assert proposal["proposal_id"].startswith("2026-02-01-proposal-")
+        assert second_result["meal_proposal"]["proposal_id"].startswith(
+            "2026-02-01-proposal-"
+        )
+        assert proposal["proposal_id"] != second_result["meal_proposal"]["proposal_id"]
 
     @pytest.mark.asyncio
     async def test_minimal_existing_recipe_proposal(self) -> None:

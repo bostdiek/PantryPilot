@@ -215,9 +215,6 @@ async def _load_full_recipes(
 
     recipe_ids = list({r.id for r in recipes})
 
-    # Ensure any pending operations are complete before new query
-    await ctx.deps.db.flush()
-
     stmt = (
         select(Recipe)
         .where(Recipe.id.in_(recipe_ids))
@@ -227,8 +224,11 @@ async def _load_full_recipes(
             )
         )
     )
-    result = await ctx.deps.db.execute(stmt)
-    full_recipes = result.scalars().all()
+    async with ctx.deps.use_db() as db:
+        # Ensure any pending operations are complete before new query.
+        await db.flush()
+        result = await db.execute(stmt)
+        full_recipes = result.scalars().all()
     return {str(r.id): _recipe_to_full_payload(r) for r in full_recipes}
 
 
@@ -314,8 +314,9 @@ async def _hybrid_search_with_query(
         .limit(cte_limit)
     )
 
-    text_rows = (await ctx.deps.db.execute(text_stmt)).all()
-    vector_rows = (await ctx.deps.db.execute(vector_stmt)).all()
+    async with ctx.deps.use_db() as db:
+        text_rows = (await db.execute(text_stmt)).all()
+        vector_rows = (await db.execute(vector_stmt)).all()
 
     combined: dict[str, dict[str, Any]] = {}
 
@@ -570,8 +571,9 @@ async def tool_search_recipes(
     stmt = stmt.order_by(sort_map.get(sort_by, Recipe.name.asc()))
     stmt = stmt.limit(max_results)
 
-    result = await ctx.deps.db.execute(stmt)
-    rows = result.all()
+    async with ctx.deps.use_db() as db:
+        result = await db.execute(stmt)
+        rows = result.all()
 
     # If filters were applied but no rows returned, fall back to semantic search
     if filters and not rows:
@@ -672,8 +674,9 @@ async def tool_get_recipe_details(
         )
     )
 
-    result = await ctx.deps.db.execute(stmt)
-    recipe = result.scalar_one_or_none()
+    async with ctx.deps.use_db() as db:
+        result = await db.execute(stmt)
+        recipe = result.scalar_one_or_none()
     if recipe is None:
         return {
             "status": "not_found",

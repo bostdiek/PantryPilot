@@ -82,7 +82,7 @@ export interface NewRecipeOption {
  */
 export interface MealProposalBlock {
   type: 'meal_proposal';
-  proposal_id: string; // For tracking accept/reject (e.g., "2026-01-26-proposal")
+  proposal_id: string; // Instance-scoped identifier (e.g., "2026-01-26-proposal-<uuid>")
   date: string; // ISO date (YYYY-MM-DD)
   day_label: string; // Human-friendly day name ("Monday", "Taco Tuesday", etc.)
   existing_recipe?: ExistingRecipeOption | null;

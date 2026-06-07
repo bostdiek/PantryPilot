@@ -8,6 +8,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const createMealEntryMock = vi.hoisted(() => vi.fn());
 const navigateMock = vi.hoisted(() => vi.fn());
 const clearDuplicateMock = vi.hoisted(() => vi.fn());
+const getMealProposalInstanceIdMock = vi.hoisted(() => vi.fn());
+const markMealProposalSavedToBookMock = vi.hoisted(() => vi.fn());
+const markMealProposalAddedToPlanMock = vi.hoisted(() => vi.fn());
+const markMealProposalRetryableAddFailureMock = vi.hoisted(() => vi.fn());
 
 // Mutable state shared between the hook mock and getState() so addRecipe can
 // simulate setting duplicateInfo (as the real Zustand store does on 409).
@@ -59,8 +63,10 @@ vi.mock('../../stores/useChatStore', () => ({
   }),
 }));
 vi.mock('../../utils/mealProposalStatus', () => ({
-  markMealProposalSavedToBook: vi.fn(),
-  markMealProposalAddedToPlan: vi.fn(),
+  getMealProposalInstanceId: getMealProposalInstanceIdMock,
+  markMealProposalSavedToBook: markMealProposalSavedToBookMock,
+  markMealProposalAddedToPlan: markMealProposalAddedToPlanMock,
+  markMealProposalRetryableAddFailure: markMealProposalRetryableAddFailureMock,
 }));
 vi.mock('../../api/endpoints/recipes', () => ({
   getRecipeById: vi.fn().mockResolvedValue(null),
@@ -174,6 +180,13 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     clearDuplicateMock.mockReset();
     createMealEntryMock.mockReset();
     createMealEntryMock.mockResolvedValue({ id: 'meal-1' });
+    getMealProposalInstanceIdMock.mockReset();
+    getMealProposalInstanceIdMock.mockImplementation(
+      (proposalKey: string) => proposalKey
+    );
+    markMealProposalSavedToBookMock.mockReset();
+    markMealProposalAddedToPlanMock.mockReset();
+    markMealProposalRetryableAddFailureMock.mockReset();
     recipeStoreState.duplicateInfo = null;
     try {
       window.localStorage.clear();
@@ -241,6 +254,19 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
         })
       );
     });
+    expect(markMealProposalSavedToBookMock).not.toHaveBeenCalled();
+    expect(markMealProposalAddedToPlanMock).toHaveBeenCalledWith(
+      'test-key',
+      expect.objectContaining({
+        proposalInstanceId: 'test-key',
+        recipeId: 'existing-uuid-123',
+        returnContext: expect.objectContaining({
+          proposalKey: 'test-key',
+          mealPlanDate: '2026-04-14',
+        }),
+      })
+    );
+    expect(markMealProposalRetryableAddFailureMock).not.toHaveBeenCalled();
     expect(navigateMock).toHaveBeenCalled();
     // Duplicate modal should not be shown (auto-proceed path taken)
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -297,5 +323,120 @@ describe('RecipesNewPage - duplicate recipe handling', () => {
     });
     expect(createMealEntryMock).not.toHaveBeenCalled();
     expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('marks retryable add failure when createMealEntry rejects in assistant flow', async () => {
+    const addRecipeMock = vi.fn().mockImplementation(async () => {
+      recipeStoreState.duplicateInfo = {
+        existing_recipe_id: 'existing-uuid-789',
+        similar_recipes: [],
+      };
+      return null;
+    });
+    createMealEntryMock.mockRejectedValue(new Error('Network error'));
+
+    vi.doMock('../../stores/useRecipeStore', () => {
+      const useRecipeStore: any = () => ({
+        addRecipe: addRecipeMock,
+        formSuggestion: null,
+        isAISuggestion: false,
+        clearFormSuggestion: vi.fn(),
+        duplicateInfo: null,
+        forceCreateRecipe: vi.fn(),
+        clearDuplicateState: vi.fn(),
+      });
+      useRecipeStore.getState = () => recipeStoreState;
+      return { useRecipeStore };
+    });
+    vi.doMock('../../api/endpoints/mealPlans', () => ({
+      createMealEntry: createMealEntryMock,
+    }));
+    vi.doMock('react-router-dom', () => ({
+      useNavigate: () => navigateMock,
+      useSearchParams: () => [
+        new URLSearchParams(
+          'proposalKey=test-key&mealPlanDate=2026-04-14&mealPlanDayLabel=Monday'
+        ),
+        vi.fn(),
+      ],
+    }));
+
+    const { default: Page } = await import('../RecipesNewPage');
+    render((<Page />) as any);
+
+    await userEvent.type(screen.getByLabelText(/Recipe Name/i), 'Test Recipe');
+    await userEvent.type(screen.getByLabelText(/Ingredient 1/i), 'Flour');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /Step 1/i }),
+      'Mix everything'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save recipe/i }));
+
+    await waitFor(() => {
+      expect(createMealEntryMock).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(markMealProposalRetryableAddFailureMock).toHaveBeenCalledWith(
+        'test-key',
+        expect.objectContaining({
+          proposalInstanceId: 'test-key',
+          recipeId: 'existing-uuid-789',
+          lastError: 'meal_entry_create_failed',
+        })
+      );
+    });
+    expect(markMealProposalAddedToPlanMock).not.toHaveBeenCalled();
+  });
+
+  it('marks saved to book when no mealPlanDate in assistant flow', async () => {
+    const addRecipeMock = vi.fn().mockResolvedValue({ id: 'new-recipe-id' });
+
+    vi.doMock('../../stores/useRecipeStore', () => {
+      const useRecipeStore: any = () => ({
+        addRecipe: addRecipeMock,
+        formSuggestion: null,
+        isAISuggestion: false,
+        clearFormSuggestion: vi.fn(),
+        duplicateInfo: null,
+        forceCreateRecipe: vi.fn(),
+        clearDuplicateState: vi.fn(),
+      });
+      useRecipeStore.getState = () => recipeStoreState;
+      return { useRecipeStore };
+    });
+    vi.doMock('../../api/endpoints/mealPlans', () => ({
+      createMealEntry: createMealEntryMock,
+    }));
+    vi.doMock('react-router-dom', () => ({
+      useNavigate: () => navigateMock,
+      useSearchParams: () => [
+        new URLSearchParams('proposalKey=test-key'),
+        vi.fn(),
+      ],
+    }));
+
+    const { default: Page } = await import('../RecipesNewPage');
+    render((<Page />) as any);
+
+    await userEvent.type(screen.getByLabelText(/Recipe Name/i), 'Test Recipe');
+    await userEvent.type(screen.getByLabelText(/Ingredient 1/i), 'Flour');
+    await userEvent.type(
+      screen.getByRole('textbox', { name: /Step 1/i }),
+      'Mix everything'
+    );
+    await userEvent.click(screen.getByRole('button', { name: /save recipe/i }));
+
+    await waitFor(() => {
+      expect(markMealProposalSavedToBookMock).toHaveBeenCalledWith(
+        'test-key',
+        expect.objectContaining({
+          proposalInstanceId: 'test-key',
+          recipeId: 'new-recipe-id',
+        })
+      );
+    });
+    expect(createMealEntryMock).not.toHaveBeenCalled();
+    expect(markMealProposalAddedToPlanMock).not.toHaveBeenCalled();
   });
 });

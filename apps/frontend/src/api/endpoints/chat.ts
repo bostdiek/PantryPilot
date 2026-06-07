@@ -123,16 +123,24 @@ export async function streamChatMessage(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let sawTerminalEvent = false;
 
     // Process the SSE stream
     while (true) {
       const { value, done } = await reader.read();
 
       if (done) {
+        if (!sawTerminalEvent) {
+          callbacks.onError?.(
+            'stream_closed',
+            'The assistant connection closed unexpectedly. Please try again.'
+          );
+        }
         break;
       }
 
       buffer += decoder.decode(value, { stream: true });
+      let shouldStopReading = false;
 
       // Process complete SSE messages (delimiter is \n\n)
       let newlineIndex;
@@ -153,12 +161,26 @@ export async function streamChatMessage(
 
           // Terminal events
           if (event.event === 'done' || event.event === 'error') {
-            reader.cancel();
+            sawTerminalEvent = true;
+            void reader.cancel();
+            shouldStopReading = true;
             break;
           }
         } catch (err) {
           logger.error('Failed to parse SSE message:', err);
+          callbacks.onError?.(
+            'parse_error',
+            'Failed to process the assistant response. Please try again.'
+          );
+          sawTerminalEvent = true;
+          void reader.cancel();
+          shouldStopReading = true;
+          break;
         }
+      }
+
+      if (shouldStopReading) {
+        break;
       }
     }
   } catch (err) {
@@ -209,8 +231,15 @@ function handleSseEvent(
     }
 
     case 'error': {
-      const errorCode = (event.data.error_code as string) || 'unknown';
-      const detail = (event.data.detail as string) || 'Unknown error';
+      const errorCode =
+        (event.data.error_code as string) ||
+        (event.data.code as string) ||
+        'assistant_error';
+      const detail =
+        (event.data.detail as string) ||
+        (event.data.message as string) ||
+        (event.data.error as string) ||
+        'Unknown error';
       callbacks.onError?.(errorCode, detail);
       break;
     }

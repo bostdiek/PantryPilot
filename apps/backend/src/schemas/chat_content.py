@@ -96,7 +96,7 @@ class MealProposalBlock(BaseModel):
     """
 
     type: Literal["meal_proposal"]
-    proposal_id: str  # For tracking accept/reject (e.g., "2026-01-26-proposal")
+    proposal_id: str  # Instance-scoped identifier (e.g., "2026-01-26-proposal-<uuid>")
     date: str  # ISO date (YYYY-MM-DD)
     day_label: str  # Human-friendly day name ("Monday", "Taco Tuesday", etc.)
 

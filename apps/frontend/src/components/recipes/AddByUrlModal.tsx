@@ -27,6 +27,14 @@ interface AddByUrlModalProps {
   prefillUrl?: string;
 }
 
+const ASSISTANT_RETURN_PARAM_KEYS = [
+  'proposalKey',
+  'returnToAssistant',
+  'chatConversationId',
+  'mealPlanDate',
+  'mealPlanDayLabel',
+] as const;
+
 export const AddByUrlModal: FC<AddByUrlModalProps> = ({
   isOpen,
   onClose,
@@ -48,6 +56,30 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
       setUrl(prefillUrl);
     }
   }, [isOpen, prefillUrl]);
+
+  const buildRedirectPath = (
+    targetPath: string,
+    extraParams?: Record<string, string>
+  ) => {
+    const redirectUrl = new URL(targetPath, window.location.origin);
+    const mergedParams = new URLSearchParams(redirectUrl.search);
+
+    for (const key of ASSISTANT_RETURN_PARAM_KEYS) {
+      const value = searchParams.get(key);
+      if (value) {
+        mergedParams.set(key, value);
+      }
+    }
+
+    if (extraParams) {
+      for (const [key, value] of Object.entries(extraParams)) {
+        mergedParams.set(key, value);
+      }
+    }
+
+    const nextSearch = mergedParams.toString();
+    return `${redirectUrl.pathname}${nextSearch ? `?${nextSearch}` : ''}${redirectUrl.hash}`;
+  };
 
   const handleClose = () => {
     // Cancel any ongoing stream
@@ -123,7 +155,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
                   }
                 );
               }
-              navigate(signedUrl);
+              navigate(buildRedirectPath(signedUrl));
             } else if (draftId) {
               // Streaming endpoint case - fetch draft and navigate to new recipe page
               try {
@@ -131,16 +163,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
                 // Set the draft in the store
                 const { setFormFromSuggestion } = useRecipeStore.getState();
                 setFormFromSuggestion(draft.payload);
-                // Navigate to new recipe page with AI flag, preserving meal plan params
-                const params = new URLSearchParams();
-                params.set('ai', '1');
-                // Preserve meal plan params if present
-                const mealPlanDate = searchParams.get('mealPlanDate');
-                const mealPlanDayLabel = searchParams.get('mealPlanDayLabel');
-                if (mealPlanDate) params.set('mealPlanDate', mealPlanDate);
-                if (mealPlanDayLabel)
-                  params.set('mealPlanDayLabel', mealPlanDayLabel);
-                navigate(`/recipes/new?${params.toString()}`);
+                navigate(buildRedirectPath('/recipes/new', { ai: '1' }));
                 if (!completed) {
                   completed = true;
                   emitProductTelemetryEvent(
@@ -237,7 +260,7 @@ export const AddByUrlModal: FC<AddByUrlModalProps> = ({
       }
 
       // Navigate to the signed URL
-      navigate(response.signed_url);
+      navigate(buildRedirectPath(response.signed_url));
       handleClose();
     } catch (err) {
       logger.error('POST extraction failed:', err);
