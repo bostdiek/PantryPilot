@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from typing import Any, cast
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic_ai import models
 from pydantic_ai.models.test import TestModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.user_preferences import UserPreferences
 from services.chat_agent import ChatAgentDeps, get_chat_agent
+from services.chat_agent.tools.recipes import tool_search_recipes
 
 
 # Block any real model requests in tests
@@ -25,6 +29,47 @@ class MockUser:
         self.id = "test-user-id"
         self.email = "test@example.com"
         self.full_name = "Test User"
+
+
+class MockRunContext:
+    """Minimal RunContext shape for direct tool tests."""
+
+    def __init__(self, deps: ChatAgentDeps) -> None:
+        self.deps = deps
+
+
+class EmptyResult:
+    """Minimal SQLAlchemy result shape returning no rows."""
+
+    def all(self) -> list[Any]:
+        return []
+
+
+class ConcurrencyCheckingSession:
+    """Fake async session that fails if execute calls overlap."""
+
+    def __init__(self) -> None:
+        self.active_execute_count = 0
+        self.max_active_execute_count = 0
+        self.execute_call_count = 0
+
+    async def execute(self, _statement: Any) -> EmptyResult:
+        self.execute_call_count += 1
+        self.active_execute_count += 1
+        self.max_active_execute_count = max(
+            self.max_active_execute_count,
+            self.active_execute_count,
+        )
+        try:
+            if self.active_execute_count > 1:
+                raise AssertionError("overlapping shared-session execute call")
+            await asyncio.sleep(0)
+            return EmptyResult()
+        finally:
+            self.active_execute_count -= 1
+
+    async def flush(self) -> None:
+        return None
 
 
 class TestChatAgentDeps:
@@ -63,6 +108,62 @@ class TestChatAgentDeps:
 
         assert deps.user_preferences == mock_prefs
         assert deps.memory_content == "User prefers spicy food"
+
+    @pytest.mark.asyncio
+    async def test_use_db_serializes_shared_session_access(self) -> None:
+        """Test shared assistant DB session access is serialized."""
+        db = AsyncMock()
+        deps = ChatAgentDeps(
+            db=db,
+            user=MockUser(),  # type: ignore
+            current_datetime=datetime.now(UTC),
+            user_timezone="UTC",
+        )
+
+        active_users = 0
+        max_active_users = 0
+        events: list[str] = []
+
+        async def use_shared_db(label: str) -> None:
+            nonlocal active_users, max_active_users
+            async with deps.use_db() as guarded_db:
+                assert guarded_db is db
+                active_users += 1
+                max_active_users = max(max_active_users, active_users)
+                events.append(f"{label}:start")
+                await asyncio.sleep(0)
+                events.append(f"{label}:end")
+                active_users -= 1
+
+        await asyncio.gather(use_shared_db("first"), use_shared_db("second"))
+
+        assert max_active_users == 1
+        assert events == ["first:start", "first:end", "second:start", "second:end"]
+
+    @pytest.mark.asyncio
+    async def test_concurrent_recipe_search_serializes_shared_session(self) -> None:
+        """Test concurrent DB-backed recipe tools do not overlap session use."""
+        db = ConcurrencyCheckingSession()
+        deps = ChatAgentDeps(
+            db=cast(AsyncSession, db),
+            user=MockUser(),  # type: ignore
+            current_datetime=datetime.now(UTC),
+            user_timezone="UTC",
+        )
+        ctx = cast(Any, MockRunContext(deps))
+
+        with patch(
+            "services.chat_agent.tools.recipes.generate_query_embedding",
+            new_callable=AsyncMock,
+            return_value=[0.1, 0.2, 0.3],
+        ):
+            await asyncio.gather(
+                tool_search_recipes(ctx, query="chicken"),
+                tool_search_recipes(ctx, query="pasta"),
+            )
+
+        assert db.execute_call_count == 4
+        assert db.max_active_execute_count == 1
 
 
 class TestAgentConstruction:

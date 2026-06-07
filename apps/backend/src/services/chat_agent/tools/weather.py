@@ -14,4 +14,5 @@ async def tool_get_daily_weather(
     ctx: RunContext[ChatAgentDeps],
 ) -> dict[str, Any]:
     """Read-only weather lookup based on user profile."""
-    return await get_daily_forecast_for_user(ctx.deps.db, user_id=ctx.deps.user.id)
+    async with ctx.deps.use_db() as db:
+        return await get_daily_forecast_for_user(db, user_id=ctx.deps.user.id)
