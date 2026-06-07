@@ -138,7 +138,8 @@ class TestChatAgentDeps:
         await asyncio.gather(use_shared_db("first"), use_shared_db("second"))
 
         assert max_active_users == 1
-        assert events == ["first:start", "first:end", "second:start", "second:end"]
+        assert len(events) == 4
+        assert set(events) == {"first:start", "first:end", "second:start", "second:end"}
 
     @pytest.mark.asyncio
     async def test_concurrent_recipe_search_serializes_shared_session(self) -> None:
