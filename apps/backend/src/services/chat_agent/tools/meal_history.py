@@ -51,8 +51,9 @@ async def tool_get_meal_plan_history(
         .order_by(Meal.planned_for_date.desc(), Meal.meal_type)
     )
 
-    result = await ctx.deps.db.execute(stmt)
-    meals = result.scalars().all()
+    async with ctx.deps.use_db() as db:
+        result = await db.execute(stmt)
+        meals = result.scalars().all()
 
     # Count recipe frequencies for top recipes
     recipe_counts: dict[str, int] = {}
