@@ -63,6 +63,8 @@ _DEFAULT_SERVICE_NAME = "pantrypilot-backend"
 # Paths to exclude from automatic tracing (reduce noise for health checks)
 EXCLUDED_URLS = "health,health/,favicon.ico"
 
+_pydantic_ai_instrumented = False
+
 
 class ProductTelemetryEventName(StrEnum):
     """Canonical backend product telemetry event names."""
@@ -208,6 +210,33 @@ def _get_installed_version(package_name: str) -> str:
         return "not-installed"
 
 
+def _enable_pydantic_ai_instrumentation() -> None:
+    """Enable Pydantic AI OpenTelemetry spans after provider setup."""
+    global _pydantic_ai_instrumented
+
+    if _pydantic_ai_instrumented:
+        logger.debug("Pydantic AI OpenTelemetry instrumentation already enabled")
+        return
+
+    try:
+        from pydantic_ai import Agent
+
+        Agent.instrument_all()
+        _pydantic_ai_instrumented = True
+        logger.info("Pydantic AI OpenTelemetry instrumentation enabled")
+    except ImportError as exc:
+        logger.warning(
+            "Pydantic AI instrumentation unavailable: %s. Installed version: %s",
+            exc,
+            _get_installed_version("pydantic-ai-slim"),
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed to enable Pydantic AI OpenTelemetry instrumentation: %s",
+            exc,
+        )
+
+
 @lru_cache
 def configure_observability() -> bool:
     """Configure OpenTelemetry with Azure Monitor for production observability.
@@ -265,6 +294,8 @@ def configure_observability() -> bool:
 
         # Set excluded URLs for FastAPI instrumentation
         os.environ.setdefault("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", EXCLUDED_URLS)
+
+        _enable_pydantic_ai_instrumentation()
 
         logger.info(
             "Azure Monitor observability configured for service '%s'",

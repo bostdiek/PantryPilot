@@ -8,6 +8,7 @@ import pytest
 
 from core.observability import (
     ProductTelemetryEventName,
+    _enable_pydantic_ai_instrumentation,
     _get_connection_string,
     _is_observability_enabled,
     _NoOpSpan,
@@ -83,6 +84,20 @@ class TestConfigureObservability:
         result = configure_observability()
         assert result is False
 
+    def test_does_not_enable_pydantic_ai_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test disabled startup does not initialize Pydantic AI instrumentation."""
+        monkeypatch.setenv("ENABLE_OBSERVABILITY", "false")
+        configure_observability.cache_clear()
+
+        with patch(
+            "core.observability._enable_pydantic_ai_instrumentation"
+        ) as mock_enable:
+            result = configure_observability()
+            assert result is False
+            mock_enable.assert_not_called()
+
     def test_returns_false_when_no_connection_string(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -131,14 +146,63 @@ class TestConfigureObservability:
         configure_observability.cache_clear()
 
         # Mock the azure.monitor.opentelemetry module
+        events: list[str] = []
         mock_configure = MagicMock()
+        mock_configure.side_effect = lambda **_kwargs: events.append("azure")
         mock_module = MagicMock()
         mock_module.configure_azure_monitor = mock_configure
+        mock_agent = MagicMock()
+        mock_agent.instrument_all.side_effect = lambda: events.append("pydantic-ai")
+        mock_pydantic_ai = MagicMock()
+        mock_pydantic_ai.Agent = mock_agent
 
-        with patch.dict("sys.modules", {"azure.monitor.opentelemetry": mock_module}):
+        monkeypatch.setattr("core.observability._pydantic_ai_instrumented", False)
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure.monitor.opentelemetry": mock_module,
+                "pydantic_ai": mock_pydantic_ai,
+            },
+        ):
             result = configure_observability()
             assert result is True
             mock_configure.assert_called_once()
+            mock_agent.instrument_all.assert_called_once_with()
+            assert events == ["azure", "pydantic-ai"]
+
+    def test_returns_true_when_pydantic_ai_instrumentation_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test instrumentation failures are logged without failing startup."""
+        monkeypatch.setenv("ENABLE_OBSERVABILITY", "true")
+        monkeypatch.setenv(
+            "APPLICATIONINSIGHTS_CONNECTION_STRING",
+            "InstrumentationKey=test;IngestionEndpoint=https://test.com",
+        )
+        configure_observability.cache_clear()
+
+        mock_configure = MagicMock()
+        mock_module = MagicMock()
+        mock_module.configure_azure_monitor = mock_configure
+        mock_agent = MagicMock()
+        mock_agent.instrument_all.side_effect = RuntimeError("instrumentation failed")
+        mock_pydantic_ai = MagicMock()
+        mock_pydantic_ai.Agent = mock_agent
+
+        monkeypatch.setattr("core.observability._pydantic_ai_instrumented", False)
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "azure.monitor.opentelemetry": mock_module,
+                "pydantic_ai": mock_pydantic_ai,
+            },
+        ):
+            result = configure_observability()
+            assert result is True
+            mock_configure.assert_called_once()
+            mock_agent.instrument_all.assert_called_once_with()
 
     def test_returns_false_on_configuration_exception(
         self, monkeypatch: pytest.MonkeyPatch
@@ -158,6 +222,25 @@ class TestConfigureObservability:
         with patch.dict("sys.modules", {"azure.monitor.opentelemetry": mock_module}):
             result = configure_observability()
             assert result is False
+
+
+class TestPydanticAiInstrumentation:
+    """Tests for Pydantic AI observability integration."""
+
+    def test_enable_pydantic_ai_instrumentation_is_idempotent(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        mock_agent = MagicMock()
+        mock_pydantic_ai = MagicMock()
+        mock_pydantic_ai.Agent = mock_agent
+
+        monkeypatch.setattr("core.observability._pydantic_ai_instrumented", False)
+
+        with patch.dict("sys.modules", {"pydantic_ai": mock_pydantic_ai}):
+            _enable_pydantic_ai_instrumentation()
+            _enable_pydantic_ai_instrumentation()
+
+        mock_agent.instrument_all.assert_called_once_with()
 
 
 class TestGetTracer:
