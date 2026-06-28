@@ -366,6 +366,17 @@ def get_tracer(name: str) -> Any:
         return _NoOpTracer()
 
 
+def get_current_span() -> Any:
+    """Return the active OpenTelemetry span or a no-op span."""
+    try:
+        from opentelemetry import trace
+
+        return trace.get_current_span()
+    except ImportError:
+        logger.debug("OpenTelemetry not available; returning no-op current span")
+        return _NoOpSpan()
+
+
 class _NoOpTracer:
     """A no-op tracer for when OpenTelemetry is not available."""
 
