@@ -377,6 +377,16 @@ def get_current_span() -> Any:
         return _NoOpSpan()
 
 
+def set_span_error_status(span: Any, exception: BaseException) -> None:
+    """Set OpenTelemetry error status with a low-cardinality description."""
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.ERROR, type(exception).__name__))
+    except ImportError:
+        logger.debug("OpenTelemetry not available; skipping span status")
+
+
 class _NoOpTracer:
     """A no-op tracer for when OpenTelemetry is not available."""
 
@@ -407,6 +417,9 @@ class _NoOpSpan:
 
     def record_exception(self, exception: BaseException) -> None:
         """No-op exception recorder."""
+
+    def set_status(self, status: object) -> None:
+        """No-op status setter."""
 
     def end(self) -> None:
         """No-op span end."""
