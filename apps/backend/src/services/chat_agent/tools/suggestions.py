@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic_ai import RunContext
 
+from core.observability import get_tracer, set_span_error_status
 from core.security import create_draft_token
 from dependencies.db import AsyncSessionLocal
 from services.ai.draft_service import create_success_draft
@@ -14,6 +15,8 @@ from services.chat_agent.deps import ChatAgentDeps
 
 
 logger = logging.getLogger(__name__)
+
+_tracer = get_tracer(__name__)
 
 
 async def tool_suggest_recipe(
@@ -79,46 +82,65 @@ async def tool_suggest_recipe(
     if source_url:
         recipe_data["link_source"] = source_url
 
-    try:
-        # Use a separate database session for draft creation to avoid
-        # conflicts with concurrent tool executions (pydantic-ai runs
-        # multiple tools in parallel, which can cause session conflicts)
-        async with AsyncSessionLocal() as draft_db:
-            draft = await create_success_draft(
-                db=draft_db,
-                current_user=user,
-                source_url=source_url or "chat://recommendation",
-                generated_recipe=recipe_data,
+    with _tracer.start_as_current_span("recipe_draft.create") as span:
+        span.set_attribute("recipe_draft.has_title", bool(title))
+        span.set_attribute("recipe_draft.ingredient_count", len(ingredients))
+        span.set_attribute("recipe_draft.instruction_count", len(instructions))
+
+        try:
+            # Use a separate database session for draft creation to avoid
+            # conflicts with concurrent tool executions (pydantic-ai runs
+            # multiple tools in parallel, which can cause session conflicts)
+            async with AsyncSessionLocal() as draft_db:
+                draft = await create_success_draft(
+                    db=draft_db,
+                    current_user=user,
+                    source_url=source_url or "chat://recommendation",
+                    generated_recipe=recipe_data,
+                )
+                # Commit the draft in this separate session
+                await draft_db.commit()
+            span.set_attribute("draft_status", "created")
+
+            # Generate signed token for secure access
+            token = create_draft_token(draft_id=draft.id, user_id=user.id)
+            span.add_event(
+                "recipe_draft.token_created",
+                attributes={"recipe_draft.token_created": True},
             )
-            # Commit the draft in this separate session
-            await draft_db.commit()
 
-        # Generate signed token for secure access
-        token = create_draft_token(draft_id=draft.id, user_id=user.id)
+            # Build deep-link URL
+            deep_link = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
+            span.add_event(
+                "recipe_draft.deep_link_created",
+                attributes={"recipe_draft.deep_link_created": True},
+            )
+            span.set_attribute("result_type", "recipe_card")
 
-        # Build deep-link URL
-        deep_link = f"/recipes/new?ai=1&draftId={draft.id}&token={token}"
+            return {
+                "status": "ok",
+                "recipe_card": {
+                    "type": "recipe_card",
+                    "title": title,
+                    "subtitle": description,
+                    "image_url": None,
+                    "href": deep_link,
+                    "source_url": source_url,  # Original external URL for "View Recipe"
+                },
+                "message": (
+                    f"Created recipe draft for '{title}'. "
+                    "User can click 'Add Recipe' to save it."
+                ),
+            }
 
-        return {
-            "status": "ok",
-            "recipe_card": {
-                "type": "recipe_card",
-                "title": title,
-                "subtitle": description,
-                "image_url": None,
-                "href": deep_link,
-                "source_url": source_url,  # Original external URL for "View Recipe"
-            },
-            "message": (
-                f"Created recipe draft for '{title}'. "
-                "User can click 'Add Recipe' to save it."
-            ),
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to create recipe draft: {e}")
-        return {
-            "status": "error",
-            "recipe_card": None,
-            "message": f"Failed to create recipe draft: {e!s}",
-        }
+        except Exception as exc:
+            span.set_attribute("draft_status", "error")
+            span.set_attribute("result_type", "error")
+            span.record_exception(exc)
+            set_span_error_status(span, exc)
+            logger.exception("Failed to create recipe draft")
+            return {
+                "status": "error",
+                "recipe_card": None,
+                "message": "Failed to create recipe draft. Please try again.",
+            }

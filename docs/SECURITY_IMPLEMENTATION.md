@@ -26,9 +26,9 @@ The chat assistant (Nibble) integrates with Azure Monitor via OpenTelemetry for 
 - Error types (not full error messages with user data)
 - Aggregated metrics (counts, latencies)
 
-### Logfire vs Azure Monitor
+### Local Trace Validation vs Azure Monitor
 
-- **Development**: Logfire can be used for local trace visualization
+- **Development**: Use the OpenTelemetry console exporter for no-secret local trace validation
 - **Production**: Azure Monitor Application Insights is the primary backend
 - **Important**: Logfire scrubbing only applies to structured fields, NOT span/log messages themselves
 
@@ -41,6 +41,49 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=...
 
 # Disable in local development (default)
 ENABLE_OBSERVABILITY=false
+
+# Validate traces locally without Azure credentials
+ENABLE_OBSERVABILITY=true
+OTEL_SERVICE_NAME=pantrypilot-backend-dev
+OTEL_TRACES_EXPORTER=console
+OTEL_TRACES_SAMPLER=always_on
+OTEL_PYTHON_LOG_CORRELATION=true
+```
+
+Run the backend locally with these settings, then exercise the authenticated chat
+stream endpoint. The backend console should show a single trace containing the
+FastAPI request span, `assistant_message`, native Pydantic AI agent/model/tool
+spans, and the `recipe_draft.create` business span when a suggested recipe draft
+is created.
+
+```bash
+cd apps/backend
+PYTHONPATH=./src uv run fastapi dev src/main.py --host 0.0.0.0 --port 8000
+curl http://localhost:8000/api/v1/health
+```
+
+When `APPLICATIONINSIGHTS_CONNECTION_STRING` is configured for a development
+Application Insights resource, verify operation linkage from Logs with KQL:
+
+```kusto
+requests
+| where url has "/api/v1/chat/conversations" and url has "/messages/stream"
+| order by timestamp desc
+| project timestamp, operation_Id, name, resultCode, duration
+```
+
+```kusto
+dependencies
+| where operation_Id == "<operation_Id>"
+| order by timestamp asc
+| project timestamp, id, operation_ParentId, name, type, target, success, duration
+```
+
+```kusto
+exceptions
+| where operation_Id == "<operation_Id>"
+| order by timestamp asc
+| project timestamp, operation_ParentId, type, outerMessage
 ```
 
 See `apps/backend/src/core/observability.py` for implementation details.

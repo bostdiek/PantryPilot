@@ -26,6 +26,7 @@ For local development:
 - Logfire can be used as optional dev tooling for quick trace visualization
 - Do NOT rely on Logfire for production retention
 - Set ENABLE_OBSERVABILITY=false locally if traces are not needed
+- Set OTEL_TRACES_EXPORTER=console locally to print spans without Azure secrets
 
 For production (Azure):
 - Set APPLICATIONINSIGHTS_CONNECTION_STRING to your App Insights connection string
@@ -56,12 +57,15 @@ logger = logging.getLogger(__name__)
 _ENV_ENABLE_OBSERVABILITY = "ENABLE_OBSERVABILITY"
 _ENV_APP_INSIGHTS_CONN_STRING = "APPLICATIONINSIGHTS_CONNECTION_STRING"
 _ENV_OTEL_SERVICE_NAME = "OTEL_SERVICE_NAME"
+_ENV_OTEL_TRACES_EXPORTER = "OTEL_TRACES_EXPORTER"
 
 # Default service name for OpenTelemetry
 _DEFAULT_SERVICE_NAME = "pantrypilot-backend"
 
 # Paths to exclude from automatic tracing (reduce noise for health checks)
 EXCLUDED_URLS = "health,health/,favicon.ico"
+
+_pydantic_ai_instrumented = False
 
 
 class ProductTelemetryEventName(StrEnum):
@@ -200,12 +204,62 @@ def _get_connection_string() -> str | None:
     return os.getenv(_ENV_APP_INSIGHTS_CONN_STRING)
 
 
+def _is_console_trace_exporter_enabled() -> bool:
+    """Return whether local console span export is requested."""
+    exporters = {
+        exporter.strip().lower()
+        for exporter in os.getenv(_ENV_OTEL_TRACES_EXPORTER, "").split(",")
+    }
+    return "console" in exporters
+
+
 def _get_installed_version(package_name: str) -> str:
     """Return installed package version for observability diagnostics."""
     try:
         return importlib_metadata.version(package_name)
     except importlib_metadata.PackageNotFoundError:
         return "not-installed"
+
+
+def _enable_pydantic_ai_instrumentation() -> None:
+    """Enable Pydantic AI OpenTelemetry spans after provider setup."""
+    global _pydantic_ai_instrumented
+
+    if _pydantic_ai_instrumented:
+        logger.debug("Pydantic AI OpenTelemetry instrumentation already enabled")
+        return
+
+    try:
+        from pydantic_ai import Agent
+
+        Agent.instrument_all()
+        _pydantic_ai_instrumented = True
+        logger.info("Pydantic AI OpenTelemetry instrumentation enabled")
+    except ImportError as exc:
+        logger.warning(
+            "Pydantic AI instrumentation unavailable: %s. Installed version: %s",
+            exc,
+            _get_installed_version("pydantic-ai-slim"),
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed to enable Pydantic AI OpenTelemetry instrumentation: %s",
+            exc,
+        )
+
+
+def _configure_console_trace_exporter(service_name: str) -> None:
+    """Configure local console trace export for development validation."""
+    from opentelemetry import trace
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.sdk.resources import Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
+
+    provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
+    provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    trace.set_tracer_provider(provider)
+    FastAPIInstrumentor().instrument(excluded_urls=EXCLUDED_URLS)
 
 
 @lru_cache
@@ -238,20 +292,47 @@ def configure_observability() -> bool:
         )
         return False
 
+    service_name = os.getenv(_ENV_OTEL_SERVICE_NAME, _DEFAULT_SERVICE_NAME)
     connection_string = _get_connection_string()
+
+    # Set excluded URLs for FastAPI instrumentation before either Azure Monitor
+    # or the local development exporter configures instrumentation.
+    os.environ.setdefault("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", EXCLUDED_URLS)
+
+    if not connection_string and _is_console_trace_exporter_enabled():
+        try:
+            _configure_console_trace_exporter(service_name)
+            _enable_pydantic_ai_instrumentation()
+            logger.info(
+                "Console OpenTelemetry observability configured for service '%s'",
+                service_name,
+            )
+            return True
+        except ImportError as exc:
+            logger.warning(
+                "Failed to import OpenTelemetry console exporter dependencies: %s",
+                exc,
+            )
+            return False
+        except Exception as exc:
+            logger.exception(
+                "Failed to configure console OpenTelemetry observability: %s",
+                exc,
+            )
+            return False
+
     if not connection_string:
         logger.warning(
-            "Observability enabled but %s not set. Skipping Azure Monitor setup.",
+            "Observability enabled but %s not set and %s is not console. "
+            "Skipping OpenTelemetry setup.",
             _ENV_APP_INSIGHTS_CONN_STRING,
+            _ENV_OTEL_TRACES_EXPORTER,
         )
         return False
 
     try:
         # Import Azure Monitor OpenTelemetry only when needed
         from azure.monitor.opentelemetry import configure_azure_monitor
-
-        # Set service name for OpenTelemetry resource attributes
-        service_name = os.getenv(_ENV_OTEL_SERVICE_NAME, _DEFAULT_SERVICE_NAME)
 
         # Configure Azure Monitor with FastAPI instrumentation
         # Note: This must be called BEFORE importing FastAPI for proper instrumentation
@@ -263,8 +344,7 @@ def configure_observability() -> bool:
             # is handled by setting OTEL_PYTHON_FASTAPI_EXCLUDED_URLS env var
         )
 
-        # Set excluded URLs for FastAPI instrumentation
-        os.environ.setdefault("OTEL_PYTHON_FASTAPI_EXCLUDED_URLS", EXCLUDED_URLS)
+        _enable_pydantic_ai_instrumentation()
 
         logger.info(
             "Azure Monitor observability configured for service '%s'",
@@ -335,6 +415,27 @@ def get_tracer(name: str) -> Any:
         return _NoOpTracer()
 
 
+def get_current_span() -> Any:
+    """Return the active OpenTelemetry span or a no-op span."""
+    try:
+        from opentelemetry import trace
+
+        return trace.get_current_span()
+    except ImportError:
+        logger.debug("OpenTelemetry not available; returning no-op current span")
+        return _NoOpSpan()
+
+
+def set_span_error_status(span: Any, exception: BaseException) -> None:
+    """Set OpenTelemetry error status with a low-cardinality description."""
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.ERROR, type(exception).__name__))
+    except ImportError:
+        logger.debug("OpenTelemetry not available; skipping span status")
+
+
 class _NoOpTracer:
     """A no-op tracer for when OpenTelemetry is not available."""
 
@@ -365,6 +466,9 @@ class _NoOpSpan:
 
     def record_exception(self, exception: BaseException) -> None:
         """No-op exception recorder."""
+
+    def set_status(self, status: object) -> None:
+        """No-op status setter."""
 
     def end(self) -> None:
         """No-op span end."""
