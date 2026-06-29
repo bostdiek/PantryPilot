@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.observability import get_tracer, set_span_error_status
 from models.users import User
 from schemas.ai import SSEEvent
 from services.ai.extraction_common import DraftManager
@@ -18,6 +19,9 @@ from services.ai.interfaces import (
     RecipeConverterProtocol,
 )
 from services.ai.models import DraftOutcome
+
+
+_tracer = get_tracer(__name__)
 
 
 class UrlOrchestrator(AIExtractionService):
@@ -40,62 +44,87 @@ class UrlOrchestrator(AIExtractionService):
         current_user: User,
         prompt_override: str | None = None,
     ) -> DraftOutcome[Any]:
-        sanitized_html = await self.html_extractor.fetch_sanitized_html(source_url)
-        if not sanitized_html:
-            from schemas.ai import ExtractionNotFound
-
-            failure_draft = await self.draft_manager.create_failure_draft(
-                db=db,
-                current_user=current_user,
-                source_url=source_url,
-                extraction_not_found=ExtractionNotFound(reason="fetch_failed"),
-                prompt_override=prompt_override,
+        with _tracer.start_as_current_span("ai_recipe_extract.url") as span:
+            span.set_attribute("ai_recipe.source_type", "url")
+            span.set_attribute("ai_recipe.streamed", False)
+            span.set_attribute(
+                "ai_recipe.prompt_override_used", prompt_override is not None
             )
-            token = self.draft_manager.create_draft_token(
-                failure_draft.id,
-                current_user.id,
-                timedelta(hours=1),
-            )
-            return DraftOutcome(failure_draft, token, False, message="fetch_failed")
+            try:
+                sanitized_html = await self.html_extractor.fetch_sanitized_html(
+                    source_url
+                )
+                span.set_attribute("ai_recipe.html_found", bool(sanitized_html))
+                if not sanitized_html:
+                    from schemas.ai import ExtractionNotFound
 
-        extraction_result = await self.ai_agent.run_extraction_agent(
-            sanitized_html, prompt_override
-        )
+                    failure_draft = await self.draft_manager.create_failure_draft(
+                        db=db,
+                        current_user=current_user,
+                        source_url=source_url,
+                        extraction_not_found=ExtractionNotFound(reason="fetch_failed"),
+                        prompt_override=prompt_override,
+                    )
+                    token = self.draft_manager.create_draft_token(
+                        failure_draft.id,
+                        current_user.id,
+                        timedelta(hours=1),
+                    )
+                    span.set_attribute("ai_recipe.extraction_status", "fetch_failed")
+                    span.set_attribute("ai_recipe.result_type", "failure_draft")
+                    return DraftOutcome(
+                        failure_draft, token, False, message="fetch_failed"
+                    )
 
-        from schemas.ai import ExtractionNotFound
+                extraction_result = await self.ai_agent.run_extraction_agent(
+                    sanitized_html, prompt_override
+                )
 
-        if isinstance(extraction_result, ExtractionNotFound):
-            failure_draft = await self.draft_manager.create_failure_draft(
-                db=db,
-                current_user=current_user,
-                source_url=source_url,
-                extraction_not_found=extraction_result,
-                prompt_override=prompt_override,
-            )
-            token = self.draft_manager.create_draft_token(
-                failure_draft.id,
-                current_user.id,
-                timedelta(hours=1),
-            )
-            return DraftOutcome(failure_draft, token, False, message="not_found")
+                from schemas.ai import ExtractionNotFound
 
-        generated_recipe = self.recipe_converter.convert_to_recipe_create(
-            extraction_result, source_url
-        )
+                if isinstance(extraction_result, ExtractionNotFound):
+                    failure_draft = await self.draft_manager.create_failure_draft(
+                        db=db,
+                        current_user=current_user,
+                        source_url=source_url,
+                        extraction_not_found=extraction_result,
+                        prompt_override=prompt_override,
+                    )
+                    token = self.draft_manager.create_draft_token(
+                        failure_draft.id,
+                        current_user.id,
+                        timedelta(hours=1),
+                    )
+                    span.set_attribute("ai_recipe.extraction_status", "not_found")
+                    span.set_attribute("ai_recipe.result_type", "failure_draft")
+                    return DraftOutcome(
+                        failure_draft, token, False, message="not_found"
+                    )
 
-        draft = await self.draft_manager.create_success_draft(
-            db=db,
-            current_user=current_user,
-            source_url=source_url,
-            generated_recipe=generated_recipe,
-            prompt_override=prompt_override,
-        )
-        token = self.draft_manager.create_draft_token(
-            draft.id,
-            current_user.id,
-            timedelta(hours=1),
-        )
-        return DraftOutcome(draft, token, True)
+                generated_recipe = self.recipe_converter.convert_to_recipe_create(
+                    extraction_result, source_url
+                )
+
+                draft = await self.draft_manager.create_success_draft(
+                    db=db,
+                    current_user=current_user,
+                    source_url=source_url,
+                    generated_recipe=generated_recipe,
+                    prompt_override=prompt_override,
+                )
+                token = self.draft_manager.create_draft_token(
+                    draft.id,
+                    current_user.id,
+                    timedelta(hours=1),
+                )
+                span.set_attribute("ai_recipe.extraction_status", "success")
+                span.set_attribute("ai_recipe.result_type", "draft")
+                return DraftOutcome(draft, token, True)
+            except Exception as exc:
+                span.set_attribute("ai_recipe.extraction_status", "error")
+                span.record_exception(exc)
+                set_span_error_status(span, exc)
+                raise
 
     async def extract_recipe_from_images(
         self,
@@ -114,6 +143,25 @@ class UrlOrchestrator(AIExtractionService):
         current_user: User,
         prompt_override: str | None = None,
     ) -> AsyncGenerator[str, None]:
+        with _tracer.start_as_current_span("ai_recipe_extract.url") as span:
+            span.set_attribute("ai_recipe.source_type", "url")
+            span.set_attribute("ai_recipe.streamed", True)
+            span.set_attribute(
+                "ai_recipe.prompt_override_used", prompt_override is not None
+            )
+            async for line in self._stream_extraction_progress(
+                source_url, db, current_user, prompt_override, span
+            ):
+                yield line
+
+    async def _stream_extraction_progress(
+        self,
+        source_url: str,
+        db: AsyncSession,
+        current_user: User,
+        prompt_override: str | None,
+        span: Any,
+    ) -> AsyncGenerator[str, None]:
         yield (
             SSEEvent.model_validate(
                 {"status": "started", "step": "started", "progress": 0.0}
@@ -128,6 +176,9 @@ class UrlOrchestrator(AIExtractionService):
         try:
             html = await self.html_extractor.fetch_sanitized_html(source_url)
         except Exception as e:
+            span.set_attribute("ai_recipe.extraction_status", "fetch_failed")
+            span.record_exception(e)
+            set_span_error_status(span, e)
             yield (
                 SSEEvent.terminal_error(
                     step="fetch_html",
@@ -137,7 +188,9 @@ class UrlOrchestrator(AIExtractionService):
             )
             return
 
+        span.set_attribute("ai_recipe.html_found", bool(html))
         if not html:
+            span.set_attribute("ai_recipe.extraction_status", "empty_html")
             yield (
                 SSEEvent.terminal_error(
                     step="fetch_html",
@@ -163,6 +216,9 @@ class UrlOrchestrator(AIExtractionService):
                 html, prompt_override
             )
         except Exception as e:
+            span.set_attribute("ai_recipe.extraction_status", "agent_error")
+            span.record_exception(e)
+            set_span_error_status(span, e)
             yield (
                 SSEEvent.terminal_error(
                     step="ai_call",
@@ -184,6 +240,8 @@ class UrlOrchestrator(AIExtractionService):
             )
             # Commit the draft so it's available for immediate retrieval
             await db.commit()
+            span.set_attribute("ai_recipe.extraction_status", "not_found")
+            span.set_attribute("ai_recipe.result_type", "failure_draft")
             yield (
                 SSEEvent.terminal_success(
                     draft_id=getattr(draft_obj, "id", None), success=False
@@ -196,6 +254,9 @@ class UrlOrchestrator(AIExtractionService):
                 extraction_result, source_url
             )
         except Exception as e:
+            span.set_attribute("ai_recipe.extraction_status", "convert_failed")
+            span.record_exception(e)
+            set_span_error_status(span, e)
             yield (
                 SSEEvent.terminal_error(
                     step="convert_schema",
@@ -220,6 +281,8 @@ class UrlOrchestrator(AIExtractionService):
         )
         # Commit the draft so it's available for immediate retrieval
         await db.commit()
+        span.set_attribute("ai_recipe.extraction_status", "success")
+        span.set_attribute("ai_recipe.result_type", "draft")
         yield (
             SSEEvent.terminal_success(
                 draft_id=getattr(draft_obj, "id", None), success=True

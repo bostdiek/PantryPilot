@@ -149,9 +149,8 @@ class TestConfigureObservability:
         mock_opentelemetry = MagicMock()
         mock_opentelemetry.trace = mock_trace
         mock_resource = MagicMock()
-        mock_resource.create.side_effect = (
-            lambda attrs: events.append(f"resource:{attrs['service.name']}")
-            or "resource"
+        mock_resource.create.side_effect = lambda attrs: (
+            events.append(f"resource:{attrs['service.name']}") or "resource"
         )
         mock_provider = MagicMock()
         mock_provider_cls = MagicMock(return_value=mock_provider)

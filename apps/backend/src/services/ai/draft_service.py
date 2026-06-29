@@ -26,6 +26,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import crud.ai_drafts as crud_ai_drafts
+from core.observability import get_tracer, set_span_error_status
 from core.security import create_draft_token as core_create_draft_token
 from models.ai_drafts import AIDraft
 from models.users import User
@@ -33,6 +34,7 @@ from schemas.ai import ExtractionNotFound
 
 
 logger = logging.getLogger(__name__)
+_tracer = get_tracer(__name__)
 
 
 class _FailureDraftStub:
@@ -76,38 +78,56 @@ async def create_success_draft(
     Always uses `crud.ai_drafts.create_draft` (no api-level override probing).
     """
     payload = _normalize_payload(generated_recipe)
-    try:
-        draft_any = await _maybe_call(
-            crud_ai_drafts.create_draft,
-            db=db,
-            user_id=current_user.id,
+    with _tracer.start_as_current_span("recipe_draft.create") as span:
+        _set_draft_span_attributes(
+            span,
             draft_type="recipe_suggestion",
-            payload=payload,
             source_url=source_url,
-            prompt_used=prompt_override,
-            ttl_hours=1,
+            prompt_override=prompt_override,
+            payload=payload,
         )
-        draft = cast(AIDraft, draft_any)
-    except AttributeError as exc:  # pragma: no cover - defensive
-        from uuid import uuid4
+        try:
+            try:
+                draft_any = await _maybe_call(
+                    crud_ai_drafts.create_draft,
+                    db=db,
+                    user_id=current_user.id,
+                    draft_type="recipe_suggestion",
+                    payload=payload,
+                    source_url=source_url,
+                    prompt_used=prompt_override,
+                    ttl_hours=1,
+                )
+                draft = cast(AIDraft, draft_any)
+            except AttributeError as exc:  # pragma: no cover - defensive
+                from uuid import uuid4
 
-        logger.debug(
-            "create_success_draft: limited DB session, returning stub draft: %s",
-            exc,
-        )
-        draft = cast(
-            AIDraft,
-            _FailureDraftStub(
-                id=uuid4(),
-                payload=payload,
-                expires_at=datetime.now(UTC) + timedelta(hours=1),
-            ),
-        )
-    logger.debug(
-        "create_success_draft: created draft id=%s", getattr(draft, "id", None)
-    )
-    # mypy: ensure return type is AIDraft-like; tests may use Mock with same attrs
-    return draft
+                logger.debug(
+                    "create_success_draft: limited DB session, "
+                    "returning stub draft: %s",
+                    exc,
+                )
+                draft = cast(
+                    AIDraft,
+                    _FailureDraftStub(
+                        id=uuid4(),
+                        payload=payload,
+                        expires_at=datetime.now(UTC) + timedelta(hours=1),
+                    ),
+                )
+            span.set_attribute("recipe_draft.status", "created")
+            span.set_attribute(
+                "recipe_draft.id_present", getattr(draft, "id", None) is not None
+            )
+            logger.debug(
+                "create_success_draft: created draft id=%s", getattr(draft, "id", None)
+            )
+            return draft
+        except Exception as exc:
+            span.set_attribute("recipe_draft.status", "error")
+            span.record_exception(exc)
+            set_span_error_status(span, exc)
+            raise
 
 
 async def create_failure_draft(
@@ -128,39 +148,60 @@ async def create_failure_draft(
     except Exception:  # pragma: no cover - defensive
         payload["detail"] = str(extraction_not_found)
 
-    try:
-        draft_any = await _maybe_call(
-            crud_ai_drafts.create_draft,
-            db=db,
-            user_id=current_user.id,
+    with _tracer.start_as_current_span("recipe_draft.create") as span:
+        _set_draft_span_attributes(
+            span,
             draft_type="recipe_suggestion_failure",
-            payload=payload,
             source_url=source_url,
-            prompt_used=prompt_override,
-            ttl_hours=1,
+            prompt_override=prompt_override,
+            payload=payload,
         )
-        draft = cast(AIDraft, draft_any)
-    except AttributeError as exc:  # pragma: no cover - defensive
-        from uuid import uuid4
+        span.set_attribute("recipe_draft.failure", True)
+        try:
+            try:
+                draft_any = await _maybe_call(
+                    crud_ai_drafts.create_draft,
+                    db=db,
+                    user_id=current_user.id,
+                    draft_type="recipe_suggestion_failure",
+                    payload=payload,
+                    source_url=source_url,
+                    prompt_used=prompt_override,
+                    ttl_hours=1,
+                )
+                draft = cast(AIDraft, draft_any)
+            except AttributeError as exc:  # pragma: no cover - defensive
+                from uuid import uuid4
 
-        logger.debug(
-            "create_failure_draft: limited DB session, returning stub draft: %s",
-            exc,
-        )
-        draft = cast(
-            AIDraft,
-            _FailureDraftStub(
-                id=uuid4(),
-                payload=payload,
-                expires_at=datetime.now(UTC) + timedelta(hours=1),
-            ),
-        )
-    # Keep an expires_at attribute for tests; set to now+1h
-    draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
-    logger.debug(
-        "create_failure_draft: created failure draft id=%s", getattr(draft, "id", None)
-    )
-    return draft
+                logger.debug(
+                    "create_failure_draft: limited DB session, "
+                    "returning stub draft: %s",
+                    exc,
+                )
+                draft = cast(
+                    AIDraft,
+                    _FailureDraftStub(
+                        id=uuid4(),
+                        payload=payload,
+                        expires_at=datetime.now(UTC) + timedelta(hours=1),
+                    ),
+                )
+            # Keep an expires_at attribute for tests; set to now+1h
+            draft.expires_at = datetime.now(UTC) + timedelta(hours=1)
+            span.set_attribute("recipe_draft.status", "created")
+            span.set_attribute(
+                "recipe_draft.id_present", getattr(draft, "id", None) is not None
+            )
+            logger.debug(
+                "create_failure_draft: created failure draft id=%s",
+                getattr(draft, "id", None),
+            )
+            return draft
+        except Exception as exc:
+            span.set_attribute("recipe_draft.status", "error")
+            span.record_exception(exc)
+            set_span_error_status(span, exc)
+            raise
 
 
 def create_draft_token(
@@ -190,3 +231,49 @@ def _normalize_payload(obj: Any) -> dict[str, Any]:
         return {"value": str(obj)}
     except Exception:
         return {"value": str(obj)}
+
+
+def _source_type(source_url: str) -> str:
+    if source_url == "image_upload":
+        return "image"
+    if source_url:
+        return "url"
+    return "unknown"
+
+
+def _recipe_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    recipe_data = payload.get("recipe_data")
+    if isinstance(recipe_data, dict):
+        return recipe_data
+    return payload
+
+
+def _count_items(value: object) -> int:
+    if isinstance(value, list | tuple):
+        return len(value)
+    return 0
+
+
+def _set_draft_span_attributes(
+    span: Any,
+    *,
+    draft_type: str,
+    source_url: str,
+    prompt_override: str | None,
+    payload: dict[str, Any],
+) -> None:
+    recipe_payload = _recipe_payload(payload)
+    source_type = _source_type(source_url)
+    span.set_attribute("recipe_draft.type", draft_type)
+    span.set_attribute("recipe_draft.source_type", source_type)
+    span.set_attribute("recipe_draft.has_source_url", source_type == "url")
+    span.set_attribute("recipe_draft.prompt_override_used", prompt_override is not None)
+    span.set_attribute("recipe_draft.has_title", bool(recipe_payload.get("title")))
+    span.set_attribute(
+        "recipe_draft.ingredient_count",
+        _count_items(recipe_payload.get("ingredients")),
+    )
+    span.set_attribute(
+        "recipe_draft.instruction_count",
+        _count_items(recipe_payload.get("instructions")),
+    )
