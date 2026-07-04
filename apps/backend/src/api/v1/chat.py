@@ -36,6 +36,7 @@ from core.error_handler import get_correlation_id
 from core.observability import (
     ProductTelemetryEventName,
     build_product_telemetry_attributes,
+    get_current_span,
     get_tracer,
     record_product_telemetry_event,
 )
@@ -1036,6 +1037,30 @@ def _extract_interactive_blocks_from_tool_result(
     return blocks
 
 
+def _record_tool_lifecycle_event_on_current_span(
+    *,
+    event: ProductTelemetryEventName,
+    request_id: str,
+    conversation_id: UUID,
+    tool_name: str,
+    success: bool | None = None,
+    latency_ms: int | None = None,
+) -> None:
+    """Attach supplemental tool lifecycle metadata to the active assistant span."""
+    attrs = build_product_telemetry_attributes(
+        event=event,
+        feature_name="assistant",
+        request_id=request_id,
+        conversation_id=str(conversation_id),
+        success=success,
+        latency_ms=latency_ms,
+        tool_count=1,
+        tool_names=[tool_name],
+        streamed=True,
+    )
+    get_current_span().add_event(event.value, attributes=attrs)
+
+
 async def _handle_agent_stream_event(  # noqa: C901
     event: object,
     *,
@@ -1065,19 +1090,12 @@ async def _handle_agent_stream_event(  # noqa: C901
             started_at=datetime.now(UTC),
             call_order=current_order,
         )
-        with _tracer.start_as_current_span(f"tool_start:{tool_name}") as span:
-            for key, value in build_product_telemetry_attributes(
-                event=ProductTelemetryEventName.ASSISTANT_TOOL_STARTED,
-                feature_name="assistant",
-                request_id=request_id,
-                conversation_id=str(conversation_id),
-                tool_count=1,
-                tool_names=[tool_name],
-                streamed=True,
-            ).items():
-                span.set_attribute(key, value)
-            span.set_attribute("tool_call_id", event.tool_call_id)
-            span.set_attribute("call_order", current_order)
+        _record_tool_lifecycle_event_on_current_span(
+            event=ProductTelemetryEventName.ASSISTANT_TOOL_STARTED,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            tool_name=tool_name,
+        )
         return (
             [
                 ChatSseEvent(
@@ -1100,31 +1118,17 @@ async def _handle_agent_stream_event(  # noqa: C901
         tool_name = tool_start.tool_name if tool_start else "unknown"
         arguments = tool_start.arguments if tool_start else {}
         started_at = tool_start.started_at if tool_start else datetime.now(UTC)
-        call_order = tool_start.call_order if tool_start else -1
         finished_at = datetime.now(UTC)
         duration_ms = (finished_at - started_at).total_seconds() * 1000
 
-        # Create tracing span for tool call
-        with _tracer.start_as_current_span(f"tool_call:{tool_name}") as span:
-            for key, value in build_product_telemetry_attributes(
-                event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
-                feature_name="assistant",
-                request_id=request_id,
-                conversation_id=str(conversation_id),
-                success=True,
-                latency_ms=int(duration_ms),
-                tool_count=1,
-                tool_names=[tool_name],
-                streamed=True,
-            ).items():
-                span.set_attribute(key, value)
-            span.set_attribute("tool_name", tool_name)
-            span.set_attribute("tool_call_id", event.tool_call_id)
-            span.set_attribute("call_order", call_order)
-            span.set_attribute("duration_ms", duration_ms)
-            span.set_attribute("conversation_id", str(conversation_id))
-            span.set_attribute("message_id", str(message_id))
-            span.set_attribute("status", "success")
+        _record_tool_lifecycle_event_on_current_span(
+            event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            tool_name=tool_name,
+            success=True,
+            latency_ms=int(duration_ms),
+        )
 
         result_content = getattr(event.result, "content", None)
         if isinstance(result_content, dict):

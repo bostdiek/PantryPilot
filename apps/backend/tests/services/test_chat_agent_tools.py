@@ -55,6 +55,74 @@ class MockRunContext:
         self.deps = deps or MockChatAgentDeps()
 
 
+class RecordingSpan:
+    """Minimal span double for recipe suggestion instrumentation tests."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self.attributes: dict[str, object] = {}
+        self.events: list[tuple[str, dict[str, object] | None]] = []
+        self.exceptions: list[BaseException] = []
+        self.status: object | None = None
+
+    def __enter__(self) -> RecordingSpan:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def set_attribute(self, key: str, value: object) -> None:
+        self.attributes[key] = value
+
+    def add_event(
+        self,
+        name: str,
+        attributes: dict[str, object] | None = None,
+    ) -> None:
+        self.events.append((name, attributes))
+
+    def record_exception(self, exception: BaseException) -> None:
+        self.exceptions.append(exception)
+
+    def set_status(self, status: object) -> None:
+        self.status = status
+
+
+class RecordingTracer:
+    """Minimal tracer double for recipe suggestion instrumentation tests."""
+
+    def __init__(self) -> None:
+        self.spans: list[RecordingSpan] = []
+
+    def start_as_current_span(self, name: str, **_kwargs: object) -> RecordingSpan:
+        span = RecordingSpan(name)
+        self.spans.append(span)
+        return span
+
+
+class FakeAsyncSession:
+    """Async session double used by AsyncSessionLocal tests."""
+
+    def __init__(self) -> None:
+        self.commits = 0
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+class FakeAsyncSessionLocal:
+    """Async context manager double for AsyncSessionLocal."""
+
+    def __init__(self, session: FakeAsyncSession) -> None:
+        self.session = session
+
+    async def __aenter__(self) -> FakeAsyncSession:
+        return self.session
+
+    async def __aexit__(self, *args: object) -> None:
+        return None
+
+
 def _sample_recipe_params() -> dict[str, Any]:
     """Return sample recipe parameters for testing."""
     return {
@@ -75,6 +143,131 @@ def _sample_recipe_params() -> dict[str, Any]:
 
 class TestSuggestRecipeTool:
     """Tests for the suggest_recipe tool function."""
+
+    @pytest.mark.asyncio
+    async def test_suggest_recipe_records_safe_draft_span(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test successful recipe draft creation records safe business metadata."""
+        from services.chat_agent.tools import suggestions
+
+        params = _sample_recipe_params()
+        user = MockUser()
+        draft = MockDraft()
+        tracer = RecordingTracer()
+        fake_session = FakeAsyncSession()
+        token_value = "signed.jwt.token"
+
+        async def fake_create_success_draft(**_kwargs: object) -> MockDraft:
+            return draft
+
+        monkeypatch.setattr(suggestions, "_tracer", tracer)
+        monkeypatch.setattr(
+            suggestions,
+            "AsyncSessionLocal",
+            lambda: FakeAsyncSessionLocal(fake_session),
+        )
+        monkeypatch.setattr(
+            suggestions,
+            "create_success_draft",
+            fake_create_success_draft,
+        )
+        monkeypatch.setattr(
+            suggestions,
+            "create_draft_token",
+            lambda **_kwargs: token_value,
+        )
+
+        response = await suggestions.tool_suggest_recipe(
+            MockRunContext(MockChatAgentDeps(user=user)),
+            **params,
+        )
+
+        assert response["status"] == "ok"
+        assert response["recipe_card"]["type"] == "recipe_card"
+        assert response["recipe_card"]["href"].endswith(f"&token={token_value}")
+        assert fake_session.commits == 1
+
+        assert len(tracer.spans) == 1
+        span = tracer.spans[0]
+        assert span.name == "recipe_draft.create"
+        assert span.attributes == {
+            "recipe_draft.has_title": True,
+            "recipe_draft.ingredient_count": 2,
+            "recipe_draft.instruction_count": 3,
+            "draft_status": "created",
+            "result_type": "recipe_card",
+        }
+        assert span.events == [
+            (
+                "recipe_draft.token_created",
+                {"recipe_draft.token_created": True},
+            ),
+            (
+                "recipe_draft.deep_link_created",
+                {"recipe_draft.deep_link_created": True},
+            ),
+        ]
+        assert params["title"] not in str(span.attributes)
+        assert token_value not in str(span.attributes)
+        assert all(
+            token_value not in str(attributes) for _name, attributes in span.events
+        )
+
+    @pytest.mark.asyncio
+    async def test_suggest_recipe_records_exception_on_draft_failure(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test draft failures are correlated without leaking internal details."""
+        from opentelemetry.trace import StatusCode
+
+        from services.chat_agent.tools import suggestions
+
+        params = _sample_recipe_params()
+        user = MockUser()
+        tracer = RecordingTracer()
+        fake_session = FakeAsyncSession()
+        failure = RuntimeError("database password leaked")
+
+        async def fake_create_success_draft(**_kwargs: object) -> MockDraft:
+            raise failure
+
+        monkeypatch.setattr(suggestions, "_tracer", tracer)
+        monkeypatch.setattr(
+            suggestions,
+            "AsyncSessionLocal",
+            lambda: FakeAsyncSessionLocal(fake_session),
+        )
+        monkeypatch.setattr(
+            suggestions,
+            "create_success_draft",
+            fake_create_success_draft,
+        )
+
+        response = await suggestions.tool_suggest_recipe(
+            MockRunContext(MockChatAgentDeps(user=user)),
+            **params,
+        )
+
+        assert response == {
+            "status": "error",
+            "recipe_card": None,
+            "message": "Failed to create recipe draft. Please try again.",
+        }
+
+        assert len(tracer.spans) == 1
+        span = tracer.spans[0]
+        assert span.name == "recipe_draft.create"
+        assert span.attributes["draft_status"] == "error"
+        assert span.attributes["result_type"] == "error"
+        assert span.exceptions == [failure]
+        assert span.status is not None
+        assert span.status.status_code == StatusCode.ERROR
+        assert span.status.description == "RuntimeError"
+        assert "database password" not in str(response)
+        assert "database password" not in str(span.attributes)
 
     @pytest.mark.asyncio
     async def test_suggest_recipe_creates_draft_successfully(self) -> None:
