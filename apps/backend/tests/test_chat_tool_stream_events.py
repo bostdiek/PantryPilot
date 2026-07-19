@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from typing import cast
 from uuid import uuid4
 
@@ -10,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.chat import _handle_agent_stream_event, _ToolCallStart
 from models.chat_tool_calls import ChatToolCall
+from services.chat_agent import ChatAgentDeps
 
 
 class _FakeSpan:
@@ -36,6 +41,33 @@ class _FakeDb:
         self.commits += 1
 
 
+class _FakeDeps:
+    def __init__(self, db: _FakeDb, *, lock: asyncio.Lock | None = None) -> None:
+        self._db = db
+        self._lock = lock or asyncio.Lock()
+
+    @asynccontextmanager
+    async def use_db(self) -> AsyncIterator[AsyncSession]:
+        async with self._lock:
+            yield cast(AsyncSession, self._db)
+
+    @property
+    def lock(self) -> asyncio.Lock:
+        return self._lock
+
+
+class _LockAwareDb(_FakeDb):
+    def __init__(self, holder_active: asyncio.Event) -> None:
+        super().__init__()
+        self._holder_active = holder_active
+        self.commit_attempted_while_locked = False
+
+    async def commit(self) -> None:
+        if self._holder_active.is_set():
+            self.commit_attempted_while_locked = True
+        await super().commit()
+
+
 @pytest.mark.asyncio
 async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None:
     from pydantic_ai.messages import (
@@ -50,6 +82,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
     user_id = uuid4()
 
     db = _FakeDb()
+    deps = _FakeDeps(db)
     tool_calls_by_id: dict[str, _ToolCallStart] = {}
     tool_call_order = [0]
 
@@ -65,7 +98,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=user_id,
-        db=cast(AsyncSession, db),
+        deps=cast(ChatAgentDeps, deps),
         tool_calls_by_id=tool_calls_by_id,
         tool_call_order=tool_call_order,
         request_id="req-1",
@@ -90,7 +123,7 @@ async def test_handle_agent_stream_event_emits_tool_started_and_result() -> None
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=user_id,
-        db=cast(AsyncSession, db),
+        deps=cast(ChatAgentDeps, deps),
         tool_calls_by_id=tool_calls_by_id,
         tool_call_order=tool_call_order,
         request_id="req-1",
@@ -130,6 +163,7 @@ async def test_handle_agent_stream_event_records_tool_lifecycle_events(
     user_id = uuid4()
     span = _FakeSpan()
     db = _FakeDb()
+    deps = _FakeDeps(db)
     tool_calls_by_id: dict[str, _ToolCallStart] = {}
     tool_call_order = [0]
 
@@ -147,7 +181,7 @@ async def test_handle_agent_stream_event_records_tool_lifecycle_events(
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=user_id,
-        db=cast(AsyncSession, db),
+        deps=cast(ChatAgentDeps, deps),
         tool_calls_by_id=tool_calls_by_id,
         tool_call_order=tool_call_order,
         request_id="req-1",
@@ -165,7 +199,7 @@ async def test_handle_agent_stream_event_records_tool_lifecycle_events(
         conversation_id=conversation_id,
         message_id=message_id,
         user_id=user_id,
-        db=cast(AsyncSession, db),
+        deps=cast(ChatAgentDeps, deps),
         tool_calls_by_id=tool_calls_by_id,
         tool_call_order=tool_call_order,
         request_id="req-1",
@@ -182,6 +216,76 @@ async def test_handle_agent_stream_event_records_tool_lifecycle_events(
     assert "product.telemetry.latency_ms" in completed_attrs
     assert "tool_call_id" not in started_attrs
     assert "tool_call_id" not in completed_attrs
+
+
+@pytest.mark.asyncio
+async def test_handle_agent_stream_event_waits_for_shared_db_lock() -> None:
+    from pydantic_ai.messages import FunctionToolResultEvent, ToolReturnPart
+
+    conversation_id = uuid4()
+    message_id = uuid4()
+    user_id = uuid4()
+
+    shared_lock = asyncio.Lock()
+    holder_active = asyncio.Event()
+    db = _LockAwareDb(holder_active)
+    deps = _FakeDeps(db, lock=shared_lock)
+    tool_calls_by_id = {
+        "call_1": _ToolCallStart(
+            tool_name="search_recipes",
+            arguments={"query": "chicken"},
+            started_at=datetime.now(UTC),
+            call_order=0,
+        )
+    }
+    tool_call_order = [1]
+
+    lock_held = asyncio.Event()
+    release_lock = asyncio.Event()
+
+    async def _hold_shared_db_lock() -> None:
+        async with deps.use_db():
+            holder_active.set()
+            lock_held.set()
+            await release_lock.wait()
+            holder_active.clear()
+
+    holder_task = asyncio.create_task(_hold_shared_db_lock())
+    await lock_held.wait()
+
+    result_event = FunctionToolResultEvent(
+        ToolReturnPart(
+            tool_name="search_recipes",
+            content={"items": []},
+            tool_call_id="call_1",
+        )
+    )
+
+    handler_task = asyncio.create_task(
+        _handle_agent_stream_event(
+            result_event,
+            conversation_id=conversation_id,
+            message_id=message_id,
+            user_id=user_id,
+            deps=cast(ChatAgentDeps, deps),
+            tool_calls_by_id=tool_calls_by_id,
+            tool_call_order=tool_call_order,
+            request_id="req-1",
+        )
+    )
+
+    await asyncio.sleep(0)
+    assert not handler_task.done()
+
+    release_lock.set()
+    await holder_task
+    sse_events, result, emitted_blocks = await handler_task
+
+    assert result is None
+    assert emitted_blocks == []
+    assert any('"event":"tool.result"' in event for event in sse_events)
+    assert db.commit_attempted_while_locked is False
+    assert db.commits == 1
 
 
 def test_extract_tool_name_logs_warning_on_unknown(
