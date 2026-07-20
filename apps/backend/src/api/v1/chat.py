@@ -1067,7 +1067,7 @@ async def _handle_agent_stream_event(  # noqa: C901
     conversation_id: UUID,
     message_id: UUID,
     user_id: UUID,
-    db: AsyncSession,
+    deps: ChatAgentDeps,
     tool_calls_by_id: dict[str, _ToolCallStart],
     tool_call_order: list[int],
     request_id: str,
@@ -1154,25 +1154,26 @@ async def _handle_agent_stream_event(  # noqa: C901
             )
             persisted_result = {"content": str(result_content)}
 
-        db.add(
-            ChatToolCall(
-                conversation_id=conversation_id,
-                message_id=message_id,
-                user_id=user_id,
-                tool_name=tool_name,
-                arguments=arguments,
-                result=persisted_result,
-                status="success",
-                error=None,
-                started_at=started_at,
-                finished_at=finished_at,
-                call_metadata={
-                    "tool_call_id": event.tool_call_id,
-                    "source": "pydantic_ai",
-                },
+        async with deps.use_db() as db:
+            db.add(
+                ChatToolCall(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    user_id=user_id,
+                    tool_name=tool_name,
+                    arguments=arguments,
+                    result=persisted_result,
+                    status="success",
+                    error=None,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    call_metadata={
+                        "tool_call_id": event.tool_call_id,
+                        "source": "pydantic_ai",
+                    },
+                )
             )
-        )
-        await db.commit()
+            await db.commit()
 
         # Build list of SSE events to emit
         sse_events: list[str] = []
@@ -1468,7 +1469,7 @@ async def stream_chat_message(  # noqa: C901
                         conversation_id=conversation_id,
                         message_id=message_id,
                         user_id=current_user.id,
-                        db=db,
+                        deps=deps,
                         tool_calls_by_id=tool_calls_by_id,
                         tool_call_order=tool_call_order,
                         request_id=request_id,
