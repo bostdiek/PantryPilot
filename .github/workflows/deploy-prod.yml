@@ -100,6 +100,7 @@ jobs:
           type: deployment
           operation: create
           scope: resourceGroup
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           name: pantrypilot-prod-${{ github.run_number }}
           resource-group-name: ${{ env.AZURE_RESOURCE_GROUP }}
           template-file: ./infra/main.bicep
