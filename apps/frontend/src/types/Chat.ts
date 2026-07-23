@@ -97,11 +97,7 @@ export interface MealProposalBlock {
  * Use `block.type` to discriminate between variants.
  */
 export type ChatContentBlock =
-  | TextBlock
-  | LinkBlock
-  | RecipeCardBlock
-  | ActionBlock
-  | MealProposalBlock;
+  TextBlock | LinkBlock | RecipeCardBlock | ActionBlock | MealProposalBlock;
 
 // -----------------------------------------------------------------------------
 // SSE Event Types

@@ -95,13 +95,16 @@ jobs:
 
       - name: Deploy Bicep infrastructure
         id: deploy
-        uses: azure/arm-deploy@v2
+        uses: azure/bicep-deploy@v2
         with:
-          resourceGroupName: ${{ env.AZURE_RESOURCE_GROUP }}
-          template: ./infra/main.bicep
-          parameters: ./infra/parameters/main.prod.bicepparam
-          deploymentName: pantrypilot-prod-${{ github.run_number }}
-          failOnStdErr: false
+          type: deployment
+          operation: create
+          scope: resourceGroup
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          name: pantrypilot-prod-${{ github.run_number }}
+          resource-group-name: ${{ env.AZURE_RESOURCE_GROUP }}
+          template-file: ./infra/main.bicep
+          parameters-file: ./infra/parameters/main.prod.bicepparam
         env:
           AZURE_LOCATION: "Central US"
           AZURE_UNIQUE_SUFFIX: prod001

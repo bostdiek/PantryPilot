@@ -75,9 +75,9 @@ export default function AssistantPage() {
       if (key === 'k') {
         e.preventDefault();
         document
-          .querySelector<
-            HTMLInputElement | HTMLTextAreaElement
-          >('#assistant-message')
+          .querySelector<HTMLInputElement | HTMLTextAreaElement>(
+            '#assistant-message'
+          )
           ?.focus();
         return;
       }

@@ -1,11 +1,5 @@
 export type InputType =
-  | 'text'
-  | 'email'
-  | 'password'
-  | 'number'
-  | 'search'
-  | 'tel'
-  | 'url';
+  'text' | 'email' | 'password' | 'number' | 'search' | 'tel' | 'url';
 export type InputSize = 'sm' | 'md' | 'lg';
 export type InputVariant = 'outline' | 'filled' | 'unstyled';
 
