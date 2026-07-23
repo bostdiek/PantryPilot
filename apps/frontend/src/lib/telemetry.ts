@@ -17,10 +17,7 @@ export type ProductTelemetryEventName =
   | 'recipe_search_result_clicked';
 
 export type ProductTelemetryFeatureName =
-  | 'assistant'
-  | 'url_import'
-  | 'image_import'
-  | 'recipe_search';
+  'assistant' | 'url_import' | 'image_import' | 'recipe_search';
 
 export interface ProductTelemetryRequestMetadata {
   requestId: string;
