@@ -1130,7 +1130,7 @@ async def _handle_agent_stream_event(  # noqa: C901
             latency_ms=int(duration_ms),
         )
 
-        result_content = getattr(event.result, "content", None)
+        result_content = event.part.content
         if isinstance(result_content, dict):
             persisted_result: dict[str, object] | None = result_content
         elif result_content is None:
@@ -1457,42 +1457,44 @@ async def stream_chat_message(  # noqa: C901
                     user_preferences=user_prefs,
                     memory_content=memory_content,
                 )
-                async for agent_event in agent.run_stream_events(
+                async with agent.run_stream_events(
                     payload.content, deps=deps, message_history=message_history
-                ):
-                    (
-                        sse_events,
-                        result,
-                        emitted_blocks,
-                    ) = await _handle_agent_stream_event(
-                        agent_event,
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                        user_id=current_user.id,
-                        deps=deps,
-                        tool_calls_by_id=tool_calls_by_id,
-                        tool_call_order=tool_call_order,
-                        request_id=request_id,
-                    )
+                ) as agent_events:
+                    async for agent_event in agent_events:
+                        (
+                            sse_events,
+                            result,
+                            emitted_blocks,
+                        ) = await _handle_agent_stream_event(
+                            agent_event,
+                            conversation_id=conversation_id,
+                            message_id=message_id,
+                            user_id=current_user.id,
+                            deps=deps,
+                            tool_calls_by_id=tool_calls_by_id,
+                            tool_call_order=tool_call_order,
+                            request_id=request_id,
+                        )
 
-                    # Track memory updates and warn if excessive
-                    if isinstance(agent_event, FunctionToolCallEvent):
-                        tool_name = _extract_tool_name(agent_event.part)
-                        if tool_name == "update_user_memory":
-                            memory_update_count += 1
-                            if memory_update_count > 2:
-                                logger.warning(
-                                    f"Excessive memory updates detected "
-                                    f"(count={memory_update_count}) in conversation "
-                                    f"{conversation_id} - possible agent loop"
-                                )
+                        # Track memory updates and warn if excessive
+                        if isinstance(agent_event, FunctionToolCallEvent):
+                            tool_name = _extract_tool_name(agent_event.part)
+                            if tool_name == "update_user_memory":
+                                memory_update_count += 1
+                                if memory_update_count > 2:
+                                    logger.warning(
+                                        f"Excessive memory updates detected "
+                                        f"(count={memory_update_count}) in "
+                                        f"conversation "
+                                        f"{conversation_id} - possible agent loop"
+                                    )
 
-                    for sse_line in sse_events:
-                        yield sse_line
-                    if emitted_blocks:
-                        tool_emitted_blocks.extend(emitted_blocks)
-                    if result is not None:
-                        agent_result = result  # Full result object with new_messages()
+                        for sse_line in sse_events:
+                            yield sse_line
+                        if emitted_blocks:
+                            tool_emitted_blocks.extend(emitted_blocks)
+                        if result is not None:
+                            agent_result = result
 
                 # Extract output for normalization
                 if hasattr(agent_result, "output"):

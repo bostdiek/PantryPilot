@@ -8,10 +8,14 @@ from functools import lru_cache
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from httpx import AsyncClient, HTTPStatusError
+from httpx2 import AsyncClient, HTTPStatusError
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models import Model
-from pydantic_ai.retries import AsyncTenacityTransport, RetryConfig, wait_retry_after
+from pydantic_ai.retries import (
+    AsyncHTTPX2TenacityTransport,
+    RetryConfig,
+    wait_retry_after,
+)
 from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from schemas.chat_content import AssistantMessage, TextBlock
@@ -324,7 +328,7 @@ def _create_resilient_http_client() -> AsyncClient:
         if response.status_code in (429, 502, 503, 504):
             response.raise_for_status()
 
-    transport = AsyncTenacityTransport(
+    transport = AsyncHTTPX2TenacityTransport(
         config=RetryConfig(
             retry=retry_if_exception_type(HTTPStatusError),
             wait=wait_retry_after(
