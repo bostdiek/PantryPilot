@@ -237,6 +237,9 @@ jobs:
           cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
+      - name: Set up npm
+        run: npm install --global npm@11.6.2
+
       - name: Install dependencies
         working-directory: apps/frontend
         run: npm ci
