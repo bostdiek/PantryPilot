@@ -142,10 +142,10 @@ def check_resource_access[ResourceT](
     # know the resource has a `user_id` attribute.
     resource_h = cast(HasUserIdProtocol, resource)
 
-    # No user ownership information - legacy data, allow for now
+    # Ownerless resources are never accessible, including during rollback.
     if resource_h.user_id is None:
-        LOGGER.warning("Resource has no user_id - legacy data")
-        return resource
+        LOGGER.warning("Denied access to resource without user_id")
+        raise not_found(not_found_message)
 
     # Admin override
     if allow_admin_override and current_user.is_admin:

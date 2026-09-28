@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 from unittest.mock import AsyncMock, patch
@@ -15,7 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.user_preferences import UserPreferences
 from services.chat_agent import ChatAgentDeps, get_chat_agent
-from services.chat_agent.tools.recipes import tool_search_recipes
+from services.chat_agent.tools.recipes import (
+    tool_get_recipe_details,
+    tool_search_recipes,
+)
 
 
 # Block any real model requests in tests
@@ -44,6 +48,9 @@ class EmptyResult:
     def all(self) -> list[Any]:
         return []
 
+    def scalar_one_or_none(self) -> None:
+        return None
+
 
 class ConcurrencyCheckingSession:
     """Fake async session that fails if execute calls overlap."""
@@ -52,9 +59,11 @@ class ConcurrencyCheckingSession:
         self.active_execute_count = 0
         self.max_active_execute_count = 0
         self.execute_call_count = 0
+        self.statements: list[Any] = []
 
-    async def execute(self, _statement: Any) -> EmptyResult:
+    async def execute(self, statement: Any) -> EmptyResult:
         self.execute_call_count += 1
+        self.statements.append(statement)
         self.active_execute_count += 1
         self.max_active_execute_count = max(
             self.max_active_execute_count,
@@ -165,6 +174,29 @@ class TestChatAgentDeps:
 
         assert db.execute_call_count == 4
         assert db.max_active_execute_count == 1
+        for statement in db.statements:
+            compiled = str(statement)
+            assert "recipe_names.user_id =" in compiled
+            assert "recipe_names.user_id IS NULL" not in compiled
+
+    @pytest.mark.asyncio
+    async def test_recipe_details_query_requires_owner(self) -> None:
+        """Test recipe details cannot select null-owned recipes."""
+        db = ConcurrencyCheckingSession()
+        deps = ChatAgentDeps(
+            db=cast(AsyncSession, db),
+            user=MockUser(),  # type: ignore
+            current_datetime=datetime.now(UTC),
+            user_timezone="UTC",
+        )
+        ctx = cast(Any, MockRunContext(deps))
+
+        result = await tool_get_recipe_details(ctx, str(uuid.uuid4()))
+
+        assert result["status"] == "not_found"
+        compiled = str(db.statements[0])
+        assert "recipe_names.user_id =" in compiled
+        assert "recipe_names.user_id IS NULL" not in compiled
 
 
 class TestAgentConstruction:

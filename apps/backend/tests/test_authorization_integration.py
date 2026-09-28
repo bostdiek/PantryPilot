@@ -90,8 +90,8 @@ class TestEndpointAuthorization:
         result = check_resource_write_access(recipe, user)
         assert result == recipe
 
-    def test_legacy_recipe_authorization_allows_access(self):
-        """Test that legacy recipes with null user_id are accessible."""
+    def test_legacy_recipe_authorization_denies_access(self):
+        """Test that legacy recipes with null user_id are denied."""
         user_id = uuid.uuid4()
         user = User(
             id=user_id,
@@ -104,8 +104,27 @@ class TestEndpointAuthorization:
         # Create a legacy recipe without user_id
         legacy_recipe = MockRecipeForAuth(user_id=None)
 
-        result = check_resource_access(legacy_recipe, user)
-        assert result == legacy_recipe
+        with pytest.raises(Exception) as exc_info:
+            check_resource_access(legacy_recipe, user)
+
+        assert hasattr(exc_info.value, "status_code")
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_admin_cannot_access_null_owned_recipe(self):
+        """Test that administrator status does not override missing ownership."""
+        admin_user = User(
+            id=uuid.uuid4(),
+            username="admin",
+            email="admin@test.com",
+            hashed_password="hash",
+            is_admin=True,
+        )
+
+        with pytest.raises(Exception) as exc_info:
+            check_resource_access(MockRecipeForAuth(user_id=None), admin_user)
+
+        assert hasattr(exc_info.value, "status_code")
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
     def test_admin_override_can_be_disabled(self):
         """Test that admin override can be disabled for specific resources."""
