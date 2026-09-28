@@ -489,6 +489,7 @@ dev = [
     { name = "python-json-logger" },
     { name = "ruff" },
     { name = "tiktoken" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -545,6 +546,7 @@ dev = [
     { name = "python-json-logger", specifier = ">=4.2.0" },
     { name = "ruff", specifier = ">=0.16.8" },
     { name = "tiktoken", specifier = ">=0.14.0" },
+    { name = "tqdm", specifier = ">=4.70.1" },
 ]
 
 [[package]]
