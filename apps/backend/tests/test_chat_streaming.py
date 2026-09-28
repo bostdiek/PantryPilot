@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from types import SimpleNamespace
 from typing import cast
@@ -73,14 +74,19 @@ class _SpanAwareAgent:
     def __init__(self) -> None:
         self.stream_span_name: str | None = None
 
+    @asynccontextmanager
     async def run_stream_events(
         self,
         *_args: object,
         **_kwargs: object,
-    ) -> AsyncIterator[object]:
+    ) -> AsyncIterator[AsyncIterator[object]]:
         self.stream_span_name = _current_span_name.get()
-        if False:
-            yield object()
+
+        async def _events() -> AsyncIterator[object]:
+            if False:
+                yield object()
+
+        yield _events()
 
 
 class _FakeResult:
