@@ -54,8 +54,8 @@ const Navigation: React.FC = () => {
   };
 
   return (
-    <nav className="border-b border-gray-200 bg-white shadow">
-      <div className="flex items-center justify-between px-6 py-4">
+    <nav className="sticky top-0 z-40 flex max-h-dvh flex-col border-b border-gray-200 bg-white pt-[env(safe-area-inset-top)] shadow">
+      <div className="flex shrink-0 items-center justify-between py-4 pr-[max(1.5rem,env(safe-area-inset-right))] pl-[max(1.5rem,env(safe-area-inset-left))]">
         {/* Desktop Navigation Links - hidden on mobile */}
         <div className="hidden gap-4 md:flex">
           {/* Show navigation links only when authenticated */}
@@ -145,9 +145,10 @@ const Navigation: React.FC = () => {
         {hasHydrated && isAuthenticated && (
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="flex items-center justify-center rounded-md p-2 text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none md:hidden"
+            className="flex min-h-11 min-w-11 items-center justify-center rounded-md p-2 text-gray-700 hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none md:hidden"
             aria-label="Toggle mobile menu"
             aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
           >
             {mobileMenuOpen ? (
               <X className="h-6 w-6" aria-hidden="true" />
@@ -226,8 +227,9 @@ const Navigation: React.FC = () => {
       {/* Mobile Navigation Menu - shown when hamburger is clicked */}
       {hasHydrated && isAuthenticated && mobileMenuOpen && (
         <div
+          id="mobile-navigation"
           ref={mobileMenuRef}
-          className="border-t border-gray-200 bg-white px-6 py-4 md:hidden"
+          className="min-h-0 overflow-y-auto overscroll-contain border-t border-gray-200 bg-white py-4 pr-[max(1.5rem,env(safe-area-inset-right))] pb-[max(1rem,env(safe-area-inset-bottom))] pl-[max(1.5rem,env(safe-area-inset-left))] md:hidden"
         >
           <div className="flex flex-col gap-3">
             <NavLink
@@ -235,7 +237,7 @@ const Navigation: React.FC = () => {
               end
               onClick={() => setMobileMenuOpen(false)}
               className={(meta: { isActive: boolean }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
+                `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
                   meta.isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -249,7 +251,7 @@ const Navigation: React.FC = () => {
               to="/recipes"
               onClick={() => setMobileMenuOpen(false)}
               className={(meta: { isActive: boolean }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
+                `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
                   meta.isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -263,7 +265,7 @@ const Navigation: React.FC = () => {
               to="/meal-plan"
               onClick={() => setMobileMenuOpen(false)}
               className={(meta: { isActive: boolean }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
+                `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
                   meta.isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -277,7 +279,7 @@ const Navigation: React.FC = () => {
               to="/grocery-list"
               onClick={() => setMobileMenuOpen(false)}
               className={(meta: { isActive: boolean }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
+                `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
                   meta.isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-100'
@@ -291,7 +293,7 @@ const Navigation: React.FC = () => {
               to="/assistant"
               onClick={() => setMobileMenuOpen(false)}
               className={(meta: { isActive: boolean }) =>
-                `flex items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
+                `flex min-h-11 items-center gap-3 rounded-md px-3 py-2 text-base font-medium ${
                   meta.isActive
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-100'
