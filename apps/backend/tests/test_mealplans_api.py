@@ -276,20 +276,34 @@ async def test_move_entry_across_days_via_patch(mealplans_client: AsyncClient) -
 
 # Helper fixture that returns both an AsyncClient and a recipe seeding helper
 class _MealplansEnv:
-    def __init__(self, client: AsyncClient, engine: AsyncEngine):
+    def __init__(
+        self,
+        client: AsyncClient,
+        engine: AsyncEngine,
+        user_id: uuid.UUID,
+    ):
         self.client = client
         self._engine = engine
+        self.user_id = user_id
 
-    async def seed_recipe(self, recipe_id: uuid.UUID) -> None:
+    async def seed_recipe(
+        self,
+        recipe_id: uuid.UUID,
+        owner_id: uuid.UUID | None = None,
+    ) -> None:
         async with self._engine.begin() as conn:
             await conn.exec_driver_sql(
-                "INSERT OR IGNORE INTO recipe_names (id) VALUES (?)",
-                (recipe_id.bytes,),
+                "INSERT OR IGNORE INTO recipe_names (id, user_id) VALUES (?, ?)",
+                (
+                    recipe_id.hex,
+                    owner_id.hex if owner_id is not None else None,
+                ),
             )
 
 
 @pytest_asyncio.fixture
 async def mealplans_env() -> AsyncIterator[_MealplansEnv]:
+    user_id = uuid.uuid4()
     engine: AsyncEngine = create_async_engine(
         "sqlite+aiosqlite:///:memory:",
         future=True,
@@ -297,7 +311,8 @@ async def mealplans_env() -> AsyncIterator[_MealplansEnv]:
     )
     async with engine.begin() as conn:
         await conn.exec_driver_sql(
-            "CREATE TABLE IF NOT EXISTS recipe_names (id BLOB PRIMARY KEY)"
+            "CREATE TABLE IF NOT EXISTS recipe_names "
+            "(id VARCHAR(32) PRIMARY KEY, user_id VARCHAR(32))"
         )
         await conn.run_sync(
             lambda sync_conn: Base.metadata.create_all(
@@ -318,6 +333,7 @@ async def mealplans_env() -> AsyncIterator[_MealplansEnv]:
             user = result.scalars().first()
             if not user:
                 demo = User(
+                    id=user_id,
                     username="demo",
                     email="demo@tests.local",
                     hashed_password="x",
@@ -335,7 +351,7 @@ async def mealplans_env() -> AsyncIterator[_MealplansEnv]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
         try:
-            yield _MealplansEnv(client, engine)
+            yield _MealplansEnv(client, engine, user_id)
         finally:
             app.dependency_overrides.pop(get_db, None)
             app.dependency_overrides.pop(get_current_user, None)
@@ -350,7 +366,7 @@ async def test_plan_meal_with_existing_recipe(mealplans_env: _MealplansEnv) -> N
     public HTTP endpoint end-to-end.
     """
     recipe_id = uuid.uuid4()
-    await mealplans_env.seed_recipe(recipe_id)
+    await mealplans_env.seed_recipe(recipe_id, mealplans_env.user_id)
 
     # Create a meal tied to the seeded recipe via HTTP API
     plan_payload = {
@@ -375,6 +391,75 @@ async def test_plan_meal_with_existing_recipe(mealplans_env: _MealplansEnv) -> N
     week = resp_week.json()["data"]
     tuesday = next(d for d in week["days"] if d["date"] == "2025-01-14")
     assert any(e["recipe_id"] == str(recipe_id) for e in tuesday["entries"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("owner_id", [None, uuid.uuid4()])
+async def test_create_meal_rejects_unauthorized_recipe(
+    mealplans_env: _MealplansEnv,
+    owner_id: uuid.UUID | None,
+) -> None:
+    """Reject ownerless and cross-user recipes without revealing existence."""
+    recipe_id = uuid.uuid4()
+    await mealplans_env.seed_recipe(recipe_id, owner_id)
+
+    response = await mealplans_env.client.post(
+        "/api/v1/meals/",
+        json={
+            "planned_for_date": "2025-01-14",
+            "meal_type": "dinner",
+            "recipe_id": str(recipe_id),
+            "is_leftover": False,
+            "is_eating_out": False,
+            "notes": None,
+            "order_index": None,
+        },
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"] == "Recipe not found"
+
+
+@pytest.mark.asyncio
+async def test_weekly_replace_validates_recipes_before_delete(
+    mealplans_env: _MealplansEnv,
+) -> None:
+    """Keep the existing week when a replacement references another user's recipe."""
+    existing = await mealplans_env.client.post(
+        "/api/v1/meals/",
+        json={
+            "planned_for_date": "2025-01-14",
+            "meal_type": "dinner",
+            "recipe_id": None,
+            "is_leftover": False,
+            "is_eating_out": False,
+            "notes": "keep me",
+            "order_index": 0,
+        },
+    )
+    assert existing.status_code == status.HTTP_200_OK
+
+    other_recipe_id = uuid.uuid4()
+    await mealplans_env.seed_recipe(other_recipe_id, uuid.uuid4())
+    replacement = await mealplans_env.client.put(
+        "/api/v1/mealplans/weekly?start=2025-01-12",
+        json=[
+            {
+                "planned_for_date": "2025-01-14",
+                "meal_type": "dinner",
+                "recipe_id": str(other_recipe_id),
+                "is_leftover": False,
+                "is_eating_out": False,
+                "notes": "invalid",
+                "order_index": 0,
+            }
+        ],
+    )
+
+    assert replacement.status_code == status.HTTP_404_NOT_FOUND
+    week = await mealplans_env.client.get("/api/v1/mealplans/weekly?start=2025-01-12")
+    entries = [entry for day in week.json()["data"]["days"] for entry in day["entries"]]
+    assert [entry["notes"] for entry in entries] == ["keep me"]
 
 
 @pytest.mark.asyncio

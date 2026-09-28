@@ -6,7 +6,7 @@ import pytest
 from fastapi import status
 from httpx import AsyncClient
 
-from api.v1.recipes import list_recipes
+from api.v1.recipes import _get_or_create_ingredient, list_recipes
 from schemas.recipes import RecipeCategory, RecipeDifficulty
 
 
@@ -37,6 +37,34 @@ class _RecordingSession:
         if len(self.statements) == 1:
             return _RecordingResult(total=0)
         return _RecordingResult()
+
+
+class _IngredientResult:
+    """Minimal scalar result for ingredient lookup tests."""
+
+    def scalars(self) -> "_IngredientResult":
+        return self
+
+    def first(self) -> None:
+        return None
+
+
+class _IngredientSession:
+    """Capture ingredient lookup and creation without a database."""
+
+    def __init__(self) -> None:
+        self.statements: list[object] = []
+        self.added: list[object] = []
+
+    async def execute(self, stmt: object) -> _IngredientResult:
+        self.statements.append(stmt)
+        return _IngredientResult()
+
+    def add(self, value: object) -> None:
+        self.added.append(value)
+
+    async def flush(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio
@@ -277,3 +305,45 @@ async def test_list_recipes_orders_query_by_title_then_id() -> None:
     compiled = str(list_statement.compile(compile_kwargs={"literal_binds": True}))
 
     assert "ORDER BY recipe_names.name, recipe_names.id" in compiled
+    assert "recipe_names.user_id =" in compiled
+    assert "recipe_names.user_id IS NULL" not in compiled
+
+
+@pytest.mark.asyncio
+async def test_admin_list_excludes_null_owned_recipes() -> None:
+    """Test that admin listing still requires explicit recipe ownership."""
+    db = _RecordingSession()
+    current_user = type(
+        "CurrentUser",
+        (),
+        {"id": uuid.uuid4(), "is_admin": True},
+    )()
+
+    await list_recipes(
+        db=db,
+        current_user=current_user,
+        include_full_recipe=False,
+    )
+
+    list_statement = db.statements[1]
+    compiled = str(list_statement.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "recipe_names.user_id IS NOT NULL" in compiled
+
+
+@pytest.mark.asyncio
+async def test_ingredient_lookup_is_strictly_user_scoped() -> None:
+    """Test recipe writes never reuse null-owned or cross-user ingredients."""
+    db = _IngredientSession()
+    user_id = uuid.uuid4()
+
+    ingredient = await _get_or_create_ingredient(
+        db=db,  # type: ignore[arg-type]
+        name="Salt",
+        user_id=user_id,
+    )
+
+    compiled = str(db.statements[0].compile(compile_kwargs={"literal_binds": True}))
+    assert "ingredient_names.user_id =" in compiled
+    assert "ingredient_names.user_id IS NULL" not in compiled
+    assert ingredient.user_id == user_id

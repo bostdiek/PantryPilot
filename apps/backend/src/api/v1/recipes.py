@@ -166,10 +166,7 @@ async def create_recipe(
             stmt = select(Ingredient).where(
                 and_(
                     func.lower(Ingredient.ingredient_name) == ing_data.name.lower(),
-                    or_(
-                        Ingredient.user_id == current_user.id,
-                        Ingredient.user_id.is_(None),  # Legacy ingredients
-                    ),
+                    Ingredient.user_id == current_user.id,
                 )
             )
             result = await db.execute(stmt)
@@ -397,16 +394,13 @@ async def _get_or_create_ingredient(
         sqlalchemy.exc.SQLAlchemyError: For SQLAlchemy-related database errors
             that are not handled as concurrent creation conflicts.
     """
-    # Look for ingredient by name for this user or legacy null user_id
+    # Look for an ingredient by name for this user.
     # Use case-insensitive matching to align with the unique index
     # on (user_id, LOWER(ingredient_name))
     stmt = select(Ingredient).where(
         and_(
             func.lower(Ingredient.ingredient_name) == name.lower(),
-            or_(
-                Ingredient.user_id == user_id,
-                Ingredient.user_id.is_(None),  # Legacy ingredients
-            ),
+            Ingredient.user_id == user_id,
         )
     )
     result = await db.execute(stmt)
@@ -530,16 +524,13 @@ def _build_recipe_filters(
     difficulty: RecipeDifficulty | None,
 ) -> list[Any]:
     """Build filter conditions for recipe search."""
-    filters = []
+    filters: list[Any] = []
 
-    # Filter by user ownership (admin can see all recipes)
-    if not current_user.is_admin:
-        filters.append(
-            or_(
-                Recipe.user_id == current_user.id,
-                Recipe.user_id.is_(None),  # Legacy recipes without owner
-            )
-        )
+    # Admins can see every owned recipe; other users see only their own.
+    if current_user.is_admin:
+        filters.append(Recipe.user_id.is_not(None))
+    else:
+        filters.append(Recipe.user_id == current_user.id)
 
     if query:
         like = f"%{query}%"
