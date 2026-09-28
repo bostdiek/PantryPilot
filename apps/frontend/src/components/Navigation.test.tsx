@@ -307,7 +307,8 @@ describe('Navigation', () => {
       'top-0',
       'z-40',
       'max-h-dvh',
-      'pt-[env(safe-area-inset-top)]'
+      'pt-[env(safe-area-inset-top)]',
+      'md:static'
     );
     expect(navigation).not.toHaveClass('fixed');
   });

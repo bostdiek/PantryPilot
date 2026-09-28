@@ -54,7 +54,7 @@ const Navigation: React.FC = () => {
   };
 
   return (
-    <nav className="sticky top-0 z-40 flex max-h-dvh flex-col border-b border-gray-200 bg-white pt-[env(safe-area-inset-top)] shadow">
+    <nav className="sticky top-0 z-40 flex max-h-dvh flex-col border-b border-gray-200 bg-white pt-[env(safe-area-inset-top)] shadow md:static">
       <div className="flex shrink-0 items-center justify-between py-4 pr-[max(1.5rem,env(safe-area-inset-right))] pl-[max(1.5rem,env(safe-area-inset-left))]">
         {/* Desktop Navigation Links - hidden on mobile */}
         <div className="hidden gap-4 md:flex">
