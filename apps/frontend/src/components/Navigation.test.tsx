@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import Navigation from './Navigation';
 
@@ -85,6 +86,9 @@ describe('Navigation', () => {
     expect(
       screen.getByRole('link', { name: /meal plan/i })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: /grocery list/i })
+    ).toBeInTheDocument();
 
     // User menu button should be present
     const userMenuButton = screen.getByRole('button', { name: /user menu/i });
@@ -125,6 +129,13 @@ describe('Navigation', () => {
     expect(
       screen.queryByRole('button', { name: /logout/i })
     ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /toggle mobile menu/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /user menu/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
   });
 
   test('renders mobile hamburger toggle button for authenticated users', () => {
@@ -149,6 +160,8 @@ describe('Navigation', () => {
     });
     expect(toggleButton).toBeInTheDocument();
     expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+    expect(toggleButton).toHaveAttribute('aria-controls', 'mobile-navigation');
+    expect(toggleButton).toHaveClass('min-h-11', 'min-w-11');
   });
 
   test('expands and collapses mobile menu when toggle button is clicked', () => {
@@ -188,10 +201,62 @@ describe('Navigation', () => {
     const expandedHomeLinks = screen.getAllByRole('link', { name: /^home$/i });
     expect(expandedHomeLinks.length).toBeGreaterThan(initialLinkCount);
 
+    const mobileMenu = container.querySelector('#mobile-navigation');
+    expect(mobileMenu).toBeInTheDocument();
+    expect(mobileMenu).toHaveClass(
+      'min-h-0',
+      'overflow-y-auto',
+      'overscroll-contain',
+      'pb-[max(1rem,env(safe-area-inset-bottom))]'
+    );
+
+    for (const linkName of [
+      'home',
+      'recipes',
+      'meal plan',
+      'grocery list',
+      'assistant',
+    ]) {
+      const links = screen.getAllByRole('link', {
+        name: new RegExp(`^${linkName}$`, 'i'),
+      });
+      expect(links).toHaveLength(2);
+      expect(links[1]).toHaveClass('min-h-11');
+    }
+
     // Click to collapse mobile menu
     fireEvent.click(toggleButton);
 
     // Mobile menu should be collapsed
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('opens and closes the mobile menu from the keyboard', async () => {
+    const user = userEvent.setup();
+    vi.mocked(useAuthStore).mockReturnValue({
+      hasHydrated: true,
+      logout: vi.fn(),
+      token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
+    } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
+    vi.mocked(useIsAuthenticated).mockReturnValue(true);
+
+    render(
+      <MemoryRouter>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    const toggleButton = screen.getByRole('button', {
+      name: /toggle mobile menu/i,
+    });
+    toggleButton.focus();
+
+    await user.keyboard('{Enter}');
+    expect(toggleButton).toHaveAttribute('aria-expanded', 'true');
+
+    await user.keyboard(' ');
     expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
   });
 
@@ -227,5 +292,74 @@ describe('Navigation', () => {
 
     // Mobile menu should be closed after clicking a link
     expect(toggleButton).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('keeps the navigation in flow while making it sticky and safe-area aware', () => {
+    render(
+      <MemoryRouter>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    const navigation = screen.getByRole('navigation');
+    expect(navigation).toHaveClass(
+      'sticky',
+      'top-0',
+      'z-40',
+      'max-h-dvh',
+      'pt-[env(safe-area-inset-top)]',
+      'md:static'
+    );
+    expect(navigation).not.toHaveClass('fixed');
+  });
+
+  test('identifies Recipes as current on a nested recipe route', () => {
+    vi.mocked(useAuthStore).mockReturnValue({
+      hasHydrated: true,
+      logout: vi.fn(),
+      token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
+    } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
+    vi.mocked(useIsAuthenticated).mockReturnValue(true);
+
+    render(
+      <MemoryRouter initialEntries={['/recipes/recipe-1/edit']}>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: /^recipes$/i })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(
+      screen.getByRole('link', { name: /^assistant$/i })
+    ).not.toHaveAttribute('aria-current');
+  });
+
+  test('identifies Assistant as current on the Assistant route', () => {
+    vi.mocked(useAuthStore).mockReturnValue({
+      hasHydrated: true,
+      logout: vi.fn(),
+      token: 'tok',
+      user: { id: '1', username: 'tester', email: 't@example.com' },
+    } as any);
+    vi.mocked(useDisplayName).mockReturnValue('Tester');
+    vi.mocked(useIsAuthenticated).mockReturnValue(true);
+
+    render(
+      <MemoryRouter initialEntries={['/assistant']}>
+        <Navigation />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByRole('link', { name: /^assistant$/i })).toHaveAttribute(
+      'aria-current',
+      'page'
+    );
+    expect(
+      screen.getByRole('link', { name: /^recipes$/i })
+    ).not.toHaveAttribute('aria-current');
   });
 });
