@@ -50,6 +50,7 @@ def _create_recovery_tables() -> None:
         "ownership_meal_link_quarantine",
         sa.Column("meal_id", UUID(as_uuid=True), primary_key=True),
         sa.Column("recipe_id", UUID(as_uuid=True), nullable=False),
+        sa.Column("restore_on_downgrade", sa.Boolean(), nullable=False),
     )
     op.create_table(
         "ownership_ingredient_mappings",
@@ -73,13 +74,37 @@ def _create_recovery_tables() -> None:
 
 def _assign_reliable_recipe_owners() -> None:
     op.execute("""
+        WITH candidates AS (
+            SELECT
+                r.id AS recipe_id,
+                LOWER(r.name) AS normalized_name,
+                (ARRAY_AGG(DISTINCT m.user_id))[1] AS assigned_user_id
+            FROM recipe_names AS r
+            JOIN meal_history AS m ON m.recipe_id = r.id
+            WHERE r.user_id IS NULL
+            GROUP BY r.id, r.name
+            HAVING COUNT(DISTINCT m.user_id) = 1
+        ),
+        eligible AS (
+            SELECT c.recipe_id, c.assigned_user_id
+            FROM candidates AS c
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM recipe_names AS owned
+                WHERE owned.user_id = c.assigned_user_id
+                  AND LOWER(owned.name) = c.normalized_name
+            )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM candidates AS peer
+                WHERE peer.recipe_id <> c.recipe_id
+                  AND peer.assigned_user_id = c.assigned_user_id
+                  AND peer.normalized_name = c.normalized_name
+            )
+        )
         INSERT INTO ownership_recipe_assignments (recipe_id, assigned_user_id)
-        SELECT r.id, (ARRAY_AGG(DISTINCT m.user_id))[1]
-        FROM recipe_names AS r
-        JOIN meal_history AS m ON m.recipe_id = r.id
-        WHERE r.user_id IS NULL
-        GROUP BY r.id
-        HAVING COUNT(DISTINCT m.user_id) = 1
+        SELECT recipe_id, assigned_user_id
+        FROM eligible
     """)
     op.execute("""
         UPDATE recipe_names AS r
@@ -91,8 +116,12 @@ def _assign_reliable_recipe_owners() -> None:
 
 def _quarantine_cross_user_meal_links() -> None:
     op.execute("""
-        INSERT INTO ownership_meal_link_quarantine (meal_id, recipe_id)
-        SELECT m.id, m.recipe_id
+        INSERT INTO ownership_meal_link_quarantine (
+            meal_id,
+            recipe_id,
+            restore_on_downgrade
+        )
+        SELECT m.id, m.recipe_id, FALSE
         FROM meal_history AS m
         JOIN recipe_names AS r ON r.id = m.recipe_id
         WHERE r.user_id IS NOT NULL
@@ -121,8 +150,12 @@ def _quarantine_unresolved_recipes() -> None:
           ON q.source_id = ri.recipe_id
     """)
     op.execute("""
-        INSERT INTO ownership_meal_link_quarantine (meal_id, recipe_id)
-        SELECT m.id, m.recipe_id
+        INSERT INTO ownership_meal_link_quarantine (
+            meal_id,
+            recipe_id,
+            restore_on_downgrade
+        )
+        SELECT m.id, m.recipe_id, TRUE
         FROM meal_history AS m
         JOIN ownership_recipe_quarantine AS q
           ON q.source_id = m.recipe_id
@@ -334,6 +367,7 @@ def downgrade() -> None:
         SET recipe_id = q.recipe_id
         FROM ownership_meal_link_quarantine AS q
         WHERE m.id = q.meal_id
+          AND q.restore_on_downgrade
     """)
     op.execute("""
         UPDATE recipe_names AS r

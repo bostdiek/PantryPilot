@@ -9,8 +9,9 @@ ms.topic: how-to
 
 Migration `20260928_19` makes recipe and ingredient ownership mandatory. It
 assigns an owner only when one distinct user references a legacy recipe through
-meal history. It quarantines ambiguous and unreferenced records instead of
-guessing an owner.
+meal history and that assignment does not create a case-insensitive recipe-name
+collision for the user. It quarantines ambiguous, unreferenced, and colliding
+records instead of guessing an owner or merging recipes.
 
 Run this migration only after reviewing the inventory and creating a verified
 database backup.
@@ -31,18 +32,38 @@ WITH ownership_evidence AS (
     LEFT JOIN meal_history AS m ON m.recipe_id = r.id
     WHERE r.user_id IS NULL
     GROUP BY r.id, r.name
+),
+candidates AS (
+    SELECT
+        e.*,
+        e.candidate_users[1] AS candidate_owner
+    FROM ownership_evidence AS e
+    WHERE e.distinct_users = 1
 )
 SELECT
-    id,
-    name,
-    distinct_users,
-    candidate_users,
+    e.id,
+    e.name,
+    e.distinct_users,
+    e.candidate_users,
     CASE
-        WHEN distinct_users = 1 THEN 'assign unique meal-history user'
-        WHEN distinct_users = 0 THEN 'quarantine unreferenced recipe'
+        WHEN e.distinct_users = 0 THEN 'quarantine unreferenced recipe'
+        WHEN e.distinct_users > 1 THEN 'quarantine ambiguous recipe'
+        WHEN EXISTS (
+            SELECT 1
+            FROM recipe_names AS owned
+            WHERE owned.user_id = e.candidate_users[1]
+              AND LOWER(owned.name) = LOWER(e.name)
+        ) THEN 'quarantine collision with owned recipe'
+        WHEN (
+            SELECT COUNT(*)
+            FROM candidates AS peer
+            WHERE peer.candidate_owner = e.candidate_users[1]
+              AND LOWER(peer.name) = LOWER(e.name)
+        ) > 1 THEN 'quarantine collision between inferable recipes'
+        WHEN e.distinct_users = 1 THEN 'assign unique meal-history user'
         ELSE 'quarantine ambiguous recipe'
     END AS disposition
-FROM ownership_evidence
+FROM ownership_evidence AS e
 ORDER BY disposition, name, id;
 ```
 
@@ -87,8 +108,8 @@ make migrate-prod
 
 The migration performs these operations in one transaction:
 
-1. Record recipes with exactly one distinct meal-history user and assign that
-   owner.
+1. Record recipes with exactly one distinct meal-history user and no
+   case-insensitive owner/name collision, then assign that owner.
 2. Snapshot and clear meal links whose user differs from an owned recipe.
 3. Snapshot unresolved recipes, recipe-ingredient links, and meal-to-recipe
    links in `ownership_*` recovery tables.
@@ -154,13 +175,14 @@ The downgrade:
 2. Restores quarantined ingredients and recipes.
 3. Repoints migrated recipe-ingredient links to their original ingredients.
 4. Restores quarantined recipe-ingredient links.
-5. Restores each saved `meal_history.recipe_id`.
+5. Restores saved `meal_history.recipe_id` values only for recipes restored
+   from ownerless quarantine. Known cross-user links remain detached.
 6. Returns inferred recipe and ingredient ownership to its legacy state.
 7. Removes recovery tables after restoration completes.
 
 Application authorization denies null-owned resources even after rollback.
-Rollback restores data but does not restore the former compatibility access
-path.
+Rollback restores ownerless legacy data but does not restore the former
+compatibility access path or known cross-user meal links.
 
 ## Manual recovery while upgraded
 
@@ -173,8 +195,9 @@ and reinserting it with non-null ownership. Restore dependencies in this order:
 
 Use the `payload` values in `ownership_recipe_quarantine`,
 `ownership_ingredient_quarantine`, and
-`ownership_recipe_ingredient_quarantine`. Use `meal_id` and `recipe_id` from
-`ownership_meal_link_quarantine`.
+`ownership_recipe_ingredient_quarantine`. Use `meal_id`, `recipe_id`, and
+`restore_on_downgrade` from `ownership_meal_link_quarantine`; do not reconnect
+rows marked false without separately confirming both meal and recipe ownership.
 
 Test recovery SQL in a restored backup before production execution. Keep the
 quarantine tables until the production inventory, application checks, and
