@@ -22,6 +22,7 @@ from tenacity import retry_if_exception_type, stop_after_attempt, wait_exponenti
 from schemas.chat_content import AssistantMessage, TextBlock
 from services.ai.model_factory import get_chat_model
 from services.chat_agent.deps import ChatAgentDeps
+from services.chat_agent.tool_recovery import resilient_read_tool
 from services.chat_agent.tools import (
     tool_fetch_url_as_markdown,
     tool_get_daily_weather,
@@ -270,6 +271,9 @@ Tool rules:
 - Only use suggest_recipe when the user explicitly asked for a recipe or to
   save one. Otherwise, respond with text and do NOT call suggest_recipe.
 - When calling suggest_recipe, you MUST include a non-empty ingredients list.
+- If a lookup returns status=error, use successful results from other tools.
+  Never invent missing facts. Explain what is unavailable or ask the user to
+  retry; do not repeatedly call an unavailable lookup.
 """
 
 APP_NAVIGATION = """
@@ -399,20 +403,17 @@ def get_chat_agent() -> Agent[ChatAgentDeps, AssistantMessage]:
         return build_user_context_instructions(ctx.deps)
 
     # Register tools using extracted implementations
-    agent.tool(name="get_meal_plan_history", retries=_TOOL_CALL_RETRIES)(
-        tool_get_meal_plan_history
-    )
-    agent.tool(name="search_recipes", retries=_TOOL_CALL_RETRIES)(tool_search_recipes)
-    agent.tool(name="get_recipe_details", retries=_TOOL_CALL_RETRIES)(
-        tool_get_recipe_details
-    )
-    agent.tool(name="get_daily_weather", retries=_TOOL_CALL_RETRIES)(
-        tool_get_daily_weather
-    )
-    agent.tool(name="web_search", retries=_TOOL_CALL_RETRIES)(tool_web_search)
-    agent.tool(name="fetch_url_as_markdown", retries=_TOOL_CALL_RETRIES)(
-        tool_fetch_url_as_markdown
-    )
+    for name, function in (
+        ("get_meal_plan_history", tool_get_meal_plan_history),
+        ("search_recipes", tool_search_recipes),
+        ("get_recipe_details", tool_get_recipe_details),
+        ("get_daily_weather", tool_get_daily_weather),
+        ("web_search", tool_web_search),
+        ("fetch_url_as_markdown", tool_fetch_url_as_markdown),
+    ):
+        agent.tool(name=name, retries=_TOOL_CALL_RETRIES)(
+            resilient_read_tool(name, function)
+        )
     agent.tool(name="suggest_recipe", retries=_TOOL_CALL_RETRIES)(tool_suggest_recipe)
     agent.tool(name="propose_meal_for_day", retries=_TOOL_CALL_RETRIES)(
         tool_propose_meal_for_day

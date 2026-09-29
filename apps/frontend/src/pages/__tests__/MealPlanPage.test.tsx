@@ -272,18 +272,14 @@ describe('MealPlanPage', () => {
 
     render(<MealPlanPage />);
 
-    // Wait for initial load call on mount
-    await waitFor(() => {
-      expect(loadSpy).toHaveBeenCalled();
-    });
-    const initialCalls = loadSpy.mock.calls.length;
+    expect(loadSpy).not.toHaveBeenCalled();
 
     const nextBtns = screen.getAllByRole('button', { name: /Next week/i });
     await user.click(nextBtns[0]);
 
     // Given weekStartDate is 2025-01-12 in beforeEach, next week is 2025-01-19
     await waitFor(() => {
-      expect(loadSpy).toHaveBeenCalledTimes(initialCalls + 1);
+      expect(loadSpy).toHaveBeenCalledTimes(1);
       expect(loadSpy).toHaveBeenCalledWith('2025-01-19');
     });
 
@@ -291,7 +287,7 @@ describe('MealPlanPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     // Ensure we did not reset back to the original current week (2025-01-12)
-    expect(loadSpy).toHaveBeenCalledTimes(initialCalls + 1);
+    expect(loadSpy).toHaveBeenCalledTimes(1);
     expect(loadSpy).not.toHaveBeenCalledWith('2025-01-12');
     expect(useMealPlanStore.getState().currentWeek?.weekStartDate).toBe(
       '2025-01-19'

@@ -16,6 +16,7 @@ from core.observability import (
     get_tracer,
     record_product_telemetry_event,
 )
+from core.transient_errors import classify_tool_error
 
 
 logger = logging.getLogger(__name__)
@@ -116,16 +117,16 @@ async def search_web(
             return WebSearchOutcome(status="ok", provider="brave", results=results)
         except httpx.HTTPError as exc:
             logger.warning(
-                "Brave search request failed: %s - %s",
+                "Brave search request failed: %s",
                 type(exc).__name__,
-                str(exc),
             )
+            if classify_tool_error(exc) is not None:
+                raise
             error_type = type(exc).__name__
         except (KeyError, TypeError, ValueError) as exc:
             logger.warning(
-                "Brave search parse failed: %s - %s",
+                "Brave search parse failed: %s",
                 type(exc).__name__,
-                str(exc),
             )
             error_type = type(exc).__name__
 

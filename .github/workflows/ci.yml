@@ -91,7 +91,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.1.0" # Match local development version
+          node-version: "24.15.0" # Match local development version
           cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
@@ -124,7 +124,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.1.0" # Match local development version
+          node-version: "24.15.0" # Match local development version
           cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
@@ -160,7 +160,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.1.0" # Match local development version
+          node-version: "24.15.0" # Match local development version
           cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 
@@ -214,7 +214,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "24.1.0" # Match local development version
+          node-version: "24.15.0" # Match local development version
           cache: "npm"
           cache-dependency-path: apps/frontend/package-lock.json
 

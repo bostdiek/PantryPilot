@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import AsyncIterator, Generator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
@@ -13,13 +14,22 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException, status
 from httpx import AsyncClient
-from pydantic_ai import models
+from pydantic_ai import AgentRunResult, AgentRunResultEvent, models
+from pydantic_ai.messages import (
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    ToolCallPart,
+    ToolReturnPart,
+)
 from pydantic_ai.models.test import TestModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from models.chat_tool_calls import ChatToolCall
 from models.users import User
+from schemas.chat_content import AssistantMessage, TextBlock
 from schemas.chat_streaming import ChatStreamRequest
 from services.chat_agent import LiveRecipeContext
+from services.chat_agent.tool_recovery import failure_result
 
 
 # Block any real model requests in tests
@@ -104,6 +114,9 @@ class _FakeResult:
     def scalar_one(self) -> SimpleNamespace:
         return self._assistant_message
 
+    def scalar_one_or_none(self) -> SimpleNamespace:
+        return self._assistant_message
+
 
 class _LookupResult:
     def __init__(self, value: object | None) -> None:
@@ -151,6 +164,71 @@ class _FakeDb:
 
     async def rollback(self) -> None:
         return None
+
+
+class _ToolEventDb(_FakeDb):
+    def __init__(self, *, fail_error_write: bool) -> None:
+        super().__init__()
+        self.fail_error_write = fail_error_write
+        self.failed_write = False
+        self.tool_calls: list[ChatToolCall] = []
+
+    def add(self, obj: object) -> None:
+        if isinstance(obj, ChatToolCall):
+            self.tool_calls.append(obj)
+
+    async def commit(self) -> None:
+        if (
+            self.fail_error_write
+            and not self.failed_write
+            and self.tool_calls
+            and self.tool_calls[-1].status == "error"
+        ):
+            self.failed_write = True
+            raise RuntimeError("secret database failure")
+
+
+class _ScriptedToolAgent:
+    @asynccontextmanager
+    async def run_stream_events(
+        self, *_args: object, **_kwargs: object
+    ) -> AsyncIterator[AsyncIterator[object]]:
+        async def events() -> AsyncIterator[object]:
+            yield FunctionToolCallEvent(
+                ToolCallPart("get_daily_weather", {}, tool_call_id="good-1")
+            )
+            yield FunctionToolCallEvent(
+                ToolCallPart("search_recipes", {}, tool_call_id="bad-1")
+            )
+            yield FunctionToolResultEvent(
+                ToolReturnPart(
+                    "get_daily_weather",
+                    {"temperature": 70},
+                    tool_call_id="good-1",
+                )
+            )
+            yield FunctionToolResultEvent(
+                ToolReturnPart(
+                    "search_recipes",
+                    failure_result("transient_database_error"),
+                    tool_call_id="bad-1",
+                )
+            )
+            yield AgentRunResultEvent(
+                cast(
+                    AgentRunResult[AssistantMessage],
+                    SimpleNamespace(
+                        output=AssistantMessage(
+                            blocks=[
+                                TextBlock(type="text", text="Weather is available.")
+                            ]
+                        ),
+                        all_messages=lambda: [],
+                    ),
+                )
+            )
+
+        yield events()
 
 
 @pytest.fixture
@@ -561,3 +639,92 @@ async def test_stream_chat_message_invalid_payload(
     )
 
     assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_error_write", [False, True])
+async def test_given_failed_tool_when_streaming_then_lifecycle_is_coherent(
+    monkeypatch: pytest.MonkeyPatch,
+    fail_error_write: bool,
+) -> None:
+    from api.v1 import chat
+
+    # Arrange
+    async def noop(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    async def general_conversation(
+        *_args: object, **_kwargs: object
+    ) -> SimpleNamespace:
+        return SimpleNamespace(recipe_id=None)
+
+    async def empty_history(*_args: object, **_kwargs: object) -> list[object]:
+        return []
+
+    class NoPreferences:
+        async def get_by_user_id(self, *_args: object) -> None:
+            return None
+
+    class NoMemory:
+        def __init__(self, *_args: object) -> None:
+            pass
+
+        async def get_memory_document(self, *_args: object) -> None:
+            return None
+
+    db = _ToolEventDb(fail_error_write=fail_error_write)
+    monkeypatch.setattr(chat, "_tracer", _RecordingTracer())
+    monkeypatch.setattr(chat, "get_chat_agent", _ScriptedToolAgent)
+    monkeypatch.setattr(
+        chat,
+        "get_settings",
+        lambda: SimpleNamespace(LLM_PROVIDER="test", CHAT_MODEL="test"),
+    )
+    monkeypatch.setattr(chat, "_get_or_create_conversation", general_conversation)
+    monkeypatch.setattr(chat, "_create_assistant_message", noop)
+    monkeypatch.setattr(chat, "_update_conversation_activity", noop)
+    monkeypatch.setattr(chat, "_load_conversation_history", empty_history)
+    monkeypatch.setattr(chat, "UserPreferencesCRUD", NoPreferences)
+    monkeypatch.setattr(chat, "MemoryUpdateService", NoMemory)
+    monkeypatch.setattr(chat, "capture_training_sample", noop)
+
+    # Act
+    response = await chat.stream_chat_message(
+        uuid4(),
+        ChatStreamRequest(content="Check the weather and recipes"),
+        cast(User, SimpleNamespace(id=uuid4())),
+        cast(AsyncSession, db),
+    )
+    chunks = [
+        chunk if isinstance(chunk, str) else bytes(chunk).decode()
+        async for chunk in response.body_iterator
+    ]
+    names = [json.loads(chunk[6:])["event"] for chunk in chunks]
+
+    # Assert
+    if fail_error_write:
+        assert names == [
+            "status",
+            "tool.started",
+            "tool.started",
+            "tool.result",
+            "error",
+            "done",
+        ]
+        assert db.failed_write
+        assert db.assistant_message.message_metadata["error"] is True
+        assert "secret database failure" not in "".join(chunks)
+    else:
+        assert names == [
+            "status",
+            "tool.started",
+            "tool.started",
+            "tool.result",
+            "tool.result",
+            "message.delta",
+            "message.complete",
+            "done",
+        ]
+        assert [call.status for call in db.tool_calls] == ["success", "error"]
+        assert '"error_code":"transient_database_error"' in "".join(chunks)
+        assert not db.failed_write

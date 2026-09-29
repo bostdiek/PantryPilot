@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 from bs4 import BeautifulSoup
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 from services.ai.html_extractor import HTMLExtractionService
 
@@ -87,6 +87,78 @@ async def test_fetch_timeout():
 
         with pytest.raises(HTTPException):
             await extractor.fetch_and_sanitize("https://example.com/slow")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("propagate_transient_errors", [False, True])
+async def test_given_timeout_when_fetching_then_only_chat_rethrows_typed_error(
+    propagate_transient_errors: bool,
+) -> None:
+    # Arrange
+    extractor = HTMLExtractionService(
+        propagate_transient_errors=propagate_transient_errors
+    )
+    error = httpx.ReadTimeout("PRIVATE_UPSTREAM_DETAILS")
+
+    # Act and assert
+    with patch.object(extractor, "_fetch_with_safe_redirects", side_effect=error):
+        if propagate_transient_errors:
+            with pytest.raises(httpx.ReadTimeout):
+                await extractor._fetch_html("https://example.com/slow")
+        else:
+            with pytest.raises(HTTPException) as exc_info:
+                await extractor._fetch_html("https://example.com/slow")
+            assert exc_info.value.status_code == status.HTTP_408_REQUEST_TIMEOUT
+            assert exc_info.value.detail == "Request timed out"
+            assert "PRIVATE_UPSTREAM_DETAILS" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("propagate_transient_errors", [False, True])
+async def test_given_connection_error_when_fetching_then_only_chat_rethrows(
+    propagate_transient_errors: bool,
+) -> None:
+    # Arrange
+    extractor = HTMLExtractionService(
+        propagate_transient_errors=propagate_transient_errors
+    )
+    error = httpx.ConnectError("PRIVATE_UPSTREAM_DETAILS")
+
+    # Act and assert
+    with patch.object(extractor, "_fetch_with_safe_redirects", side_effect=error):
+        if propagate_transient_errors:
+            with pytest.raises(httpx.ConnectError):
+                await extractor._fetch_html("https://example.com/recipe")
+        else:
+            with pytest.raises(HTTPException) as exc_info:
+                await extractor._fetch_html("https://example.com/recipe")
+            assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
+            assert exc_info.value.detail == "Network error fetching URL"
+            assert "PRIVATE_UPSTREAM_DETAILS" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("propagate_transient_errors", [False, True])
+async def test_given_retryable_http_response_when_fetching_then_only_chat_rethrows(
+    propagate_transient_errors: bool,
+) -> None:
+    # Arrange
+    extractor = HTMLExtractionService(
+        propagate_transient_errors=propagate_transient_errors
+    )
+    response = httpx.Response(
+        503, request=httpx.Request("GET", "https://example.com/recipe")
+    )
+
+    # Act and assert
+    with patch.object(extractor, "_fetch_with_safe_redirects", return_value=response):
+        if propagate_transient_errors:
+            with pytest.raises(httpx.HTTPStatusError):
+                await extractor._fetch_html("https://example.com/recipe")
+        else:
+            with pytest.raises(HTTPException) as exc_info:
+                await extractor._fetch_html("https://example.com/recipe")
+            assert exc_info.value.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.asyncio

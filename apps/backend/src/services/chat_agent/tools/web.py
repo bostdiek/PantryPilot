@@ -8,7 +8,9 @@ from typing import Any
 from fastapi import HTTPException
 from pydantic_ai import RunContext
 
+from core.transient_errors import classify_tool_error
 from schemas.chat_streaming import MAX_SSE_EVENT_BYTES
+from services.ai.html_extractor import HTMLExtractionService
 from services.ai.markdown_extractor import MarkdownExtractionService
 from services.chat_agent.deps import ChatAgentDeps
 from services.web_search import search_web
@@ -27,7 +29,9 @@ _markdown_extractor: MarkdownExtractionService | None = None
 def _get_markdown_extractor() -> MarkdownExtractionService:
     global _markdown_extractor
     if _markdown_extractor is None:
-        _markdown_extractor = MarkdownExtractionService()
+        _markdown_extractor = MarkdownExtractionService(
+            html_extractor=HTMLExtractionService(propagate_transient_errors=True)
+        )
     return _markdown_extractor
 
 
@@ -115,15 +119,17 @@ async def tool_fetch_url_as_markdown(
             "message": message,
         }
 
-    except HTTPException as e:
+    except HTTPException:
         return {
             "status": "error",
             "url": url,
             "content": "",
-            "message": str(e.detail),
+            "message": "This URL could not be fetched.",
         }
     except Exception as e:
-        logger.error(f"Failed to fetch URL as Markdown: {e}")
+        if classify_tool_error(e) is not None:
+            raise
+        logger.exception("Failed to fetch URL as Markdown")
         return {
             "status": "error",
             "url": url,

@@ -26,6 +26,7 @@ from api.v1.chat import (
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from main import app
+from services.chat_agent.tool_recovery import failure_result
 
 
 # -----------------------------------------------------------------------------
@@ -44,12 +45,14 @@ class _MockChatMessage:
         content_blocks: list[dict[str, Any]] | None = None,
         tool_calls: list[Any] | None = None,
         created_at: datetime | None = None,
+        message_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.id = id or uuid4()
         self.role = role
         self.content_blocks = content_blocks or []
         self.tool_calls = tool_calls or []
         self.created_at = created_at or datetime.now(UTC)
+        self.message_metadata = message_metadata or {}
 
 
 class _MockChatToolCall:
@@ -361,11 +364,71 @@ class TestConvertDbMessagesToPydanticAi:
         )
 
         request_parts = history[1].parts
-        assert len(request_parts) == 1
+        assert len(request_parts) == 2
         assert isinstance(request_parts[0], ToolReturnPart)
         assert request_parts[0].tool_name == "get_daily_weather"
         assert request_parts[0].content == {"temperature": 72, "conditions": "sunny"}
         assert request_parts[0].tool_call_id == "call_123"
+        assert isinstance(request_parts[1], ToolReturnPart)
+        assert request_parts[1].tool_call_id == str(tool_call_error.id)
+        assert request_parts[1].content == failure_result(
+            "tool_unavailable", retryable=False
+        )
+
+    def test_given_failed_tool_when_replayed_then_preserves_sanitized_result(
+        self,
+    ) -> None:
+        # Arrange
+        result = failure_result("transient_database_error")
+        tool_call = _MockChatToolCall(
+            tool_name="search_recipes",
+            arguments={"query": "pasta"},
+            result=result,
+            status="error",
+            call_metadata={"tool_call_id": "failed-1"},
+        )
+        messages = [
+            _MockChatMessage(
+                role="assistant",
+                content_blocks=[{"type": "text", "text": "Search was unavailable"}],
+                tool_calls=[tool_call],
+            )
+        ]
+
+        # Act
+        history = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
+
+        # Assert
+        assert isinstance(history[1], ModelRequest)
+        assert isinstance(history[1].parts[0], ToolReturnPart)
+        assert history[1].parts[0].content == result
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [{"streaming": False, "error": True}, {"streaming": True}],
+    )
+    def test_given_incomplete_assistant_when_replayed_then_omits_its_calls(
+        self,
+        metadata: dict[str, bool],
+    ) -> None:
+        # Arrange
+        messages = [
+            _MockChatMessage(
+                role="assistant",
+                tool_calls=[
+                    _MockChatToolCall(
+                        tool_name="search_recipes", result={"recipes": []}
+                    )
+                ],
+                message_metadata=metadata,
+            )
+        ]
+
+        # Act
+        history = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
+
+        # Assert
+        assert history == []
 
     def test_tool_returns_fallbacks_and_empty_text(self) -> None:
         started_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)

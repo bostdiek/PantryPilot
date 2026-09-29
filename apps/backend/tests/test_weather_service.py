@@ -8,6 +8,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import httpx
 import pytest
 
 from services.weather import (
@@ -23,6 +24,7 @@ from services.weather import (
     _to_float,
     _weather_cache,
     clear_weather_cache,
+    get_daily_forecast_for_preferences,
     get_daily_forecast_for_user,
 )
 
@@ -493,3 +495,204 @@ class TestGetDailyForecastForUser:
 
         mock_weather_gov.assert_not_called()
         assert result["status"] == "error"
+
+
+@pytest.mark.parametrize(
+    ("primary_status", "fallback_status", "expected_status"),
+    [(503, 503, 503), (429, 403, 429), (403, 503, 503)],
+)
+@pytest.mark.asyncio
+async def test_weather_transient_error_after_fallback_is_raised_for_chat(
+    monkeypatch: pytest.MonkeyPatch,
+    primary_status: int,
+    fallback_status: int,
+    expected_status: int,
+) -> None:
+    preferences = MagicMock()
+    preferences.latitude = 42.36
+    preferences.longitude = -71.06
+    preferences.timezone = "America/New_York"
+    preferences.units = "imperial"
+    preferences.country = "US"
+    preferences.city = "Boston"
+    preferences.state_or_region = "MA"
+    preferences.postal_code = None
+    requests: list[str] = []
+    client_class = httpx.AsyncClient
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        requests.append(request.url.host)
+        status = (
+            primary_status
+            if request.url.host == "api.open-meteo.com"
+            else fallback_status
+        )
+        return httpx.Response(status)
+
+    monkeypatch.setattr(
+        "services.weather.httpx.AsyncClient",
+        lambda **kwargs: client_class(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    user_id = uuid4()
+    with pytest.raises(httpx.HTTPStatusError) as failure:
+        await get_daily_forecast_for_preferences(
+            user_id=user_id,
+            preferences=preferences,
+            propagate_transient_errors=True,
+        )
+
+    assert failure.value.response.status_code == expected_status
+    assert requests == ["api.open-meteo.com", "api.weather.gov"]
+    assert not any(key.startswith(str(user_id)) for key in _weather_cache)
+
+
+@pytest.mark.asyncio
+async def test_weather_transient_primary_error_allows_successful_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preferences = MagicMock()
+    preferences.latitude = 42.36
+    preferences.longitude = -71.06
+    preferences.timezone = "America/New_York"
+    preferences.units = "imperial"
+    preferences.country = "US"
+    preferences.city = "Boston"
+    preferences.state_or_region = "MA"
+    preferences.postal_code = None
+    client_class = httpx.AsyncClient
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "api.open-meteo.com":
+            return httpx.Response(503)
+        if request.url.path.startswith("/points/"):
+            return httpx.Response(
+                200, json={"properties": {"forecast": "https://api.weather.gov/grid"}}
+            )
+        return httpx.Response(
+            200,
+            json={
+                "properties": {
+                    "periods": [
+                        {
+                            "startTime": "2026-01-16T06:00:00-05:00",
+                            "isDaytime": True,
+                            "temperature": 45,
+                        }
+                    ]
+                }
+            },
+        )
+
+    monkeypatch.setattr(
+        "services.weather.httpx.AsyncClient",
+        lambda **kwargs: client_class(transport=httpx.MockTransport(respond), **kwargs),
+    )
+    result = await get_daily_forecast_for_preferences(
+        user_id=uuid4(),
+        preferences=preferences,
+        propagate_transient_errors=True,
+    )
+
+    assert result["status"] == "ok"
+    assert result["provider"] == "weather.gov"
+
+
+@pytest.mark.asyncio
+async def test_weather_terminal_errors_still_return_normal_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preferences = MagicMock()
+    preferences.latitude = 51.5
+    preferences.longitude = -0.12
+    preferences.timezone = "Europe/London"
+    preferences.units = "metric"
+    preferences.country = "UK"
+    preferences.city = "London"
+    preferences.state_or_region = None
+    preferences.postal_code = None
+    client_class = httpx.AsyncClient
+    monkeypatch.setattr(
+        "services.weather.httpx.AsyncClient",
+        lambda **kwargs: client_class(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(403)),
+            **kwargs,
+        ),
+    )
+
+    result = await get_daily_forecast_for_preferences(
+        user_id=uuid4(),
+        preferences=preferences,
+        propagate_transient_errors=True,
+    )
+    assert result["status"] == "error"
+    assert result["provider"] == "open-meteo"
+
+
+@pytest.mark.asyncio
+async def test_weather_non_chat_caller_retains_error_result_for_transient_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    preferences = MagicMock()
+    preferences.latitude = 51.5
+    preferences.longitude = -0.12
+    preferences.timezone = "Europe/London"
+    preferences.units = "metric"
+    preferences.country = "UK"
+    preferences.city = "London"
+    preferences.state_or_region = None
+    preferences.postal_code = None
+    client_class = httpx.AsyncClient
+    monkeypatch.setattr(
+        "services.weather.httpx.AsyncClient",
+        lambda **kwargs: client_class(
+            transport=httpx.MockTransport(lambda _request: httpx.Response(503)),
+            **kwargs,
+        ),
+    )
+
+    result = await get_daily_forecast_for_preferences(
+        user_id=uuid4(), preferences=preferences
+    )
+    assert result["status"] == "error"
+    assert result["provider"] == "open-meteo"
+
+
+@pytest.mark.asyncio
+async def test_weather_chat_bypasses_cached_failure() -> None:
+    preferences = MagicMock()
+    preferences.latitude = 51.5
+    preferences.longitude = -0.12
+    preferences.timezone = "Europe/London"
+    preferences.units = "metric"
+    preferences.country = "UK"
+    preferences.city = "London"
+    preferences.state_or_region = None
+    preferences.postal_code = None
+    user_id = uuid4()
+    key = _cache_key(
+        user_id=user_id,
+        latitude=51.5,
+        longitude=-0.12,
+        unit="celsius",
+        timezone="Europe/London",
+    )
+    _weather_cache[key] = WeatherCacheEntry(
+        fetched_at=datetime.now(UTC),
+        payload={"status": "error", "provider": "open-meteo"},
+    )
+    fresh = {"status": "ok", "provider": "open-meteo"}
+
+    with patch(
+        "services.weather._fetch_open_meteo",
+        new_callable=AsyncMock,
+        return_value=fresh,
+    ) as open_meteo:
+        result = await get_daily_forecast_for_preferences(
+            user_id=user_id,
+            preferences=preferences,
+            propagate_transient_errors=True,
+        )
+
+    open_meteo.assert_awaited_once()
+    assert result == fresh
+    assert _weather_cache[key].payload == fresh

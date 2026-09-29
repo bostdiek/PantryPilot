@@ -7,6 +7,7 @@ from contextlib import ExitStack
 from typing import Any
 from unittest.mock import Mock, patch
 
+import httpx
 import pytest
 import pytest_asyncio
 from fastapi import status
@@ -145,6 +146,25 @@ async def test_stream_error_variants(
     assert events[-1]["step"] == expected_step
     assert detail_substring in events[-1]["detail"]
     assert events[-1]["progress"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_given_upstream_timeout_when_streaming_url_then_detail_is_sanitized(
+    async_client: AsyncClient,
+) -> None:
+    # Arrange
+    with patch(FETCH_HTML, side_effect=httpx.ReadTimeout("PRIVATE_UPSTREAM_DETAILS")):
+        # Act
+        resp = await async_client.get(
+            "/api/v1/ai/extract-recipe-stream?source_url=https://example.com/recipe"
+        )
+
+    # Assert
+    events = _parse_sse(resp.text)
+    assert resp.status_code == status.HTTP_200_OK
+    assert events[-1]["error_code"] == "fetch_failed"
+    assert events[-1]["detail"] == "Fetch failed: Unable to fetch the recipe page."
+    assert "PRIVATE_UPSTREAM_DETAILS" not in resp.text
 
 
 @pytest.mark.asyncio

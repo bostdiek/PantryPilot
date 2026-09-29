@@ -1127,11 +1127,17 @@ export const useChatStore = create<ChatState>()(
               const rawToolName = data.tool_name;
               const toolName =
                 typeof rawToolName === 'string' ? rawToolName : undefined;
+              const success = data.status === 'success';
+              const errorCode = data.error_code;
               emitProductTelemetryEvent(
                 'assistant_tool_completed',
                 requestTelemetry,
                 {
-                  success: true,
+                  success,
+                  error_type:
+                    !success && typeof errorCode === 'string'
+                      ? errorCode
+                      : undefined,
                   tool_names: toolName ? [toolName] : undefined,
                   tool_count: toolName ? 1 : undefined,
                 }
