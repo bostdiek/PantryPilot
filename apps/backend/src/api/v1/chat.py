@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from pydantic_ai import Agent as PydanticAgent, AgentRunResultEvent
+from pydantic_ai import Agent as PydanticAgent, AgentRunResultEvent, UsageLimits
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -67,6 +67,7 @@ from services.chat_agent import (
     get_chat_agent,
     normalize_agent_output,
 )
+from services.chat_agent.tool_recovery import failure_result, is_failure_result
 from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 
@@ -470,7 +471,7 @@ def _get_user_friendly_error_message(exc: Exception) -> str:
         )
 
     # Fall back to a generic message for unknown errors
-    logger.error(f"Unhandled chat error: {exc}")
+    logger.error("Unhandled chat error type: %s", type(exc).__name__)
     return "Something went wrong. Please try again."
 
 
@@ -491,8 +492,11 @@ async def _mark_message_as_failed(db: AsyncSession, message_id: UUID) -> None:
         if orphaned_message and orphaned_message.message_metadata.get("streaming"):
             orphaned_message.message_metadata = {"streaming": False, "error": True}
             await db.commit()
-    except Exception:
-        logger.exception("Failed to mark message as failed during error cleanup")
+    except Exception as exc:
+        logger.error(
+            "Failed to mark message as failed during error cleanup: %s",
+            type(exc).__name__,
+        )
 
 
 # -----------------------------------------------------------------------------
@@ -683,6 +687,10 @@ class _ToolCallStart:
     call_order: int = 0
 
 
+class ToolResultPersistenceError(RuntimeError):
+    """A failed tool result could not be recorded for later replay."""
+
+
 # Maximum messages to include in history for multi-turn context.
 # Kept low to avoid blowing past Gemini's practical token budget —
 # each tool-call cycle can add thousands of tokens.
@@ -743,7 +751,7 @@ def _truncate_json(data: Any, max_chars: int) -> Any:
     return rendered[:max_chars] + "…[truncated]"
 
 
-def _convert_db_messages_to_pydantic_ai(
+def _convert_db_messages_to_pydantic_ai(  # noqa: C901
     messages: list[ChatMessage],
 ) -> list[ModelMessage]:
     """Convert database ChatMessage records to PydanticAI ModelMessage format.
@@ -757,6 +765,11 @@ def _convert_db_messages_to_pydantic_ai(
     result: list[ModelMessage] = []
 
     for msg in messages:
+        metadata = getattr(msg, "message_metadata", {}) or {}
+        if msg.role == "assistant" and (
+            metadata.get("error") or metadata.get("streaming")
+        ):
+            continue
         if msg.role == "user":
             text_content = _extract_text_from_blocks(msg.content_blocks)
             if not text_content:
@@ -808,7 +821,13 @@ def _convert_db_messages_to_pydantic_ai(
                     ToolReturnPart(
                         tool_name=tool_call.tool_name,
                         content=_truncate_json(
-                            tool_call.result or {}, _MAX_TOOL_RESULT_CHARS
+                            tool_call.result
+                            or (
+                                failure_result("tool_unavailable", retryable=False)
+                                if tool_call.status == "error"
+                                else {}
+                            ),
+                            _MAX_TOOL_RESULT_CHARS,
                         ),
                         tool_call_id=tool_call.call_metadata.get(
                             "tool_call_id", str(tool_call.id)
@@ -816,7 +835,6 @@ def _convert_db_messages_to_pydantic_ai(
                         timestamp=tool_call.finished_at or tool_call.started_at,
                     )
                     for tool_call in tool_calls
-                    if tool_call.status == "success"
                 ]
                 if return_parts:
                     result.append(ModelRequest(parts=return_parts))
@@ -1045,6 +1063,7 @@ def _record_tool_lifecycle_event_on_current_span(
     tool_name: str,
     success: bool | None = None,
     latency_ms: int | None = None,
+    error_type: str | None = None,
 ) -> None:
     """Attach supplemental tool lifecycle metadata to the active assistant span."""
     attrs = build_product_telemetry_attributes(
@@ -1054,6 +1073,7 @@ def _record_tool_lifecycle_event_on_current_span(
         conversation_id=str(conversation_id),
         success=success,
         latency_ms=latency_ms,
+        error_type=error_type,
         tool_count=1,
         tool_names=[tool_name],
         streamed=True,
@@ -1121,15 +1141,6 @@ async def _handle_agent_stream_event(  # noqa: C901
         finished_at = datetime.now(UTC)
         duration_ms = (finished_at - started_at).total_seconds() * 1000
 
-        _record_tool_lifecycle_event_on_current_span(
-            event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
-            request_id=request_id,
-            conversation_id=conversation_id,
-            tool_name=tool_name,
-            success=True,
-            latency_ms=int(duration_ms),
-        )
-
         result_content = event.part.content
         if isinstance(result_content, dict):
             persisted_result: dict[str, object] | None = result_content
@@ -1154,6 +1165,19 @@ async def _handle_agent_stream_event(  # noqa: C901
             )
             persisted_result = {"content": str(result_content)}
 
+        failure = persisted_result if is_failure_result(persisted_result) else None
+        failed = failure is not None
+        error_code = str(failure["error_code"]) if failure else None
+        _record_tool_lifecycle_event_on_current_span(
+            event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            tool_name=tool_name,
+            success=not failed,
+            latency_ms=int(duration_ms),
+            error_type=error_code,
+        )
+
         async with deps.use_db() as db:
             db.add(
                 ChatToolCall(
@@ -1163,17 +1187,29 @@ async def _handle_agent_stream_event(  # noqa: C901
                     tool_name=tool_name,
                     arguments=arguments,
                     result=persisted_result,
-                    status="success",
-                    error=None,
+                    status="error" if failed else "success",
+                    error=str(failure["message"]) if failure else None,
                     started_at=started_at,
                     finished_at=finished_at,
                     call_metadata={
                         "tool_call_id": event.tool_call_id,
                         "source": "pydantic_ai",
+                        **({"error_code": error_code} if failed else {}),
                     },
                 )
             )
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception as exc:
+                if failed:
+                    logger.error(
+                        "Failed to persist failed assistant tool result: %s",
+                        type(exc).__name__,
+                    )
+                    raise ToolResultPersistenceError(
+                        "Unable to save assistant tool result"
+                    ) from None
+                raise
 
         # Build list of SSE events to emit
         sse_events: list[str] = []
@@ -1189,8 +1225,9 @@ async def _handle_agent_stream_event(  # noqa: C901
                 data={
                     "tool_call_id": event.tool_call_id,
                     "tool_name": tool_name,
-                    "status": "success",
+                    "status": "error" if failed else "success",
                     "result": sse_safe_result,
+                    **({"error_code": error_code} if failed else {}),
                 },
             ).to_sse()
         )
@@ -1199,7 +1236,11 @@ async def _handle_agent_stream_event(  # noqa: C901
         # These blocks require user acceptance (recipe cards, meal proposals) and
         # are automatically included in the final response - the agent does not
         # need to manually add them to its output blocks.
-        emitted_blocks = _extract_interactive_blocks_from_tool_result(persisted_result)
+        emitted_blocks = (
+            []
+            if failed
+            else _extract_interactive_blocks_from_tool_result(persisted_result)
+        )
 
         for block in emitted_blocks:
             sse_events.append(
@@ -1406,6 +1447,8 @@ async def stream_chat_message(  # noqa: C901
         agent_result: object | None = None  # Avoid NameError if stream ends early
         # Track blocks emitted from tool results (e.g., recipe cards)
         tool_emitted_blocks: list[dict[str, Any]] = []
+        failed_tool_results = 0
+        successful_tool_results = 0
         yield ChatSseEvent(
             event="status",
             conversation_id=conversation_id,
@@ -1458,7 +1501,10 @@ async def stream_chat_message(  # noqa: C901
                     memory_content=memory_content,
                 )
                 async with agent.run_stream_events(
-                    payload.content, deps=deps, message_history=message_history
+                    payload.content,
+                    deps=deps,
+                    message_history=message_history,
+                    usage_limits=UsageLimits(request_limit=30, tool_calls_limit=60),
                 ) as agent_events:
                     async for agent_event in agent_events:
                         (
@@ -1491,6 +1537,11 @@ async def stream_chat_message(  # noqa: C901
 
                         for sse_line in sse_events:
                             yield sse_line
+                        if isinstance(agent_event, FunctionToolResultEvent):
+                            if is_failure_result(agent_event.part.content):
+                                failed_tool_results += 1
+                            else:
+                                successful_tool_results += 1
                         if emitted_blocks:
                             tool_emitted_blocks.extend(emitted_blocks)
                         if result is not None:
@@ -1505,6 +1556,19 @@ async def stream_chat_message(  # noqa: C901
                     raw_output = agent_result
 
                 message = normalize_agent_output(raw_output)
+                if deps.failed_tools and not any(
+                    isinstance(block, TextBlock)
+                    and block.text.strip()
+                    and block.text != "Unable to parse agent response."
+                    for block in message.blocks
+                ):
+                    message.blocks = [
+                        TextBlock(
+                            type="text",
+                            text="Some lookups are unavailable right now. "
+                            "Please try again shortly.",
+                        )
+                    ]
                 for block in message.blocks:
                     if isinstance(block, TextBlock):
                         yield ChatSseEvent(
@@ -1630,6 +1694,23 @@ async def stream_chat_message(  # noqa: C901
                 await db.commit()
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
                 tool_names = sorted({tc.tool_name for tc in tool_calls_by_id.values()})
+                outcome = (
+                    "partially_completed"
+                    if failed_tool_results and successful_tool_results
+                    else "exhausted"
+                    if failed_tool_results
+                    else "recovered"
+                    if deps.recovered_tools
+                    else "success"
+                )
+                message_span.add_event(
+                    "assistant_tool_outcome",
+                    attributes={
+                        "tool.outcome": outcome,
+                        "tool.failed_count": failed_tool_results,
+                        "tool.success_count": successful_tool_results,
+                    },
+                )
 
                 message_span.set_attribute(
                     "assistant.output_block_count", len(all_blocks)
@@ -1669,6 +1750,10 @@ async def stream_chat_message(  # noqa: C901
             try:
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
                 with _tracer.start_as_current_span("assistant_message_error") as span:
+                    span.add_event(
+                        "assistant_tool_outcome",
+                        attributes={"tool.outcome": "terminal"},
+                    )
                     record_product_telemetry_event(
                         span,
                         event=ProductTelemetryEventName.ASSISTANT_MESSAGE_FAILED,

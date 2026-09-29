@@ -12,9 +12,14 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.v1.chat import _handle_agent_stream_event, _ToolCallStart
+from api.v1.chat import (
+    ToolResultPersistenceError,
+    _handle_agent_stream_event,
+    _ToolCallStart,
+)
 from models.chat_tool_calls import ChatToolCall
 from services.chat_agent import ChatAgentDeps
+from services.chat_agent.tool_recovery import failure_result
 
 
 class _FakeSpan:
@@ -66,6 +71,11 @@ class _LockAwareDb(_FakeDb):
         if self._holder_active.is_set():
             self.commit_attempted_while_locked = True
         await super().commit()
+
+
+class _FailedWriteDb(_FakeDb):
+    async def commit(self) -> None:
+        raise RuntimeError("private connection detail")
 
 
 @pytest.mark.asyncio
@@ -216,6 +226,93 @@ async def test_handle_agent_stream_event_records_tool_lifecycle_events(
     assert "product.telemetry.latency_ms" in completed_attrs
     assert "tool_call_id" not in started_attrs
     assert "tool_call_id" not in completed_attrs
+
+
+@pytest.mark.asyncio
+async def test_given_exhausted_tool_when_result_arrives_then_persists_error_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai.messages import FunctionToolResultEvent, ToolReturnPart
+
+    # Arrange
+    span = _FakeSpan()
+    monkeypatch.setattr("api.v1.chat.get_current_span", lambda: span)
+    db = _FakeDb()
+    deps = _FakeDeps(db)
+    tool_calls = {
+        "failed-1": _ToolCallStart(
+            tool_name="search_recipes",
+            arguments={"query": "pasta"},
+            started_at=datetime.now(UTC),
+        )
+    }
+    result = failure_result("transient_database_error")
+    event = FunctionToolResultEvent(
+        ToolReturnPart(
+            tool_name="search_recipes", content=result, tool_call_id="failed-1"
+        )
+    )
+
+    # Act
+    emitted, _, blocks = await _handle_agent_stream_event(
+        event,
+        conversation_id=uuid4(),
+        message_id=uuid4(),
+        user_id=uuid4(),
+        deps=cast(ChatAgentDeps, deps),
+        tool_calls_by_id=tool_calls,
+        tool_call_order=[1],
+        request_id="req-1",
+    )
+
+    # Assert
+    assert blocks == []
+    assert len(emitted) == 1
+    assert '"status":"error"' in emitted[0]
+    assert '"error_code":"transient_database_error"' in emitted[0]
+    persisted = db.added[0]
+    assert isinstance(persisted, ChatToolCall)
+    assert persisted.status == "error"
+    assert persisted.result == result
+    metadata = persisted.call_metadata
+    assert metadata is not None
+    assert metadata["error_code"] == "transient_database_error"
+    event_attributes = span.events[0][1]
+    assert event_attributes is not None
+    assert event_attributes["product.telemetry.success"] is False
+    assert "private connection detail" not in emitted[0]
+
+
+@pytest.mark.asyncio
+async def test_given_failed_result_write_when_handled_then_does_not_emit_result(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    from pydantic_ai.messages import FunctionToolResultEvent, ToolReturnPart
+
+    # Arrange
+    db = _FailedWriteDb()
+    event = FunctionToolResultEvent(
+        ToolReturnPart(
+            tool_name="search_recipes",
+            content=failure_result("transient_database_error"),
+            tool_call_id="failed-1",
+        )
+    )
+
+    # Act and assert
+    with pytest.raises(ToolResultPersistenceError):
+        await _handle_agent_stream_event(
+            event,
+            conversation_id=uuid4(),
+            message_id=uuid4(),
+            user_id=uuid4(),
+            deps=cast(ChatAgentDeps, _FakeDeps(db)),
+            tool_calls_by_id={},
+            tool_call_order=[0],
+            request_id="req-1",
+        )
+    assert "Failed to persist failed assistant tool result" in caplog.text
+    assert "private connection detail" not in caplog.text
 
 
 @pytest.mark.asyncio
