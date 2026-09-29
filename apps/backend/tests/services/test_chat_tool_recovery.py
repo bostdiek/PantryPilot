@@ -30,7 +30,10 @@ from services.ai.html_extractor import HTMLExtractionService
 from services.chat_agent.agent import get_chat_agent
 from services.chat_agent.deps import ChatAgentDeps
 from services.chat_agent.tool_recovery import (
+    EXTENDED_ATTEMPT_TIMEOUT_SECONDS,
+    EXTENDED_TIMEOUT_TOOLS,
     MAX_ATTEMPTS,
+    MAX_ELAPSED_SECONDS,
     failure_result,
     is_failure_result,
     resilient_read_tool,
@@ -264,6 +267,158 @@ async def test_given_slow_tool_when_deadline_passes_then_returns_bounded_error(
     assert isinstance(result, dict)
     assert result["status"] == "error"
     assert result["error_code"] == "transient_network_error"
+
+
+def test_given_long_running_read_tools_when_configured_then_budget_covers_fetches() -> (
+    None
+):
+    # Arrange/Act/Assert
+    assert {
+        "search_recipes",
+        "get_daily_weather",
+        "fetch_url_as_markdown",
+    } <= EXTENDED_TIMEOUT_TOOLS
+    assert EXTENDED_ATTEMPT_TIMEOUT_SECONDS > 30.0
+    assert MAX_ELAPSED_SECONDS > EXTENDED_ATTEMPT_TIMEOUT_SECONDS
+
+
+@pytest.mark.asyncio
+async def test_given_slow_fetch_when_within_downstream_timeout_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.ATTEMPT_TIMEOUT_SECONDS", 0.05
+    )
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.EXTENDED_ATTEMPT_TIMEOUT_SECONDS", 0.2
+    )
+    monkeypatch.setattr("services.chat_agent.tool_recovery.MAX_ELAPSED_SECONDS", 0.25)
+    attempts = 0
+
+    class SlowExtractor:
+        async def fetch_as_markdown(self, _url: str) -> str:
+            nonlocal attempts
+            attempts += 1
+            await asyncio.sleep(0.08)
+            return "# Recipe"
+
+    monkeypatch.setattr(
+        "services.chat_agent.tools.web._get_markdown_extractor",
+        lambda: SlowExtractor(),
+    )
+    # Act
+    result = await resilient_read_tool(
+        "fetch_url_as_markdown", tool_fetch_url_as_markdown
+    )(_ctx(_deps(object())), "https://example.com/slow")
+
+    # Assert
+    assert result["status"] == "ok"
+    assert result["content"] == "# Recipe"
+    assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_given_slow_primary_when_weather_fallback_succeeds_then_returns_forecast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.ATTEMPT_TIMEOUT_SECONDS", 0.05
+    )
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.EXTENDED_ATTEMPT_TIMEOUT_SECONDS", 0.2
+    )
+    monkeypatch.setattr("services.chat_agent.tool_recovery.MAX_ELAPSED_SECONDS", 0.25)
+    user = MagicMock()
+    user.id = uuid4()
+    preferences = MagicMock()
+    preferences.latitude = 42.36
+    preferences.longitude = -71.06
+    preferences.timezone = "America/New_York"
+    preferences.units = "imperial"
+    preferences.country = "US"
+    preferences.city = "Boston"
+    preferences.state_or_region = "MA"
+    preferences.postal_code = None
+    forecast: dict[str, object] = {
+        "status": "ok",
+        "provider": "weather.gov",
+        "days": [],
+    }
+
+    async def slow_primary(**_kwargs: object) -> None:
+        await asyncio.sleep(0.07)
+        raise httpx.ReadTimeout("Open-Meteo timed out")
+
+    async def healthy_fallback(**_kwargs: object) -> dict[str, object]:
+        await asyncio.sleep(0.07)
+        return forecast
+
+    deps = ChatAgentDeps(
+        db=cast(AsyncSession, AsyncMock()),
+        user=cast(User, user),
+        current_datetime=datetime.now(UTC),
+        user_timezone="UTC",
+    )
+    with (
+        patch(
+            "services.chat_agent.tools.weather.user_preferences_crud.get_by_user_id",
+            new_callable=AsyncMock,
+            return_value=preferences,
+        ),
+        patch(
+            "services.weather._fetch_open_meteo",
+            new_callable=AsyncMock,
+            side_effect=slow_primary,
+        ) as open_meteo,
+        patch(
+            "services.weather._fetch_weather_gov",
+            new_callable=AsyncMock,
+            side_effect=healthy_fallback,
+        ) as weather_gov,
+    ):
+        # Act
+        result = await resilient_read_tool("get_daily_weather", tool_get_daily_weather)(
+            _ctx(deps)
+        )
+
+    # Assert
+    assert result == forecast
+    open_meteo.assert_awaited_once()
+    weather_gov.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_given_extended_lookup_stalls_when_budget_expires_then_returns_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Arrange
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.EXTENDED_ATTEMPT_TIMEOUT_SECONDS", 0.1
+    )
+    monkeypatch.setattr("services.chat_agent.tool_recovery.MAX_ELAPSED_SECONDS", 0.12)
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.random.uniform", lambda _low, _high: 0
+    )
+    attempts = 0
+
+    async def stalled(_ctx: RunContext[ChatAgentDeps]) -> None:
+        nonlocal attempts
+        attempts += 1
+        await asyncio.sleep(1)
+
+    # Act
+    result = await asyncio.wait_for(
+        resilient_read_tool("search_recipes", stalled)(_ctx(_deps(object()))),
+        timeout=0.3,
+    )
+
+    # Assert
+    assert result == failure_result(
+        "transient_network_error", tool_name="search_recipes"
+    )
+    assert 1 <= attempts <= MAX_ATTEMPTS
 
 
 def test_given_agent_registration_when_inspected_then_mutations_are_not_wrapped(

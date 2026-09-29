@@ -18,10 +18,15 @@ from services.chat_agent.deps import ChatAgentDeps
 
 MAX_ATTEMPTS = 3
 ATTEMPT_TIMEOUT_SECONDS = 10.0
-MAX_ELAPSED_SECONDS = 32.0
+# Weather can make three sequential 10s requests; URL fetches and embeddings allow 30s.
+EXTENDED_ATTEMPT_TIMEOUT_SECONDS = 33.0
+MAX_ELAPSED_SECONDS = 35.0
 MAX_TOTAL_BACKOFF_SECONDS = 2.0
 MAX_BACKOFF_SECONDS = 0.8
 MAX_MODEL_CALLS_AFTER_FAILURE = 2
+EXTENDED_TIMEOUT_TOOLS = frozenset(
+    {"search_recipes", "get_daily_weather", "fetch_url_as_markdown"}
+)
 
 type FailureResult = dict[str, str | bool]
 FAILURE_CODES = {
@@ -112,7 +117,7 @@ def resilient_read_tool[**P, T](
     name: str,
     function: Callable[Concatenate[RunContext[ChatAgentDeps], P], Awaitable[T]],
 ) -> Callable[Concatenate[RunContext[ChatAgentDeps], P], Awaitable[T | FailureResult]]:
-    """Apply the infrastructure policy only where registration proves read-only."""
+    """Apply bounded retries only where registration proves read-only."""
 
     @wraps(function)
     async def wrapped(
@@ -130,6 +135,11 @@ def resilient_read_tool[**P, T](
             return failure_result("tool_unavailable", retryable=False, tool_name=name)
 
         deadline = time.monotonic() + MAX_ELAPSED_SECONDS
+        attempt_timeout = (
+            EXTENDED_ATTEMPT_TIMEOUT_SECONDS
+            if name in EXTENDED_TIMEOUT_TOOLS
+            else ATTEMPT_TIMEOUT_SECONDS
+        )
         total_backoff = 0.0
         for attempt in range(1, MAX_ATTEMPTS + 1):
             started = time.monotonic()
@@ -137,7 +147,7 @@ def resilient_read_tool[**P, T](
                 remaining = deadline - started
                 if remaining <= 0:
                     raise TimeoutError
-                async with asyncio.timeout(min(ATTEMPT_TIMEOUT_SECONDS, remaining)):
+                async with asyncio.timeout(min(attempt_timeout, remaining)):
                     result = await function(ctx, *args, **kwargs)
             except Exception as exc:
                 classification = classify_tool_error(exc)

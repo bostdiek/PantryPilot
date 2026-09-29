@@ -531,6 +531,51 @@ describe('useChatStore', () => {
     );
   });
 
+  test.each([
+    { status: 'success', errorCode: undefined, success: true },
+    {
+      status: 'error',
+      errorCode: 'transient_database_error',
+      success: false,
+    },
+  ])(
+    'sendMessage records $status tool results accurately',
+    async ({ status, errorCode, success }) => {
+      const { result } = renderHook(() => useChatStore());
+      const mocks = await getMocks();
+      const telemetry = await import('../../lib/telemetry');
+
+      mocks.streamChatMessage.mockImplementation(
+        async (_conversationId, _content, callbacks) => {
+          callbacks.onToolResult?.({
+            tool_name: 'search_recipes',
+            status,
+            ...(errorCode ? { error_code: errorCode } : {}),
+          });
+          callbacks.onDone?.();
+        }
+      );
+
+      await act(async () => {
+        await result.current.sendMessage('Find recipes');
+      });
+
+      const emitSpy = telemetry.emitProductTelemetryEvent as ReturnType<
+        typeof vi.fn
+      >;
+      expect(emitSpy).toHaveBeenCalledWith(
+        'assistant_tool_completed',
+        expect.any(Object),
+        expect.objectContaining({
+          success,
+          error_type: errorCode,
+          tool_names: ['search_recipes'],
+          tool_count: 1,
+        })
+      );
+    }
+  );
+
   test('clearConversation clears messages for the given conversation', async () => {
     const { result } = renderHook(() => useChatStore());
 
