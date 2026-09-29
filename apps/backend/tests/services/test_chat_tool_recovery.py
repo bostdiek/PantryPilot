@@ -21,7 +21,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.transient_errors import classify_tool_error
@@ -726,6 +726,42 @@ async def test_given_exhausted_tool_when_model_repeats_then_stops_dependency_cal
 
 
 @pytest.mark.parametrize(
+    "failure",
+    [
+        SQLAlchemyTimeoutError("pool unavailable"),
+        httpx.HTTPStatusError(
+            "upstream timeout",
+            request=httpx.Request("GET", "https://test"),
+            response=httpx.Response(408),
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_given_pool_or_upstream_timeout_when_retried_then_recovers(
+    failure: Exception,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.random.uniform", lambda _low, _high: 0
+    )
+    attempts = 0
+
+    async def lookup(_ctx: RunContext[ChatAgentDeps]) -> dict[str, str]:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise failure
+        return {"status": "ok"}
+
+    deps = _deps(object())
+    result = await resilient_read_tool("lookup", lookup)(_ctx(deps))
+
+    assert result == {"status": "ok"}
+    assert attempts == 2
+    assert "lookup" in deps.recovered_tools
+
+
+@pytest.mark.parametrize(
     ("exception", "expected"),
     [
         (ValueError("bad request"), None),
@@ -736,6 +772,7 @@ async def test_given_exhausted_tool_when_model_repeats_then_stops_dependency_cal
             ),
             "transient_database_error",
         ),
+        (SQLAlchemyTimeoutError("pool unavailable"), "transient_database_error"),
         (httpx.ConnectError("network"), "transient_network_error"),
         (httpx.ReadError("interrupted"), "transient_network_error"),
         (httpx.WriteError("interrupted"), "transient_network_error"),
@@ -747,6 +784,14 @@ async def test_given_exhausted_tool_when_model_repeats_then_stops_dependency_cal
         (genai_errors.ClientError(400, {}), None),
         (genai_errors.ServerError(503, {}), "transient_service_error"),
         (genai_errors.ServerError(501, {}), None),
+        (
+            httpx.HTTPStatusError(
+                "upstream timeout",
+                request=httpx.Request("GET", "https://test"),
+                response=httpx.Response(408),
+            ),
+            "transient_service_error",
+        ),
         (
             httpx.HTTPStatusError(
                 "service",

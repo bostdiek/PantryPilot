@@ -8,10 +8,10 @@ import asyncpg  # type: ignore[import-untyped]
 import httpx
 import openai
 from google.genai import errors as genai_errors
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, TimeoutError as SQLAlchemyTimeoutError
 
 
-RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+RETRYABLE_HTTP_STATUSES = {408, 429, 500, 502, 503, 504}
 
 
 def _is_transient_database_error(exc: DBAPIError) -> bool:
@@ -31,6 +31,8 @@ def classify_tool_error(exc: Exception) -> str | None:
     if isinstance(exc, DBAPIError) and _is_transient_database_error(exc):
         return "transient_database_error"
     if isinstance(exc, asyncpg.PostgresConnectionError):
+        return "transient_database_error"
+    if isinstance(exc, SQLAlchemyTimeoutError):
         return "transient_database_error"
     if isinstance(
         exc,
