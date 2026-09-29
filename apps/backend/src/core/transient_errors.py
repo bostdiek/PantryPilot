@@ -33,7 +33,11 @@ def classify_tool_error(exc: Exception) -> str | None:
     if isinstance(exc, asyncpg.PostgresConnectionError):
         return "transient_database_error"
     if isinstance(
-        exc, asyncio.TimeoutError | httpx.TimeoutException | httpx.ConnectError
+        exc,
+        asyncio.TimeoutError
+        | httpx.TimeoutException
+        | httpx.NetworkError
+        | httpx.RemoteProtocolError,
     ):
         return "transient_network_error"
     if isinstance(exc, httpx.HTTPStatusError):
@@ -50,7 +54,7 @@ def classify_tool_error(exc: Exception) -> str | None:
             if exc.status_code in RETRYABLE_HTTP_STATUSES
             else None
         )
-    if isinstance(exc, genai_errors.ServerError):
+    if isinstance(exc, genai_errors.ClientError | genai_errors.ServerError):
         return (
             "transient_service_error" if exc.code in RETRYABLE_HTTP_STATUSES else None
         )

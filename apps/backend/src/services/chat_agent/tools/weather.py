@@ -20,4 +20,5 @@ async def tool_get_daily_weather(
     return await get_daily_forecast_for_preferences(
         user_id=ctx.deps.user.id,
         preferences=preferences,
+        propagate_transient_errors=True,
     )

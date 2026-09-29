@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 from typing import cast
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import httpx
 import pytest
+from google.genai import errors as genai_errors
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
     ModelMessage,
@@ -32,6 +35,7 @@ from services.chat_agent.tool_recovery import (
     is_failure_result,
     resilient_read_tool,
 )
+from services.chat_agent.tools.weather import tool_get_daily_weather
 from services.chat_agent.tools.web import (
     tool_fetch_url_as_markdown,
     tool_web_search,
@@ -282,6 +286,59 @@ def test_given_agent_registration_when_inspected_then_mutations_are_not_wrapped(
 
 
 @pytest.mark.asyncio
+async def test_given_weather_failure_when_retried_then_recovers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = MagicMock()
+    user.id = uuid4()
+    preferences = MagicMock()
+    preferences.latitude = 42.36
+    preferences.longitude = -71.06
+    preferences.timezone = "America/New_York"
+    preferences.units = "imperial"
+    preferences.country = "US"
+    preferences.city = "Boston"
+    preferences.state_or_region = "MA"
+    preferences.postal_code = None
+    forecast = {"status": "ok", "provider": "open-meteo", "days": []}
+    monkeypatch.setattr(
+        "services.chat_agent.tool_recovery.random.uniform", lambda _low, _high: 0
+    )
+    deps = ChatAgentDeps(
+        db=cast(AsyncSession, AsyncMock()),
+        user=cast(User, user),
+        current_datetime=datetime.now(UTC),
+        user_timezone="UTC",
+    )
+
+    with (
+        patch(
+            "services.chat_agent.tools.weather.user_preferences_crud.get_by_user_id",
+            new_callable=AsyncMock,
+            return_value=preferences,
+        ),
+        patch(
+            "services.weather._fetch_open_meteo",
+            new_callable=AsyncMock,
+            side_effect=[httpx.ReadError("interrupted"), forecast],
+        ) as open_meteo,
+        patch(
+            "services.weather._fetch_weather_gov",
+            new_callable=AsyncMock,
+            return_value={"status": "error"},
+        ) as weather_gov,
+    ):
+        result = await resilient_read_tool("get_daily_weather", tool_get_daily_weather)(
+            _ctx(deps)
+        )
+
+    assert result == forecast
+    assert open_meteo.await_count == 2
+    weather_gov.assert_awaited_once()
+    assert "get_daily_weather" in deps.recovered_tools
+
+
+@pytest.mark.asyncio
 async def test_given_transient_web_error_when_searching_then_propagates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -525,6 +582,16 @@ async def test_given_exhausted_tool_when_model_repeats_then_stops_dependency_cal
             "transient_database_error",
         ),
         (httpx.ConnectError("network"), "transient_network_error"),
+        (httpx.ReadError("interrupted"), "transient_network_error"),
+        (httpx.WriteError("interrupted"), "transient_network_error"),
+        (httpx.CloseError("interrupted"), "transient_network_error"),
+        (httpx.RemoteProtocolError("disconnected"), "transient_network_error"),
+        (httpx.LocalProtocolError("invalid request"), None),
+        (httpx.InvalidURL("invalid URL"), None),
+        (genai_errors.ClientError(429, {}), "transient_service_error"),
+        (genai_errors.ClientError(400, {}), None),
+        (genai_errors.ServerError(503, {}), "transient_service_error"),
+        (genai_errors.ServerError(501, {}), None),
         (
             httpx.HTTPStatusError(
                 "service",
