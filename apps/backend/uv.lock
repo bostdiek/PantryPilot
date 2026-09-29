@@ -502,7 +502,7 @@ requires-dist = [
     { name = "azure-communication-email", specifier = ">=1.1.0" },
     { name = "azure-monitor-opentelemetry", specifier = ">=1.8.2" },
     { name = "beautifulsoup4", specifier = ">=4.15.0" },
-    { name = "fastapi", extras = ["standard"], specifier = ">=0.140.12" },
+    { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
     { name = "google-genai", specifier = ">=2.25.0" },
     { name = "greenlet", specifier = ">=3.5.6" },
     { name = "gunicorn", specifier = ">=26.2.0" },
