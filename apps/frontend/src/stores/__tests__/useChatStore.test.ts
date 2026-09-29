@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { ApiErrorImpl } from '../../types/api';
+import type { ConversationSummary } from '../../types/Chat';
 import { useChatStore } from '../useChatStore';
 
 // Mock the chat API endpoints
@@ -69,6 +70,7 @@ describe('useChatStore', () => {
         activeConversationId: null,
         activeGeneralConversationId: null,
         activeRecipeConversationIds: {},
+        confirmedRecipeConversationIds: {},
         messagesByConversationId: {},
         hasPreviousMessagesByConversationId: {},
         isLoading: false,
@@ -177,12 +179,120 @@ describe('useChatStore', () => {
     ).toBe(false);
   });
 
+  test('resumeRecipeConversation ignores a stale route response', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const resolvers = new Map<string, (summary: ConversationSummary) => void>();
+    mocks.resumeRecipeConversation.mockImplementation(
+      (recipeId: string) =>
+        new Promise<ConversationSummary>((resolve) => {
+          resolvers.set(recipeId, resolve);
+        })
+    );
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    const recipeARequest = result.current.resumeRecipeConversation('recipe-a');
+    const recipeBRequest = result.current.resumeRecipeConversation('recipe-b');
+
+    await act(async () => {
+      resolvers.get('recipe-b')?.({
+        id: 'conversation-b',
+        title: 'Recipe B',
+        created_at: '2026-09-29T10:00:00Z',
+        last_activity_at: '2026-09-29T10:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-b',
+          recipe_title: 'Recipe B',
+          is_current: true,
+        },
+      });
+      await recipeBRequest;
+    });
+    await act(async () => {
+      resolvers.get('recipe-a')?.({
+        id: 'conversation-a',
+        title: 'Recipe A',
+        created_at: '2026-09-29T09:00:00Z',
+        last_activity_at: '2026-09-29T09:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-a',
+          recipe_title: 'Recipe A',
+          is_current: true,
+        },
+      });
+      await recipeARequest;
+    });
+
+    expect(result.current.activeConversationId).toBe('conversation-b');
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-b': 'conversation-b',
+    });
+  });
+
+  test('resumeRecipeConversation clears confirmation until the server responds', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'cached-recipe',
+            title: 'Cached',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'cached-recipe',
+        confirmedRecipeConversationIds: {
+          'recipe-1': 'cached-recipe',
+        },
+      });
+    });
+    mocks.resumeRecipeConversation.mockRejectedValue(new Error('offline'));
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+
+    expect(result.current.activeConversationId).toBe('cached-recipe');
+    expect(
+      result.current.confirmedRecipeConversationIds['recipe-1']
+    ).toBeUndefined();
+    expect(result.current.error).toBe(
+      'Unable to resume this recipe conversation. Please try again.'
+    );
+  });
+
   test('loadConversations reconciles independent current selections for each recipe', async () => {
     const { result } = renderHook(() => useChatStore());
     const mocks = await getMocks();
 
     act(() => {
       useChatStore.setState({
+        conversations: [
+          {
+            id: 'removed-context',
+            title: 'Off-page recipe',
+            createdAt: '2026-09-20T10:00:00Z',
+            lastMessageAt: '2026-09-20T10:00:00Z',
+            recipeContext: {
+              recipeId: 'removed-recipe',
+              recipeTitle: 'Off-page recipe',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'removed-general',
+            title: 'Off-page general',
+            createdAt: '2026-09-19T10:00:00Z',
+            lastMessageAt: '2026-09-19T10:00:00Z',
+          },
+        ],
         activeConversationId: 'removed-context',
         activeGeneralConversationId: 'removed-general',
         activeRecipeConversationIds: {
@@ -245,9 +355,10 @@ describe('useChatStore', () => {
     expect(result.current.activeRecipeConversationIds).toEqual({
       'recipe-1': 'recipe-1-current',
       'recipe-2': 'recipe-2-current',
+      'removed-recipe': 'removed-context',
     });
-    expect(result.current.activeGeneralConversationId).toBeNull();
-    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.activeGeneralConversationId).toBe('removed-general');
+    expect(result.current.activeConversationId).toBe('removed-context');
   });
 
   test('loadConversations preserves only the selected local-first general conversation', async () => {
@@ -1496,6 +1607,17 @@ describe('useChatStore', () => {
       });
     });
     mocks.deleteConversation.mockResolvedValue(undefined);
+    mocks.resumeRecipeConversation.mockResolvedValue({
+      id: 'recipe-older',
+      title: 'Older',
+      created_at: '2026-09-28T10:00:00Z',
+      last_activity_at: '2026-09-28T10:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
     mocks.fetchConversations.mockResolvedValue({
       conversations: [
         {
@@ -1634,7 +1756,7 @@ describe('useChatStore', () => {
       total: 0,
       has_more: false,
     });
-    mocks.createRecipeConversation.mockResolvedValue({
+    mocks.resumeRecipeConversation.mockResolvedValue({
       id: 'recipe-replacement',
       title: null,
       created_at: '2026-09-29T11:00:00Z',
@@ -1650,7 +1772,8 @@ describe('useChatStore', () => {
       await result.current.deleteConversation('recipe-current');
     });
 
-    expect(mocks.createRecipeConversation).toHaveBeenCalledWith('recipe-1');
+    expect(mocks.resumeRecipeConversation).toHaveBeenCalledWith('recipe-1');
+    expect(mocks.createRecipeConversation).not.toHaveBeenCalled();
     expect(result.current.activeConversationId).toBe('recipe-replacement');
     expect(result.current.activeRecipeConversationIds).toEqual({
       'recipe-1': 'recipe-replacement',

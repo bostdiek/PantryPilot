@@ -27,7 +27,7 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -604,9 +604,17 @@ async def list_conversations(
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
 
-    # Count total conversations for the user
+    conversation_visibility = (
+        ChatConversation.user_id == current_user.id,
+        or_(
+            ChatConversation.recipe_id.is_(None),
+            ChatConversation.recipe.has(Recipe.user_id == current_user.id),
+        ),
+    )
+    # Count only general conversations and contextual conversations whose
+    # linked recipe is still owned by the caller.
     count_query = select(func.count(ChatConversation.id)).where(
-        ChatConversation.user_id == current_user.id
+        *conversation_visibility
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
@@ -614,7 +622,7 @@ async def list_conversations(
     # Fetch conversations with pagination, ordered by most recent activity
     query = (
         select(ChatConversation)
-        .where(ChatConversation.user_id == current_user.id)
+        .where(*conversation_visibility)
         .options(selectinload(ChatConversation.recipe))
         .order_by(ChatConversation.last_activity_at.desc())
         .limit(limit)
@@ -879,6 +887,10 @@ async def get_message_history(
     conv_query = select(ChatConversation).where(
         ChatConversation.id == conversation_id,
         ChatConversation.user_id == current_user.id,
+        or_(
+            ChatConversation.recipe_id.is_(None),
+            ChatConversation.recipe.has(Recipe.user_id == current_user.id),
+        ),
     )
     conv_result = await db.execute(conv_query)
     conversation = conv_result.scalars().one_or_none()
@@ -1238,6 +1250,7 @@ async def _load_live_recipe_context(
     recipe = check_resource_access(
         result.scalars().one_or_none(),
         current_user,
+        allow_admin_override=False,
         not_found_message="Recipe not found",
     )
     return LiveRecipeContext(

@@ -175,6 +175,9 @@ describe('RecipesDetail', () => {
   it('renders action buttons', () => {
     renderRecipesDetail();
 
+    expect(screen.getByRole('article').parentElement).toHaveClass(
+      'pb-[calc(5rem+env(safe-area-inset-bottom))]'
+    );
     expect(
       screen.getByRole('button', { name: /edit test recipe/i })
     ).toBeInTheDocument();
@@ -228,6 +231,19 @@ describe('RecipesDetail', () => {
       ).not.toBeInTheDocument();
     }
   );
+
+  it('does not expose the Nibble trigger for a cached recipe without loader authorization', () => {
+    mockLoaderRecipe = null;
+
+    renderRecipesDetail();
+
+    expect(screen.getByRole('heading', { name: 'Test Recipe' })).toBeVisible();
+    expect(
+      screen.queryByRole('button', {
+        name: 'Ask Nibble about Test Recipe',
+      })
+    ).not.toBeInTheDocument();
+  });
 
   it('opens Nibble with recipe origin, scroll, and focus state', async () => {
     const user = userEvent.setup();

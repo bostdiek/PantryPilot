@@ -24,6 +24,10 @@ from services.chat_agent import (
     build_user_context_instructions,
     get_chat_agent,
 )
+from services.chat_agent.agent import (
+    RECIPE_CONTEXT_ITEM_CHAR_LIMIT,
+    RECIPE_CONTEXT_JSON_CHAR_LIMIT,
+)
 from services.chat_agent.tools.recipes import (
     tool_get_recipe_details,
     tool_search_recipes,
@@ -350,6 +354,49 @@ class TestAgentConstruction:
         assert malicious_notes not in instructions[:boundary_start]
         assert malicious_ingredient not in instructions[:boundary_start]
         assert malicious_step not in instructions[:boundary_start]
+
+    def test_contextual_user_context_bounds_large_recipe_data(self) -> None:
+        """Test recipe prompt data has per-item and total serialized limits."""
+        oversized = "x" * (RECIPE_CONTEXT_ITEM_CHAR_LIMIT * 4)
+        recipe_context = LiveRecipeContext(
+            recipe_id=uuid.uuid4(),
+            title=oversized,
+            description=oversized,
+            prep_time_minutes=10,
+            cook_time_minutes=20,
+            total_time_minutes=30,
+            serving_min=2,
+            serving_max=4,
+            notes=oversized,
+            ingredients=tuple(oversized for _ in range(100)),
+            instructions=tuple(oversized for _ in range(100)),
+        )
+        deps = ChatAgentDeps(
+            db=AsyncMock(),
+            user=MockUser(),  # type: ignore
+            current_datetime=datetime.now(UTC),
+            user_timezone="UTC",
+            recipe_context=recipe_context,
+        )
+
+        instructions = build_user_context_instructions(deps)
+
+        recipe_json = instructions.split("----- BEGIN RECIPE DATA -----", maxsplit=1)[
+            1
+        ].rsplit("----- END RECIPE DATA -----", maxsplit=1)[0]
+        parsed_recipe = json.loads(recipe_json)
+        bounded_values = [
+            parsed_recipe["title"],
+            parsed_recipe["description"],
+            parsed_recipe["notes"],
+            *parsed_recipe["ingredients"],
+            *parsed_recipe["instructions"],
+        ]
+        assert len(recipe_json.strip()) <= RECIPE_CONTEXT_JSON_CHAR_LIMIT
+        assert all(
+            len(value) <= RECIPE_CONTEXT_ITEM_CHAR_LIMIT for value in bounded_values
+        )
+        assert any("truncated" in value for value in bounded_values)
 
     @pytest.mark.asyncio
     async def test_agent_with_full_preferences_context(self) -> None:

@@ -608,9 +608,17 @@ async def test_load_live_recipe_context_uses_server_recipe_and_ingredients() -> 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("recipe", [None, SimpleNamespace(id=uuid4(), user_id=uuid4())])
+@pytest.mark.parametrize(
+    ("recipe", "is_admin"),
+    [
+        (None, False),
+        (SimpleNamespace(id=uuid4(), user_id=uuid4()), False),
+        (SimpleNamespace(id=uuid4(), user_id=uuid4()), True),
+    ],
+)
 async def test_load_live_recipe_context_rejects_missing_or_unauthorized_recipe(
     recipe: object | None,
+    is_admin: bool,
 ) -> None:
     """Deleted and cross-user live recipes fail with canonical not found."""
     from api.v1.chat import _load_live_recipe_context
@@ -619,7 +627,10 @@ async def test_load_live_recipe_context_rejects_missing_or_unauthorized_recipe(
         await _load_live_recipe_context(
             cast(AsyncSession, _LookupDb(recipe)),
             recipe_id=uuid4(),
-            current_user=cast(User, SimpleNamespace(id=uuid4(), is_admin=False)),
+            current_user=cast(
+                User,
+                SimpleNamespace(id=uuid4(), is_admin=is_admin),
+            ),
         )
 
     assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND

@@ -71,6 +71,50 @@ describe('ConversationList', () => {
     expect(screen.getByText('No chats yet.')).toBeInTheDocument();
   });
 
+  test('distinguishes recipe and general conversations in both selectors', () => {
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-chat',
+            title: 'Chat started Sep 29, 2026',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Tomato Soup',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'general-chat',
+            title: 'Meal ideas',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+          },
+        ],
+        activeConversationId: 'recipe-chat',
+      });
+    });
+
+    const { rerender } = render(<ConversationList compact />);
+
+    expect(
+      screen.getByRole('option', { name: /Tomato Soup —/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('option', { name: 'General — Meal ideas' })
+    ).toBeInTheDocument();
+
+    rerender(<ConversationList />);
+    expect(
+      screen.getByRole('button', { name: /Tomato Soup —/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /General — Meal ideas/ })
+    ).toBeInTheDocument();
+  });
+
   test('desktop list renders conversations and highlights the active one', () => {
     act(() => {
       useChatStore.setState({

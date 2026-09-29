@@ -193,7 +193,7 @@ const RecipesDetail: FC = () => {
 
   return (
     <Container>
-      <div className="py-8">
+      <div className="pt-8 pb-[calc(5rem+env(safe-area-inset-bottom))]">
         <article>
           {/* Header with Actions */}
           <header className="mb-6">
@@ -459,15 +459,17 @@ const RecipesDetail: FC = () => {
           />
         </Dialog>
 
-        <button
-          id={NIBBLE_TRIGGER_ID}
-          type="button"
-          onClick={() => handleAskNibble(recipe)}
-          aria-label={`Ask Nibble about ${recipe.title}`}
-          className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 inline-flex min-h-12 min-w-12 items-center justify-center rounded-full bg-orange-600 px-5 py-3 text-base font-semibold text-white shadow-lg hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:outline-none"
-        >
-          Ask Nibble
-        </button>
+        {loaderRecipe ? (
+          <button
+            id={NIBBLE_TRIGGER_ID}
+            type="button"
+            onClick={() => handleAskNibble(loaderRecipe)}
+            aria-label={`Ask Nibble about ${loaderRecipe.title}`}
+            className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 inline-flex min-h-12 min-w-12 items-center justify-center rounded-full bg-orange-600 px-5 py-3 text-base font-semibold text-white shadow-lg hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:outline-none"
+          >
+            Ask Nibble
+          </button>
+        ) : null}
       </div>
     </Container>
   );

@@ -158,9 +158,11 @@ class _FakeDbSession:
         self.added: list[Any] = []
         self.commits: int = 0
         self._call_count = 0
+        self.statements: list[Any] = []
 
     async def execute(self, stmt: Any) -> _ExecuteResult:
         self._call_count += 1
+        self.statements.append(stmt)
         # First call is usually count query
         if self._call_count == 1 and self._total_count > 0:
             result = _ExecuteResult()
@@ -519,6 +521,10 @@ async def test_list_conversations_empty() -> None:
         assert body["conversations"] == []
         assert body["total"] == 0
         assert body["has_more"] is False
+        assert len(db.statements) == 2
+        assert all(
+            "recipe_names.user_id =" in str(statement) for statement in db.statements
+        )
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
@@ -630,7 +636,11 @@ async def test_get_message_history_conversation_not_found() -> None:
     conversation_id = uuid4()
 
     class _NotFoundDbSession:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
         async def execute(self, stmt):
+            self.statements.append(stmt)
             return _ExecuteResult(single=None)  # No conversation found
 
     db = _NotFoundDbSession()
@@ -656,6 +666,8 @@ async def test_get_message_history_conversation_not_found() -> None:
         assert resp.status_code == status.HTTP_404_NOT_FOUND
         body = resp.json()
         assert "not found" in body["detail"].lower()
+        assert len(db.statements) == 1
+        assert "recipe_names.user_id =" in str(db.statements[0])
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)

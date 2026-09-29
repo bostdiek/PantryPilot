@@ -8,6 +8,7 @@ import { Button } from '../ui/Button';
 interface ConversationListProps {
   compact?: boolean;
   onCreateConversation?: () => void;
+  onSelectConversation?: (conversationId: string) => void | Promise<void>;
 }
 
 function formatLastMessageAt(conversation: Conversation): string {
@@ -37,9 +38,17 @@ function formatConversationTitle(conversation: Conversation): string {
   }).format(date);
 }
 
+function formatConversationLabel(conversation: Conversation): string {
+  const title = formatConversationTitle(conversation);
+  return conversation.recipeContext
+    ? `${conversation.recipeContext.recipeTitle} — ${title}`
+    : `General — ${title}`;
+}
+
 export function ConversationList({
   compact = false,
   onCreateConversation,
+  onSelectConversation,
 }: ConversationListProps) {
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
@@ -48,6 +57,8 @@ export function ConversationList({
   const deleteConversation = useChatStore((s) => s.deleteConversation);
   const handleCreateConversation =
     onCreateConversation ?? (() => void createConversation());
+  const handleSelectConversation =
+    onSelectConversation ?? ((id: string) => switchConversation(id));
 
   const handleDeleteConversation = (
     e: React.MouseEvent,
@@ -74,7 +85,7 @@ export function ConversationList({
         <select
           id="assistant-conversation"
           value={activeConversationId ?? ''}
-          onChange={(e) => void switchConversation(e.target.value)}
+          onChange={(e) => void handleSelectConversation(e.target.value)}
           className="h-12 min-w-0 flex-1 rounded-lg border border-gray-300 bg-white px-3 text-base focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
           disabled={conversations.length === 0}
           aria-label="Select a conversation"
@@ -84,7 +95,7 @@ export function ConversationList({
           ) : null}
           {conversations.map((c) => (
             <option key={c.id} value={c.id}>
-              {formatConversationTitle(c)}
+              {formatConversationLabel(c)}
             </option>
           ))}
         </select>
@@ -133,12 +144,12 @@ export function ConversationList({
           >
             <button
               type="button"
-              onClick={() => void switchConversation(c.id)}
+              onClick={() => void handleSelectConversation(c.id)}
               aria-current={activeConversationId === c.id ? 'page' : undefined}
               className="w-full p-4 pr-12 text-left focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none"
             >
               <div className="truncate font-medium text-gray-900">
-                {formatConversationTitle(c)}
+                {formatConversationLabel(c)}
               </div>
               <div className="mt-1 text-sm text-gray-500">
                 {formatLastMessageAt(c)}

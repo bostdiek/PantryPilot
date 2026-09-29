@@ -84,6 +84,7 @@ describe('AssistantPage', () => {
         activeConversationId: null,
         activeGeneralConversationId: null,
         activeRecipeConversationIds: {},
+        confirmedRecipeConversationIds: {},
         messagesByConversationId: {},
         hasPreviousMessagesByConversationId: {},
         isLoading: false,
@@ -266,6 +267,9 @@ describe('AssistantPage', () => {
 
   test('returns to the origin route with scroll and focus restoration state', async () => {
     const user = userEvent.setup();
+    vi.spyOn(useChatStore.getState(), 'loadConversations').mockResolvedValue(
+      undefined
+    );
     vi.spyOn(
       useChatStore.getState(),
       'resumeRecipeConversation'
@@ -284,6 +288,15 @@ describe('AssistantPage', () => {
       {
         initialEntries: [
           {
+            pathname: '/recipes/recipe-1',
+            state: {
+              recipeRestoration: {
+                scrollY: 384,
+                triggerId: 'recipe-nibble-trigger',
+              },
+            },
+          },
+          {
             pathname: '/assistant',
             state: {
               recipeContext: {
@@ -298,6 +311,7 @@ describe('AssistantPage', () => {
             },
           },
         ],
+        initialIndex: 1,
       }
     );
 
@@ -353,6 +367,104 @@ describe('AssistantPage', () => {
       expect(router.state.location.pathname).toBe('/recipes/recipe-1')
     );
     expect(router.state.location.state).toBeNull();
+  });
+
+  test('updates route context when selecting a different recipe conversation', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(useChatStore.getState(), 'loadConversations').mockResolvedValue(
+      undefined
+    );
+    vi.spyOn(
+      useChatStore.getState(),
+      'resumeRecipeConversation'
+    ).mockResolvedValue(undefined);
+    vi.spyOn(useChatStore.getState(), 'switchConversation').mockImplementation(
+      async (conversationId: string) => {
+        act(() => {
+          useChatStore.setState((state) => ({
+            activeConversationId: conversationId,
+            confirmedRecipeConversationIds: {
+              ...state.confirmedRecipeConversationIds,
+              'recipe-b': conversationId,
+            },
+          }));
+        });
+      }
+    );
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'conversation-a',
+            title: 'Recipe A chat',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-a',
+              recipeTitle: 'Recipe A',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'conversation-b',
+            title: 'Recipe B chat',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-b',
+              recipeTitle: 'Recipe B',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'conversation-a',
+        confirmedRecipeConversationIds: {
+          'recipe-a': 'conversation-a',
+        },
+      });
+    });
+    const router = createMemoryRouter(
+      [
+        { path: '/assistant', element: <AssistantPage /> },
+        { path: '/recipes/:id', element: <p>Recipe destination</p> },
+      ],
+      {
+        initialEntries: [
+          {
+            pathname: '/assistant',
+            state: {
+              recipeContext: {
+                recipeId: 'recipe-a',
+                recipeTitle: 'Recipe A',
+              },
+              recipeOrigin: {
+                pathname: '/recipes/recipe-a',
+                scrollY: 100,
+                triggerId: 'recipe-nibble-trigger',
+              },
+            },
+          },
+        ],
+      }
+    );
+    render(<RouterProvider router={router} />);
+
+    await user.selectOptions(
+      screen.getByLabelText('Select a conversation'),
+      'conversation-b'
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText('Recipe: Recipe B')).toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole('textbox', { name: 'Message Nibble' })
+    ).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'Back to recipe' }));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe('/recipes/recipe-b')
+    );
   });
 
   test('preserves the recipe entry for browser-back navigation', async () => {

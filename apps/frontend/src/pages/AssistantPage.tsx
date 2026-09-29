@@ -31,6 +31,9 @@ export default function AssistantPage() {
   const hasHydrated = useChatStore((s) => s.hasHydrated);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
+  const confirmedRecipeConversationIds = useChatStore(
+    (s) => s.confirmedRecipeConversationIds
+  );
   const isLoading = useChatStore((s) => s.isLoading);
   const error = useChatStore((s) => s.error);
   const loadConversations = useChatStore((s) => s.loadConversations);
@@ -76,7 +79,9 @@ export default function AssistantPage() {
     (activeConversationId ? undefined : requestedRecipeContext);
   const isRequestedRecipeConversationActive =
     !requestedRecipeId ||
-    activeConversation?.recipeContext?.recipeId === requestedRecipeId;
+    (activeConversation?.recipeContext?.recipeId === requestedRecipeId &&
+      confirmedRecipeConversationIds[requestedRecipeId] ===
+        activeConversation.id);
 
   const handleNewGeneralChat = useCallback(() => {
     clearError();
@@ -86,6 +91,47 @@ export default function AssistantPage() {
     }
     void createConversation();
   }, [clearError, createConversation, navigate, requestedRecipeId]);
+
+  const handleSelectConversation = useCallback(
+    async (conversationId: string) => {
+      await switchConversation(conversationId);
+      const selectedConversation = useChatStore
+        .getState()
+        .conversations.find(
+          (conversation) => conversation.id === conversationId
+        );
+      const selectedRecipeContext = selectedConversation?.recipeContext;
+
+      if (!selectedRecipeContext) {
+        if (requestedRecipeId) {
+          navigate('/assistant', { replace: true, state: null });
+        }
+        return;
+      }
+
+      const selectedRecipePath = `/recipes/${selectedRecipeContext.recipeId}`;
+      const recipeOrigin =
+        locationState?.recipeOrigin?.pathname === selectedRecipePath
+          ? locationState.recipeOrigin
+          : undefined;
+      navigate('/assistant', {
+        replace: true,
+        state: {
+          recipeContext: {
+            recipeId: selectedRecipeContext.recipeId,
+            recipeTitle: selectedRecipeContext.recipeTitle,
+          },
+          ...(recipeOrigin ? { recipeOrigin } : {}),
+        },
+      });
+    },
+    [
+      locationState?.recipeOrigin,
+      navigate,
+      requestedRecipeId,
+      switchConversation,
+    ]
+  );
 
   const hasPreviousMessages = activeConversationId
     ? (hasPreviousMessagesByConversationId[activeConversationId] ?? false)
@@ -226,18 +272,13 @@ export default function AssistantPage() {
     if (!activeRecipeContext) return;
 
     const origin = locationState?.recipeOrigin;
-    const pathname =
-      origin?.pathname ?? `/recipes/${activeRecipeContext.recipeId}`;
-    navigate(pathname, {
-      state: origin
-        ? {
-            recipeRestoration: {
-              scrollY: origin.scrollY,
-              triggerId: origin.triggerId,
-            },
-          }
-        : null,
-    });
+    const activeRecipePath = `/recipes/${activeRecipeContext.recipeId}`;
+    if (origin?.pathname === activeRecipePath) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(activeRecipePath, { replace: true, state: null });
   };
 
   const handleStartGeneralChat = () => {
@@ -281,7 +322,10 @@ export default function AssistantPage() {
           aria-label="Conversation list"
           className="hidden w-80 shrink-0 border-r border-gray-200 md:block md:overflow-y-auto"
         >
-          <ConversationList onCreateConversation={handleNewGeneralChat} />
+          <ConversationList
+            onCreateConversation={handleNewGeneralChat}
+            onSelectConversation={handleSelectConversation}
+          />
         </aside>
 
         <section
@@ -310,6 +354,7 @@ export default function AssistantPage() {
               <ConversationList
                 compact
                 onCreateConversation={handleNewGeneralChat}
+                onSelectConversation={handleSelectConversation}
               />
             </div>
 
