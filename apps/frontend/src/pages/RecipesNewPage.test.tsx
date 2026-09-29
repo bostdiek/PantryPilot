@@ -1,6 +1,7 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { useRecipeStore } from '../stores/useRecipeStore';
 import RecipesNewPage from './RecipesNewPage';
 
 // Mock SVG imports for Select icons
@@ -26,6 +27,10 @@ vi.mock('../hooks/useUnsavedChanges', () => ({
 }));
 
 describe('RecipesNewPage', () => {
+  beforeEach(() => {
+    navigateMock.mockClear();
+  });
+
   test('renders form fields and buttons', () => {
     render(
       <MemoryRouter>
@@ -93,16 +98,48 @@ describe('RecipesNewPage', () => {
     expect(navigateMock).toHaveBeenCalledWith('/recipes');
   });
 
-  test('submit navigates after save', () => {
-    render(
-      <MemoryRouter>
-        <RecipesNewPage />
-      </MemoryRouter>
-    );
+  test('submit navigates after save', async () => {
+    const addRecipeSpy = vi
+      .spyOn(useRecipeStore.getState(), 'addRecipe')
+      .mockImplementation(async (recipe) => ({
+        ...recipe,
+        id: 'recipe-1',
+        total_time_minutes: 0,
+        created_at: new Date(),
+        updated_at: new Date(),
+      }));
 
-    const save = screen.getByText(/save recipe/i);
-    fireEvent.click(save);
-    expect(navigateMock).toHaveBeenCalledWith('/recipes');
+    try {
+      render(
+        <MemoryRouter>
+          <RecipesNewPage />
+        </MemoryRouter>
+      );
+
+      fireEvent.change(screen.getByLabelText(/recipe name/i), {
+        target: { value: 'Onion soup' },
+      });
+      fireEvent.change(screen.getByPlaceholderText(/e\.g\., Onion/i), {
+        target: { value: 'Onion' },
+      });
+      fireEvent.change(screen.getByLabelText('Step 1'), {
+        target: { value: 'Chop the onion' },
+      });
+      fireEvent.click(screen.getByText(/save recipe/i));
+
+      await waitFor(() => {
+        expect(addRecipeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Onion soup',
+            instructions: ['Chop the onion'],
+            ingredients: [expect.objectContaining({ name: 'Onion' })],
+          })
+        );
+        expect(navigateMock).toHaveBeenCalledWith('/recipes');
+      });
+    } finally {
+      addRecipeSpy.mockRestore();
+    }
   });
 
   test('handles instruction reordering with up/down buttons', () => {
@@ -173,5 +210,6 @@ describe('RecipesNewPage', () => {
     // Some implementations might show the red warning about connection issues
     // We'll check that the component is still rendered after attempted submission
     expect(screen.getByText(/recipe name/i)).toBeInTheDocument();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });
