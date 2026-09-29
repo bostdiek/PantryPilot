@@ -90,12 +90,22 @@ class _MockConversation:
         title: str | None = None,
         created_at: datetime | None = None,
         last_activity_at: datetime | None = None,
+        recipe_id: UUID | None = None,
+        recipe_title: str | None = None,
+        is_current_for_recipe: bool = False,
     ) -> None:
         self.id = id or uuid4()
         self.user_id = user_id or uuid4()
         self.title = title
         self.created_at = created_at or datetime.now(UTC)
         self.last_activity_at = last_activity_at or datetime.now(UTC)
+        self.recipe_id = recipe_id
+        self.recipe = (
+            SimpleNamespace(id=recipe_id, name=recipe_title)
+            if recipe_id is not None and recipe_title is not None
+            else None
+        )
+        self.is_current_for_recipe = is_current_for_recipe
 
 
 class _ScalarsResult:
@@ -813,7 +823,14 @@ async def test_list_conversations_only_returns_user_owned() -> None:
     current_user_id = uuid4()
 
     # Create conversations - only the ones belonging to current user should be returned
-    user_conv1 = _MockConversation(user_id=current_user_id, title="My chat 1")
+    recipe_id = uuid4()
+    user_conv1 = _MockConversation(
+        user_id=current_user_id,
+        title="My chat 1",
+        recipe_id=recipe_id,
+        recipe_title="Tomato Soup",
+        is_current_for_recipe=True,
+    )
     user_conv2 = _MockConversation(user_id=current_user_id, title="My chat 2")
     # Note: Other user's conversations would not be returned by the filtered query
 
@@ -858,6 +875,14 @@ async def test_list_conversations_only_returns_user_owned() -> None:
         titles = [c["title"] for c in body["conversations"]]
         assert "My chat 1" in titles
         assert "My chat 2" in titles
+        contextual = next(c for c in body["conversations"] if c["title"] == "My chat 1")
+        general = next(c for c in body["conversations"] if c["title"] == "My chat 2")
+        assert contextual["recipe_context"] == {
+            "recipe_id": str(recipe_id),
+            "recipe_title": "Tomato Soup",
+            "is_current": True,
+        }
+        assert general["recipe_context"] is None
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)

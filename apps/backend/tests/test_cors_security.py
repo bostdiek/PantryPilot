@@ -1,15 +1,29 @@
 """Tests for CORS configuration and security headers."""
 
+from collections.abc import Generator
+from unittest.mock import AsyncMock
+
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from dependencies.db import get_db
 from main import app
 
 
 @pytest.fixture
-def client():
-    """Create test client."""
-    return TestClient(app)
+def client() -> Generator[TestClient, None, None]:
+    """Create a test client with an isolated database health dependency."""
+
+    async def _override_get_db():
+        yield AsyncMock(spec=AsyncSession)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.pop(get_db, None)
 
 
 class TestCORSConfiguration:

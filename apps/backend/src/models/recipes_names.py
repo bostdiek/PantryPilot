@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, Text, func
@@ -7,6 +8,10 @@ from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base
+
+
+if TYPE_CHECKING:
+    from .chat_conversations import ChatConversation
 
 
 class Recipe(Base):
@@ -52,3 +57,8 @@ class Recipe(Base):
     # Relationships
     recipeingredients = relationship("RecipeIngredient", back_populates="recipe")
     user = relationship("User", back_populates="recipes")
+    chat_conversations: Mapped[list["ChatConversation"]] = relationship(
+        "ChatConversation",
+        back_populates="recipe",
+        passive_deletes=True,
+    )

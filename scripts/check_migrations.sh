@@ -255,6 +255,138 @@ $$;
 SQL
 }
 
+assert_recipe_context_migration() {
+  psql_exec "${TMPDB}" <<'SQL'
+INSERT INTO recipe_names (id, user_id, name)
+VALUES (
+  '20000000-0000-0000-0000-000000000008',
+  '10000000-0000-0000-0000-000000000001',
+  'Context Migration Recipe'
+);
+
+INSERT INTO chat_conversations (
+  id,
+  user_id,
+  recipe_id,
+  is_current_for_recipe,
+  title
+)
+VALUES
+  (
+    '60000000-0000-0000-0000-000000000001',
+    '10000000-0000-0000-0000-000000000001',
+    NULL,
+    FALSE,
+    'General conversation'
+  ),
+  (
+    '60000000-0000-0000-0000-000000000002',
+    '10000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000008',
+    TRUE,
+    'Current contextual conversation'
+  ),
+  (
+    '60000000-0000-0000-0000-000000000003',
+    '10000000-0000-0000-0000-000000000001',
+    '20000000-0000-0000-0000-000000000008',
+    FALSE,
+    'Older contextual conversation'
+  );
+
+DO $$
+BEGIN
+  BEGIN
+    INSERT INTO chat_conversations (
+      id,
+      user_id,
+      recipe_id,
+      is_current_for_recipe
+    )
+    VALUES (
+      '60000000-0000-0000-0000-000000000004',
+      '10000000-0000-0000-0000-000000000001',
+      '20000000-0000-0000-0000-000000000008',
+      TRUE
+    );
+    RAISE EXCEPTION 'partial unique current-thread constraint was not enforced';
+  EXCEPTION
+    WHEN unique_violation THEN
+      NULL;
+  END;
+END
+$$;
+
+BEGIN;
+
+UPDATE chat_conversations
+SET is_current_for_recipe = FALSE
+WHERE id = '60000000-0000-0000-0000-000000000002';
+
+DELETE FROM chat_conversations
+WHERE id = '60000000-0000-0000-0000-000000000002';
+
+UPDATE chat_conversations
+SET is_current_for_recipe = TRUE
+WHERE id = '60000000-0000-0000-0000-000000000003';
+
+COMMIT;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM chat_conversations
+    WHERE id = '60000000-0000-0000-0000-000000000002'
+  ) THEN
+    RAISE EXCEPTION 'deleted current contextual conversation remains';
+  END IF;
+  IF (
+    SELECT COUNT(*)
+    FROM chat_conversations
+    WHERE user_id = '10000000-0000-0000-0000-000000000001'
+      AND recipe_id = '20000000-0000-0000-0000-000000000008'
+      AND is_current_for_recipe
+  ) <> 1 THEN
+    RAISE EXCEPTION 'contextual conversation promotion did not preserve one current row';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM chat_conversations
+    WHERE id = '60000000-0000-0000-0000-000000000003'
+      AND is_current_for_recipe
+  ) THEN
+    RAISE EXCEPTION 'older contextual conversation was not promoted';
+  END IF;
+END
+$$;
+
+DELETE FROM recipe_names
+WHERE id = '20000000-0000-0000-0000-000000000008';
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM chat_conversations
+    WHERE recipe_id = '20000000-0000-0000-0000-000000000008'
+  ) THEN
+    RAISE EXCEPTION 'recipe-linked conversations did not cascade delete';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM chat_conversations
+    WHERE id = '60000000-0000-0000-0000-000000000001'
+      AND recipe_id IS NULL
+      AND NOT is_current_for_recipe
+  ) THEN
+    RAISE EXCEPTION 'general conversation invariant changed';
+  END IF;
+END
+$$;
+SQL
+}
+
 assert_downgraded_snapshot() {
   psql_exec "${TMPDB}" <<'SQL'
 DO $$
@@ -327,6 +459,13 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'ingredient ownership column did not return to nullable';
   END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'chat_conversations'
+      AND column_name IN ('recipe_id', 'is_current_for_recipe')
+  ) THEN
+    RAISE EXCEPTION 'recipe context columns remain after downgrade';
+  END IF;
 END
 $$;
 SQL
@@ -337,6 +476,7 @@ validate_representative_snapshot() {
   stage_representative_snapshot
   run_alembic "${TMPDB}" upgrade head
   assert_upgraded_snapshot
+  assert_recipe_context_migration
   run_alembic "${TMPDB}" downgrade 20260131_18
   assert_downgraded_snapshot
 }

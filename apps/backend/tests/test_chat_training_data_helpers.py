@@ -214,11 +214,16 @@ class TestBuildTrainingPromptData:
     def test_extracts_multiple_system_parts_concatenated(self) -> None:
         """With deps, dynamic sections are appended to the system message."""
         import datetime
+        import uuid
         from unittest.mock import MagicMock
 
         from api.v1.chat import _build_training_prompt_data
-        from services.chat_agent.agent import CHAT_SYSTEM_PROMPT
-        from services.chat_agent.deps import ChatAgentDeps
+        from services.chat_agent.agent import (
+            CHAT_SYSTEM_PROMPT,
+            build_datetime_instructions,
+            build_user_context_instructions,
+        )
+        from services.chat_agent.deps import ChatAgentDeps, LiveRecipeContext
 
         user_part = UserPromptPart(content="Help me plan meals", timestamp=None)
         request = ModelRequest(parts=[user_part])
@@ -235,16 +240,32 @@ class TestBuildTrainingPromptData:
             user_timezone="America/New_York",
             user_preferences=None,
             memory_content=None,
+            recipe_context=LiveRecipeContext(
+                recipe_id=uuid.uuid4(),
+                title="Fresh server recipe",
+                description=None,
+                prep_time_minutes=5,
+                cook_time_minutes=20,
+                total_time_minutes=25,
+                serving_min=2,
+                serving_max=2,
+                notes=None,
+                ingredients=("2 tomatoes",),
+                instructions=("Simmer.",),
+            ),
         )
 
         result = _build_training_prompt_data(mock_result, deps=deps)
         messages = result["messages"]
 
         assert messages[0]["role"] == "system"
-        # Static prompt present
-        assert CHAT_SYSTEM_PROMPT in messages[0]["content"]
-        # Dynamic datetime section present
+        assert messages[0]["content"] == (
+            CHAT_SYSTEM_PROMPT
+            + build_datetime_instructions(deps)
+            + build_user_context_instructions(deps)
+        )
         assert "CURRENT DATE AND TIME" in messages[0]["content"]
+        assert '"title": "Fresh server recipe"' in messages[0]["content"]
         assert messages[1]["role"] == "user"
 
     def test_includes_user_preferences_in_system_prompt(self) -> None:

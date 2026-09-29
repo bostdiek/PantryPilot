@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 
 interface ConversationListProps {
   compact?: boolean;
+  onCreateConversation?: () => void;
 }
 
 function formatLastMessageAt(conversation: Conversation): string {
@@ -36,12 +37,17 @@ function formatConversationTitle(conversation: Conversation): string {
   }).format(date);
 }
 
-export function ConversationList({ compact = false }: ConversationListProps) {
+export function ConversationList({
+  compact = false,
+  onCreateConversation,
+}: ConversationListProps) {
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const createConversation = useChatStore((s) => s.createConversation);
   const switchConversation = useChatStore((s) => s.switchConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
+  const handleCreateConversation =
+    onCreateConversation ?? (() => void createConversation());
 
   const handleDeleteConversation = (
     e: React.MouseEvent,
@@ -87,7 +93,7 @@ export function ConversationList({ compact = false }: ConversationListProps) {
           type="button"
           variant="primary"
           className="h-12 w-12 shrink-0 p-0"
-          onClick={() => void createConversation()}
+          onClick={handleCreateConversation}
           aria-label="New Chat"
           title="New Chat"
         >
@@ -105,7 +111,7 @@ export function ConversationList({ compact = false }: ConversationListProps) {
           variant="primary"
           fullWidth
           className="h-12"
-          onClick={() => void createConversation()}
+          onClick={handleCreateConversation}
         >
           <span className="inline-flex items-center gap-2">
             <Plus className="h-5 w-5" aria-hidden="true" />

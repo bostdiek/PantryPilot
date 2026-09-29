@@ -17,6 +17,7 @@ import type {
   ChatSseEvent,
   ChatStreamCallbacks,
   ConversationListResponse,
+  ConversationSummary,
   MessageHistoryResponse,
 } from '../../types/Chat';
 import { getApiBaseUrl } from '../client';
@@ -38,6 +39,27 @@ function handleAuthError(status: number): void {
     logger.info('Session expired (chat endpoint 401) — logging out');
     useAuthStore.getState().logout('expired');
   }
+}
+
+async function parseConversationSummaryResponse(
+  response: Response
+): Promise<ConversationSummary> {
+  if (!response.ok) {
+    handleAuthError(response.status);
+    const errorText = await response.text();
+    let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
+
+    try {
+      const errorJson = JSON.parse(errorText);
+      errorDetail = errorJson.detail || errorDetail;
+    } catch {
+      // Use default error detail
+    }
+
+    throw new ApiErrorImpl(errorDetail, response.status, 'http_error');
+  }
+
+  return response.json();
 }
 
 // -----------------------------------------------------------------------------
@@ -322,6 +344,66 @@ export async function fetchConversations(
   }
 
   return response.json();
+}
+
+/**
+ * Resume the current conversation for a recipe, creating one when absent.
+ *
+ * @param recipeId - The recipe ID
+ * @returns The current persisted contextual conversation
+ */
+export async function resumeRecipeConversation(
+  recipeId: string
+): Promise<ConversationSummary> {
+  const API_BASE_URL = getApiBaseUrl();
+  const url = `${API_BASE_URL}/api/v1/chat/recipes/${recipeId}/conversations/resume`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  return parseConversationSummaryResponse(response);
+}
+
+/**
+ * Create and select a new conversation for a recipe.
+ *
+ * @param recipeId - The recipe ID
+ * @returns The newly persisted contextual conversation
+ */
+export async function createRecipeConversation(
+  recipeId: string
+): Promise<ConversationSummary> {
+  const API_BASE_URL = getApiBaseUrl();
+  const url = `${API_BASE_URL}/api/v1/chat/recipes/${recipeId}/conversations`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  return parseConversationSummaryResponse(response);
+}
+
+/**
+ * Select an existing contextual conversation as current for its recipe.
+ *
+ * @param conversationId - The contextual conversation ID
+ * @returns The selected contextual conversation
+ */
+export async function selectRecipeConversation(
+  conversationId: string
+): Promise<ConversationSummary> {
+  const API_BASE_URL = getApiBaseUrl();
+  const url = `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/select`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+
+  return parseConversationSummaryResponse(response);
 }
 
 /**

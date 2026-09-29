@@ -8,6 +8,7 @@ import type { Recipe } from '../../types/Recipe';
 
 // Mock the router hooks
 const mockNavigate = vi.fn();
+let mockLoaderRecipe: Recipe | null;
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -15,7 +16,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => mockNavigate,
     useParams: () => ({ id: 'test-recipe-id' }),
-    useLoaderData: () => mockRecipe,
+    useLoaderData: () => mockLoaderRecipe,
   };
 });
 
@@ -67,6 +68,7 @@ const mockDuplicateRecipe = vi.fn();
 describe('RecipesDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockLoaderRecipe = mockRecipe;
 
     // Setup default mock store state
     vi.mocked(useRecipeStore).mockReturnValue({
@@ -99,9 +101,21 @@ describe('RecipesDetail', () => {
     });
   });
 
-  const renderRecipesDetail = () => {
+  const renderRecipesDetail = (
+    initialEntry:
+      | string
+      | {
+          pathname: string;
+          state: {
+            recipeRestoration: {
+              scrollY: number;
+              triggerId: string;
+            };
+          };
+        } = '/recipes/test-recipe-id'
+  ) => {
     return render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <RecipesDetail />
       </MemoryRouter>
     );
@@ -170,6 +184,130 @@ describe('RecipesDetail', () => {
     expect(
       screen.getByRole('button', { name: /delete test recipe/i })
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Ask Nibble about Test Recipe' })
+    ).toHaveClass('min-h-12', 'min-w-12');
+  });
+
+  it('stacks recipe actions below the heading on narrow viewports', () => {
+    renderRecipesDetail();
+
+    const headingLayout = screen.getByRole('heading', {
+      level: 1,
+      name: 'Test Recipe',
+    }).parentElement?.parentElement;
+    const actionLayout = screen
+      .getByRole('button', { name: /edit test recipe/i })
+      .closest('div');
+
+    expect(headingLayout).toHaveClass('flex-col', 'sm:flex-row');
+    expect(actionLayout).toHaveClass('w-full', 'sm:w-auto', 'sm:shrink-0');
+  });
+
+  it.each([
+    ['loading', true, /loading recipe/i],
+    ['not found', false, /recipe not found/i],
+  ])(
+    'does not expose the Nibble trigger while the recipe is %s',
+    (_state, isLoading, expectedText) => {
+      mockLoaderRecipe = null;
+      vi.mocked(useRecipeStore).mockReturnValue({
+        ...vi.mocked(useRecipeStore)(),
+        recipes: [],
+        filteredRecipes: [],
+        isLoading,
+      });
+
+      renderRecipesDetail();
+
+      expect(screen.getByText(expectedText)).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', {
+          name: 'Ask Nibble about Test Recipe',
+        })
+      ).not.toBeInTheDocument();
+    }
+  );
+
+  it('opens Nibble with recipe origin, scroll, and focus state', async () => {
+    const user = userEvent.setup();
+    const replaceState = vi.spyOn(window.history, 'replaceState');
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      value: 420,
+    });
+    renderRecipesDetail();
+
+    await user.click(
+      screen.getByRole('button', {
+        name: 'Ask Nibble about Test Recipe',
+      })
+    );
+
+    expect(mockNavigate).toHaveBeenCalledWith('/assistant', {
+      state: {
+        recipeContext: {
+          recipeId: 'test-recipe-id',
+          recipeTitle: 'Test Recipe',
+        },
+        recipeOrigin: {
+          pathname: '/recipes/test-recipe-id',
+          scrollY: 420,
+          triggerId: 'recipe-nibble-trigger',
+        },
+      },
+    });
+    expect(replaceState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        usr: expect.objectContaining({
+          recipeRestoration: {
+            scrollY: 420,
+            triggerId: 'recipe-nibble-trigger',
+          },
+        }),
+      }),
+      ''
+    );
+  });
+
+  it('restores recipe scroll and trigger focus after detail render', async () => {
+    const scrollTo = vi
+      .spyOn(window, 'scrollTo')
+      .mockImplementation(() => undefined);
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      callback(0);
+      return 1;
+    });
+
+    const { rerender } = renderRecipesDetail({
+      pathname: '/recipes/test-recipe-id',
+      state: {
+        recipeRestoration: {
+          scrollY: 275,
+          triggerId: 'recipe-nibble-trigger',
+        },
+      },
+    });
+
+    const trigger = screen.getByRole('button', {
+      name: 'Ask Nibble about Test Recipe',
+    });
+    await waitFor(() => {
+      expect(scrollTo).toHaveBeenCalledWith({ top: 275 });
+      expect(trigger).toHaveFocus();
+    });
+    expect(mockNavigate).toHaveBeenCalledWith('/recipes/test-recipe-id', {
+      replace: true,
+      state: null,
+    });
+
+    rerender(
+      <MemoryRouter>
+        <RecipesDetail />
+      </MemoryRouter>
+    );
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
   });
 
   it('navigates to edit page when edit button is clicked', async () => {
