@@ -27,6 +27,12 @@ class ChatAgentDeps:
     user_preferences: UserPreferences | None = None
     memory_content: str | None = None
     db_lock: Lock = field(default_factory=Lock, repr=False, compare=False)
+    retry_budget_lock: Lock = field(default_factory=Lock, repr=False, compare=False)
+    failed_tools: set[str] = field(default_factory=set, repr=False, compare=False)
+    recovered_tools: set[str] = field(default_factory=set, repr=False, compare=False)
+    model_calls_after_failure: dict[str, int] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     @asynccontextmanager
     async def use_db(self) -> AsyncIterator[AsyncSession]:
@@ -37,4 +43,8 @@ class ChatAgentDeps:
         so assistant tools that use the injected session must acquire this guard.
         """
         async with self.db_lock:
-            yield self.db
+            try:
+                yield self.db
+            except BaseException:
+                await self.db.rollback()
+                raise

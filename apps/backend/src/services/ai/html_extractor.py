@@ -11,6 +11,8 @@ from bs4 import BeautifulSoup
 from bs4.element import Comment, NavigableString
 from fastapi import HTTPException, status
 
+from core.transient_errors import classify_tool_error
+
 
 logger = logging.getLogger(__name__)
 
@@ -146,15 +148,23 @@ class HTMLExtractionService:
         "data-*",
     }
 
-    def __init__(self, timeout: int = 30, max_size: int = 5 * 1024 * 1024):
+    def __init__(
+        self,
+        timeout: int = 30,
+        max_size: int = 5 * 1024 * 1024,
+        *,
+        propagate_transient_errors: bool = False,
+    ) -> None:
         """Initialize the HTML extraction service.
 
         Args:
             timeout: Request timeout in seconds
             max_size: Maximum response size in bytes (5MB default)
+            propagate_transient_errors: Expose typed transient errors for chat retries
         """
         self.timeout = timeout
         self.max_size = max_size
+        self.propagate_transient_errors = propagate_transient_errors
 
     def _build_request_headers(self) -> dict[str, str]:
         """Build outbound headers for recipe page fetches."""
@@ -183,6 +193,7 @@ class HTMLExtractionService:
 
         Raises:
             HTTPException: If URL is invalid or fetch fails
+            httpx.HTTPError: For transient fetch failures when opted into chat retries
         """
         # Validate URL
         self._validate_url(url)
@@ -273,6 +284,7 @@ class HTMLExtractionService:
 
         Raises:
             HTTPException: If fetch fails
+            httpx.HTTPError: For transient failures when propagation is enabled
         """
         headers = self._build_request_headers()
 
@@ -288,6 +300,8 @@ class HTMLExtractionService:
                 return response.text
 
         except httpx.HTTPStatusError as e:
+            if self.propagate_transient_errors and classify_tool_error(e) is not None:
+                raise
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
@@ -296,13 +310,17 @@ class HTMLExtractionService:
                 ),
             ) from e
         except httpx.TimeoutException as e:
+            if self.propagate_transient_errors:
+                raise
             raise HTTPException(
                 status_code=status.HTTP_408_REQUEST_TIMEOUT, detail="Request timed out"
             ) from e
         except httpx.RequestError as e:
+            if self.propagate_transient_errors and classify_tool_error(e) is not None:
+                raise
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Network error: {str(e)}",
+                detail="Network error fetching URL",
             ) from e
         except HTTPException:
             raise

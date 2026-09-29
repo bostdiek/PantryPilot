@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC
 from unittest.mock import patch
 
+import httpx
 import pytest
 import pytest_asyncio
 from fastapi import status
@@ -139,6 +140,30 @@ async def test_extract_recipe_from_url_ai_failure(
     assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     detail = resp.json()["detail"]
     assert detail == "An unexpected error occurred during recipe extraction"
+
+
+@pytest.mark.asyncio
+async def test_given_upstream_timeout_when_importing_url_then_returns_http_408(
+    async_client: AsyncClient,
+) -> None:
+    # Arrange
+    with (
+        patch("services.ai.html_extractor.HTMLExtractionService._validate_url"),
+        patch(
+            "services.ai.html_extractor.HTMLExtractionService._fetch_with_safe_redirects",
+            side_effect=httpx.ReadTimeout("PRIVATE_UPSTREAM_DETAILS"),
+        ),
+    ):
+        # Act
+        resp = await async_client.post(
+            "/api/v1/ai/extract-recipe-from-url",
+            json={"source_url": "https://example.com/slow"},
+        )
+
+    # Assert
+    assert resp.status_code == status.HTTP_408_REQUEST_TIMEOUT
+    assert resp.json()["detail"] == "Request timed out"
+    assert "PRIVATE_UPSTREAM_DETAILS" not in resp.text
 
 
 @pytest.mark.asyncio
