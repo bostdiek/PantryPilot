@@ -180,6 +180,9 @@ function reconcileLoadedConversationState(
   | 'activeConversationId'
   | 'activeGeneralConversationId'
   | 'activeRecipeConversationIds'
+  | 'confirmedRecipeConversationIds'
+  | 'messagesByConversationId'
+  | 'hasPreviousMessagesByConversationId'
 > {
   const serverRecipeConversationIds = Object.fromEntries(
     serverConversations
@@ -195,26 +198,43 @@ function reconcileLoadedConversationState(
         conversation.id,
       ])
   );
-  const activeRecipeConversationIds = {
-    ...state.activeRecipeConversationIds,
-    ...serverRecipeConversationIds,
-  };
   const serverConversationIds = new Set(
     serverConversations.map((conversation) => conversation.id)
   );
-  const preservedConversationIds = new Set(
-    [
-      state.activeConversationId,
-      state.activeGeneralConversationId,
-      ...Object.values(state.activeRecipeConversationIds),
-    ].filter((id): id is string => Boolean(id))
+  const staleRecipeConversationIds = new Set(
+    state.conversations
+      .filter(
+        (conversation) =>
+          conversation.recipeContext &&
+          !serverConversationIds.has(conversation.id)
+      )
+      .map((conversation) => conversation.id)
   );
-  const preservedConversations = state.conversations.filter(
+  Object.values(state.activeRecipeConversationIds).forEach((conversationId) => {
+    if (!serverConversationIds.has(conversationId)) {
+      staleRecipeConversationIds.add(conversationId);
+    }
+  });
+  Object.values(state.confirmedRecipeConversationIds).forEach(
+    (conversationId) => {
+      if (!serverConversationIds.has(conversationId)) {
+        staleRecipeConversationIds.add(conversationId);
+      }
+    }
+  );
+  const preservedGeneralDraftIds = new Set(
+    [state.activeConversationId, state.activeGeneralConversationId].filter(
+      (conversationId): conversationId is string => Boolean(conversationId)
+    )
+  );
+  const preservedGeneralDrafts = state.conversations.filter(
     (conversation) =>
-      preservedConversationIds.has(conversation.id) &&
+      conversation.isLocalOnly &&
+      !conversation.recipeContext &&
+      preservedGeneralDraftIds.has(conversation.id) &&
       !serverConversationIds.has(conversation.id)
   );
-  const conversations = [...preservedConversations, ...serverConversations];
+  const conversations = [...preservedGeneralDrafts, ...serverConversations];
   const conversationIds = new Set(
     conversations.map((conversation) => conversation.id)
   );
@@ -223,15 +243,46 @@ function reconcileLoadedConversationState(
       .filter((conversation) => !conversation.recipeContext)
       .map((conversation) => conversation.id)
   );
+  const activeConversation = state.conversations.find(
+    (conversation) => conversation.id === state.activeConversationId
+  );
+  const activeRecipeId =
+    activeConversation?.recipeContext?.recipeId ??
+    Object.entries(state.activeRecipeConversationIds).find(
+      ([, conversationId]) => conversationId === state.activeConversationId
+    )?.[0];
+  const activeConversationId = activeRecipeId
+    ? (serverRecipeConversationIds[activeRecipeId] ?? null)
+    : state.activeConversationId &&
+        conversationIds.has(state.activeConversationId)
+      ? state.activeConversationId
+      : null;
+  const confirmedRecipeConversationIds: Record<string, string> =
+    Object.fromEntries(
+      Object.entries(state.confirmedRecipeConversationIds).filter(
+        ([recipeId, conversationId]) =>
+          serverRecipeConversationIds[recipeId] === conversationId
+      )
+    );
+  if (activeRecipeId && activeConversationId) {
+    confirmedRecipeConversationIds[activeRecipeId] = activeConversationId;
+  }
+  const messagesByConversationId = { ...state.messagesByConversationId };
+  const hasPreviousMessagesByConversationId = {
+    ...state.hasPreviousMessagesByConversationId,
+  };
+  staleRecipeConversationIds.forEach((conversationId) => {
+    delete messagesByConversationId[conversationId];
+    delete hasPreviousMessagesByConversationId[conversationId];
+  });
 
   return {
     conversations,
-    activeRecipeConversationIds,
-    activeConversationId:
-      state.activeConversationId &&
-      conversationIds.has(state.activeConversationId)
-        ? state.activeConversationId
-        : null,
+    activeRecipeConversationIds: serverRecipeConversationIds,
+    confirmedRecipeConversationIds,
+    messagesByConversationId,
+    hasPreviousMessagesByConversationId,
+    activeConversationId,
     activeGeneralConversationId:
       state.activeGeneralConversationId &&
       generalConversationIds.has(state.activeGeneralConversationId)

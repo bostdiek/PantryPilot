@@ -268,7 +268,7 @@ describe('useChatStore', () => {
     );
   });
 
-  test('loadConversations reconciles independent current selections for each recipe', async () => {
+  test('loadConversations removes a server-absent contextual selection', async () => {
     const { result } = renderHook(() => useChatStore());
     const mocks = await getMocks();
 
@@ -291,6 +291,7 @@ describe('useChatStore', () => {
             title: 'Off-page general',
             createdAt: '2026-09-19T10:00:00Z',
             lastMessageAt: '2026-09-19T10:00:00Z',
+            isLocalOnly: true,
           },
         ],
         activeConversationId: 'removed-context',
@@ -298,6 +299,17 @@ describe('useChatStore', () => {
         activeRecipeConversationIds: {
           'recipe-1': 'stale-recipe-1',
           'removed-recipe': 'removed-context',
+        },
+        confirmedRecipeConversationIds: {
+          'removed-recipe': 'removed-context',
+        },
+        messagesByConversationId: {
+          'removed-context': [],
+          'removed-general': [],
+        },
+        hasPreviousMessagesByConversationId: {
+          'removed-context': true,
+          'removed-general': false,
         },
       });
     });
@@ -355,10 +367,82 @@ describe('useChatStore', () => {
     expect(result.current.activeRecipeConversationIds).toEqual({
       'recipe-1': 'recipe-1-current',
       'recipe-2': 'recipe-2-current',
-      'removed-recipe': 'removed-context',
     });
     expect(result.current.activeGeneralConversationId).toBe('removed-general');
-    expect(result.current.activeConversationId).toBe('removed-context');
+    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.confirmedRecipeConversationIds).toEqual({});
+    expect(result.current.messagesByConversationId).toEqual({
+      'removed-general': [],
+    });
+    expect(result.current.hasPreviousMessagesByConversationId).toEqual({
+      'removed-general': false,
+    });
+    expect(
+      result.current.conversations.some(
+        (conversation) => conversation.id === 'removed-context'
+      )
+    ).toBe(false);
+  });
+
+  test('loadConversations switches to a server-replaced contextual selection', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'stale-context',
+            title: 'Earlier Pasta chat',
+            createdAt: '2026-09-29T08:00:00Z',
+            lastMessageAt: '2026-09-29T08:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'stale-context',
+        activeRecipeConversationIds: { 'recipe-1': 'stale-context' },
+        confirmedRecipeConversationIds: { 'recipe-1': 'stale-context' },
+        messagesByConversationId: { 'stale-context': [] },
+        hasPreviousMessagesByConversationId: { 'stale-context': true },
+      });
+    });
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'server-current',
+          title: 'Latest Pasta chat',
+          created_at: '2026-09-29T10:00:00Z',
+          last_activity_at: '2026-09-29T10:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: true,
+          },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadConversations();
+    });
+
+    expect(result.current.activeConversationId).toBe('server-current');
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'server-current',
+    });
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-1': 'server-current',
+    });
+    expect(result.current.messagesByConversationId).toEqual({});
+    expect(result.current.hasPreviousMessagesByConversationId).toEqual({});
+    expect(result.current.conversations).toHaveLength(1);
+    expect(result.current.conversations[0]?.id).toBe('server-current');
   });
 
   test('loadConversations preserves only the selected local-first general conversation', async () => {
