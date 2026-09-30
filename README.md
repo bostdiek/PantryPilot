@@ -86,11 +86,11 @@ metadata are separate and are not updated by this release process.
    branch-push workflows continue to deploy dev and prod.
 
 Repository setup is required: create a `RELEASE_PLEASE_TOKEN` Actions secret
-using a GitHub App installation token or a fine-grained PAT with Contents,
-Pull requests, and Issues read/write permissions for this repository. A separate
-token is needed because release PRs created with the default `GITHUB_TOKEN` do
-not trigger PR checks. Allow Actions to create pull requests in repository
-Actions settings. In branch protection/rulesets, require the **Release Policy**
+using a fine-grained PAT with Contents, Pull requests, and Issues read/write
+permissions for this repository. A separate token is needed because release
+PRs created with the default `GITHUB_TOKEN` do not trigger PR checks. Allow
+Actions to create pull requests in repository Actions settings. In branch
+protection/rulesets, require the **Release Policy**
 and existing CI checks on `main` and `production`, require PRs, allow squash
 merges into `main`, and use merge commits for promotions into `production`.
 The PR title check cannot itself control which merge button is clicked; restrict
