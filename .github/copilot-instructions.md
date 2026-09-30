@@ -77,6 +77,43 @@ cp .env.example .env.prod
 # - Set SECRET_KEY to a development key
 ```
 
+## Package Proxy and Supply-Chain Quarantine
+
+**CRITICAL**: The maintainer's development machine installs packages only through a corporate proxy. The proxy holds each new release in quarantine for several days (up to about two weeks) before serving it. Direct access to `registry.npmjs.org` and `pypi.org` is blocked. Read this section before you install dependencies, change a lockfile, or diagnose an install failure.
+
+### How the machine is configured
+
+The proxy is set in user-level config, not in the repository:
+
+- **npm**: `~/.npmrc` sets `registry=https://packagefeedproxy.microsoft.io/npm/`
+- **uv**: `~/.config/uv/uv.toml` sets the default index to `https://packagefeedproxy.microsoft.io/pypi/simple`
+- **Node.js**: the default `node` on `PATH` can be older than v20. Use nvm for Node 20+ before running npm or frontend tooling, for example `export PATH=~/.nvm/versions/node/v24.15.0/bin:$PATH`.
+
+### Rules
+
+- Never bypass the proxy. Don't pass `--registry=https://registry.npmjs.org/`, don't switch indexes, and don't turn off the quarantine. When a locked version isn't available yet, pin to the newest version the proxy serves.
+- A version that is still in quarantine fails with an npm `E404` such as `Cannot find the file <pkg>-<version>.tgz ... in feed 'npm-public'`, or with a uv resolution error. CI can still pass in this state, because GitHub runners reach the public registries.
+- Dependabot and upstream merges often bump packages to releases that are too new for the proxy. Check lockfile changes before assuming a local install works.
+- Run a real `npm ci` in every checkout and git worktree. Don't symlink or reuse `node_modules` from another checkout. Version drift causes misleading type and test failures.
+
+### Frontend (npm) workflow
+
+1. List every locked version the proxy can't serve, in one pass:
+
+   ```bash
+   node scripts/check_npm_lock_availability.mjs   # defaults: apps/frontend/package-lock.json and `npm config get registry`
+   ```
+
+2. For each unavailable package, find the newest version the proxy serves (`npm view <pkg> versions --json` or `npm view <pkg> dist-tags`). Pin to it in `apps/frontend`, for example `npm install --save-dev --ignore-scripts <pkg>@^<version>`. For transitive packages, pin the direct dependency that pulls them in.
+3. Keep every `resolved` URL in `package-lock.json` on `https://registry.npmjs.org/`. With its default `replace-registry-host=npmjs` setting, npm maps those URLs to the configured proxy locally, and CI and Docker use them unchanged. If npm writes a `packagefeedproxy.microsoft.io` or `ms-feed-*.pkgs.visualstudio.com` URL for an entry you changed, rewrite it to the matching `registry.npmjs.org` URL. The integrity hash stays the same.
+4. Don't let npm prune the optional `node_modules/@emnapi/core` and `node_modules/@emnapi/runtime` lockfile entries. Multi-architecture Docker `npm ci` builds need them. If they disappear, restore them from the previous lockfile.
+5. Check that `git diff apps/frontend/package-lock.json` is minimal. Then run a clean `rm -rf node_modules && npm ci`, followed by `npm run type-check`, `npm run lint`, and `npx vitest run`.
+
+### Backend (uv) workflow
+
+- `apps/backend/uv.lock` is locked against the proxy index URL (`source = { registry = "https://packagefeedproxy.microsoft.io/pypi/simple" }`). Keep it that way: CI and Docker builds can reach that index, and `uv sync --locked` fails locally when the lockfile's index doesn't match the configured one.
+- If a required version is still in quarantine, lower the floor in `apps/backend/pyproject.toml` to the newest version the proxy serves. Prefer `>=` over `==` pins, so the constraint doesn't outlast the quarantine. Then run `uv lock` and verify with `uv sync --locked`.
+
 ## Working Effectively
 
 ### Bootstrap, Build, and Test the Repository
@@ -369,6 +406,7 @@ make clean-all                # Remove all Docker resources (safe - PantryPilot 
 3. **Frontend dependency issues**:
    - Run `make clean-deps` to rebuild node_modules
    - Ensure Node.js version is 20+
+   - `npm ci` fails with `E404 ... in feed 'npm-public'`: the locked version is still in the proxy's quarantine. Follow [Package Proxy and Supply-Chain Quarantine](#package-proxy-and-supply-chain-quarantine).
 
 4. **Database connection errors**:
    - Check if database is running: `make db-maintenance CMD=health`

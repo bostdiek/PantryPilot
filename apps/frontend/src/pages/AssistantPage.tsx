@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import { ChatInput } from '../components/chat/ChatInput';
 import { ChatMessage } from '../components/chat/ChatMessage';
@@ -7,15 +7,45 @@ import { ConversationList } from '../components/chat/ConversationList';
 import { Container } from '../components/ui/Container';
 import { useChatStore } from '../stores/useChatStore';
 
+interface AssistantLocationState {
+  recipeContext?: {
+    recipeId: string;
+    recipeTitle: string;
+  };
+  recipeOrigin?: {
+    pathname: string;
+    scrollY: number;
+    triggerId: string;
+  };
+}
+
 export default function AssistantPage() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locationState = location.state as AssistantLocationState | null;
+  const requestedRecipeContext = locationState?.recipeContext;
+  const requestedRecipeId = requestedRecipeContext?.recipeId;
+  const lastRecipeResumeAttemptRef = useRef<string | null>(null);
+  const generalCreationRequestedRef = useRef(false);
   const hasHydrated = useChatStore((s) => s.hasHydrated);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const conversations = useChatStore((s) => s.conversations);
+  const confirmedRecipeConversationIds = useChatStore(
+    (s) => s.confirmedRecipeConversationIds
+  );
   const isLoading = useChatStore((s) => s.isLoading);
+  const error = useChatStore((s) => s.error);
   const loadConversations = useChatStore((s) => s.loadConversations);
   const createConversation = useChatStore((s) => s.createConversation);
+  const resumeRecipeConversation = useChatStore(
+    (s) => s.resumeRecipeConversation
+  );
+  const createRecipeConversation = useChatStore(
+    (s) => s.createRecipeConversation
+  );
   const switchConversation = useChatStore((s) => s.switchConversation);
+  const clearError = useChatStore((s) => s.clearError);
   const cancelPendingAssistantReply = useChatStore(
     (s) => s.cancelPendingAssistantReply
   );
@@ -32,13 +62,97 @@ export default function AssistantPage() {
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
 
-  const messages = useMemo(() => {
-    if (!activeConversationId) return [];
-    return messagesByConversationId[activeConversationId] ?? [];
-  }, [activeConversationId, messagesByConversationId]);
+  const activeConversation = useMemo(
+    () =>
+      conversations.find(
+        (conversation) => conversation.id === activeConversationId
+      ),
+    [activeConversationId, conversations]
+  );
+  const activeConversationRecipeId =
+    activeConversation?.recipeContext?.recipeId;
+  const isActiveRecipeConversationConfirmed =
+    !activeConversationRecipeId ||
+    confirmedRecipeConversationIds[activeConversationRecipeId] ===
+      activeConversation?.id;
+  const isRequestedRecipeConversationActive =
+    !requestedRecipeId ||
+    (activeConversationRecipeId === requestedRecipeId &&
+      isActiveRecipeConversationConfirmed);
+  // Recipe threads accept messages only after the server confirms them as
+  // current in this session, with or without route context.
+  const canSendMessage =
+    isRequestedRecipeConversationActive && isActiveRecipeConversationConfirmed;
+  // While a requested recipe is reconciling or has failed, show its context
+  // rather than the previously active thread.
+  const activeRecipeContext = isRequestedRecipeConversationActive
+    ? (activeConversation?.recipeContext ??
+      (activeConversationId ? undefined : requestedRecipeContext))
+    : requestedRecipeContext;
+  const displayedConversationId = isRequestedRecipeConversationActive
+    ? activeConversationId
+    : null;
 
-  const hasPreviousMessages = activeConversationId
-    ? (hasPreviousMessagesByConversationId[activeConversationId] ?? false)
+  const messages = useMemo(() => {
+    if (!displayedConversationId) return [];
+    return messagesByConversationId[displayedConversationId] ?? [];
+  }, [displayedConversationId, messagesByConversationId]);
+
+  const handleNewGeneralChat = useCallback(() => {
+    clearError();
+    generalCreationRequestedRef.current = true;
+    if (requestedRecipeId) {
+      navigate('/assistant', { replace: true, state: null });
+    }
+    void createConversation();
+  }, [clearError, createConversation, navigate, requestedRecipeId]);
+
+  const handleSelectConversation = useCallback(
+    async (conversationId: string) => {
+      const selected = await switchConversation(conversationId);
+      // Keep the current route and error when the selection failed or was
+      // superseded by a later one.
+      if (!selected) return;
+      const selectedConversation = useChatStore
+        .getState()
+        .conversations.find(
+          (conversation) => conversation.id === conversationId
+        );
+      const selectedRecipeContext = selectedConversation?.recipeContext;
+
+      if (!selectedRecipeContext) {
+        if (requestedRecipeId) {
+          navigate('/assistant', { replace: true, state: null });
+        }
+        return;
+      }
+
+      const selectedRecipePath = `/recipes/${selectedRecipeContext.recipeId}`;
+      const recipeOrigin =
+        locationState?.recipeOrigin?.pathname === selectedRecipePath
+          ? locationState.recipeOrigin
+          : undefined;
+      navigate('/assistant', {
+        replace: true,
+        state: {
+          recipeContext: {
+            recipeId: selectedRecipeContext.recipeId,
+            recipeTitle: selectedRecipeContext.recipeTitle,
+          },
+          ...(recipeOrigin ? { recipeOrigin } : {}),
+        },
+      });
+    },
+    [
+      locationState?.recipeOrigin,
+      navigate,
+      requestedRecipeId,
+      switchConversation,
+    ]
+  );
+
+  const hasPreviousMessages = displayedConversationId
+    ? (hasPreviousMessagesByConversationId[displayedConversationId] ?? false)
     : false;
 
   const lastMessage = useMemo(() => {
@@ -46,8 +160,27 @@ export default function AssistantPage() {
   }, [messages]);
 
   useEffect(() => {
-    void loadConversations();
-  }, [loadConversations]);
+    let cancelled = false;
+
+    const initializeConversations = async () => {
+      await loadConversations();
+      if (
+        cancelled ||
+        !requestedRecipeId ||
+        lastRecipeResumeAttemptRef.current === requestedRecipeId
+      ) {
+        return;
+      }
+
+      lastRecipeResumeAttemptRef.current = requestedRecipeId;
+      await resumeRecipeConversation(requestedRecipeId);
+    };
+
+    void initializeConversations();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadConversations, requestedRecipeId, resumeRecipeConversation]);
 
   // Poll conversations to pick up title updates
   // Use 30s in development, 60s in production to reduce API calls
@@ -84,13 +217,13 @@ export default function AssistantPage() {
 
       if (key === 'n') {
         e.preventDefault();
-        void createConversation();
+        handleNewGeneralChat();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [createConversation, hasHydrated]);
+  }, [handleNewGeneralChat, hasHydrated]);
 
   useEffect(() => {
     return () => {
@@ -100,9 +233,13 @@ export default function AssistantPage() {
 
   useEffect(() => {
     if (!hasHydrated) return;
+    if (requestedRecipeId) return;
 
     if (conversations.length === 0) {
-      void createConversation();
+      if (!generalCreationRequestedRef.current) {
+        generalCreationRequestedRef.current = true;
+        void createConversation();
+      }
       return;
     }
 
@@ -114,6 +251,7 @@ export default function AssistantPage() {
     conversations,
     createConversation,
     hasHydrated,
+    requestedRecipeId,
     switchConversation,
   ]);
 
@@ -147,6 +285,23 @@ export default function AssistantPage() {
       setAnnouncement(`Nibble: ${lastMessage.content}`);
     }
   }, [hasHydrated, lastMessage]);
+
+  const handleBackToRecipe = () => {
+    if (!activeRecipeContext) return;
+
+    const origin = locationState?.recipeOrigin;
+    const activeRecipePath = `/recipes/${activeRecipeContext.recipeId}`;
+    if (origin?.pathname === activeRecipePath) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(activeRecipePath, { replace: true, state: null });
+  };
+
+  const handleStartGeneralChat = () => {
+    handleNewGeneralChat();
+  };
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -185,14 +340,17 @@ export default function AssistantPage() {
           aria-label="Conversation list"
           className="hidden w-80 shrink-0 border-r border-gray-200 md:block md:overflow-y-auto"
         >
-          <ConversationList />
+          <ConversationList
+            onCreateConversation={handleNewGeneralChat}
+            onSelectConversation={handleSelectConversation}
+          />
         </aside>
 
         <section
           aria-label="Chat conversation"
           className="flex min-h-0 min-w-0 flex-1 flex-col md:pl-6"
         >
-          <header className="pb-3">
+          <header className="max-h-[45dvh] overflow-y-auto pr-1 pb-3 md:max-h-none md:overflow-visible md:pr-0">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h1 className="text-2xl font-semibold">SmartMeal Assistant</h1>
@@ -203,7 +361,7 @@ export default function AssistantPage() {
 
               <button
                 type="button"
-                onClick={() => void createConversation()}
+                onClick={handleNewGeneralChat}
                 className="hidden h-12 rounded-lg border border-gray-300 px-4 text-base font-medium hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:outline-none md:inline-flex"
               >
                 New Chat
@@ -211,8 +369,59 @@ export default function AssistantPage() {
             </div>
 
             <div className="mt-3 md:hidden" aria-label="Conversation selector">
-              <ConversationList compact />
+              <ConversationList
+                compact
+                onCreateConversation={handleNewGeneralChat}
+                onSelectConversation={handleSelectConversation}
+              />
             </div>
+
+            {activeRecipeContext ? (
+              <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3">
+                <p className="text-sm font-medium text-gray-900">
+                  Recipe: {activeRecipeContext.recipeTitle}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBackToRecipe}
+                    className="inline-flex min-h-12 min-w-12 items-center rounded-lg border border-orange-300 bg-white px-4 py-2 text-base font-medium text-gray-900 hover:bg-orange-100 focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 focus:outline-none"
+                  >
+                    Back to recipe
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void createRecipeConversation(
+                        activeRecipeContext.recipeId
+                      )
+                    }
+                    aria-label={`New conversation for ${activeRecipeContext.recipeTitle}`}
+                    className="inline-flex min-h-12 items-center rounded-lg bg-orange-600 px-4 py-2 text-base font-medium text-white hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 focus:outline-none"
+                  >
+                    New recipe chat
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {error ? (
+              <div
+                role="alert"
+                className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"
+              >
+                <p>{error}</p>
+                {requestedRecipeId && !isRequestedRecipeConversationActive ? (
+                  <button
+                    type="button"
+                    onClick={handleStartGeneralChat}
+                    className="mt-2 inline-flex min-h-12 items-center rounded-lg border border-red-300 bg-white px-4 py-2 text-base font-medium text-gray-900 hover:bg-red-100 focus:ring-2 focus:ring-red-500 focus:ring-offset-1 focus:outline-none"
+                  >
+                    Start a general chat instead
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </header>
 
           <section
@@ -237,8 +446,8 @@ export default function AssistantPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        activeConversationId &&
-                        void loadMoreMessages(activeConversationId)
+                        displayedConversationId &&
+                        void loadMoreMessages(displayedConversationId)
                       }
                       disabled={isLoading}
                       className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50"
@@ -263,7 +472,7 @@ export default function AssistantPage() {
           </section>
 
           <div className="shrink-0 border-t border-gray-200 pt-4">
-            <ChatInput />
+            <ChatInput disabled={!canSendMessage} />
           </div>
         </section>
       </div>

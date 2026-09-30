@@ -11,7 +11,11 @@ import { useChatStore } from '../../stores/useChatStore';
 import { Button } from '../ui/Button';
 import { Textarea } from '../ui/Textarea';
 
-export function ChatInput() {
+interface ChatInputProps {
+  disabled?: boolean;
+}
+
+export function ChatInput({ disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState('');
   const isLoading = useChatStore((s) => s.isLoading);
   const isStreaming = useChatStore((s) => s.isStreaming);
@@ -23,11 +27,11 @@ export function ChatInput() {
 
   const sendCurrentMessage = useCallback(async () => {
     const trimmed = message.trim();
-    if (!trimmed || isLoading || isStreaming) return;
+    if (!trimmed || disabled || isLoading || isStreaming) return;
 
     await sendMessage(trimmed);
     setMessage('');
-  }, [isLoading, isStreaming, message, sendMessage]);
+  }, [disabled, isLoading, isStreaming, message, sendMessage]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -67,7 +71,7 @@ export function ChatInput() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isStreaming}
+          disabled={disabled || isStreaming}
           // Some mobile keyboards only support voice typing reliably in
           // single-line inputs (vs. multiline textareas).
           autoCorrect="on"
@@ -86,7 +90,7 @@ export function ChatInput() {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isStreaming}
+          disabled={disabled || isStreaming}
           rows={2}
           autoCorrect="on"
           autoCapitalize="sentences"
@@ -113,7 +117,7 @@ export function ChatInput() {
         <Button
           type="submit"
           variant="primary"
-          disabled={!message.trim() || isLoading}
+          disabled={disabled || !message.trim() || isLoading}
           className="h-12 w-12 shrink-0 p-0"
           aria-label="Send message"
         >

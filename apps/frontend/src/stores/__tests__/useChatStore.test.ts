@@ -1,12 +1,17 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+import { ApiErrorImpl } from '../../types/api';
+import type { ConversationSummary } from '../../types/Chat';
 import { useChatStore } from '../useChatStore';
 
 // Mock the chat API endpoints
 vi.mock('../../api/endpoints/chat', () => ({
   fetchConversations: vi.fn(),
   fetchMessages: vi.fn(),
+  resumeRecipeConversation: vi.fn(),
+  createRecipeConversation: vi.fn(),
+  selectRecipeConversation: vi.fn(),
   streamChatMessage: vi.fn(),
   acceptAction: vi.fn(),
   cancelAction: vi.fn(),
@@ -37,6 +42,15 @@ const getMocks = async () => {
   return {
     fetchConversations: chatApi.fetchConversations as ReturnType<typeof vi.fn>,
     fetchMessages: chatApi.fetchMessages as ReturnType<typeof vi.fn>,
+    resumeRecipeConversation: chatApi.resumeRecipeConversation as ReturnType<
+      typeof vi.fn
+    >,
+    createRecipeConversation: chatApi.createRecipeConversation as ReturnType<
+      typeof vi.fn
+    >,
+    selectRecipeConversation: chatApi.selectRecipeConversation as ReturnType<
+      typeof vi.fn
+    >,
     streamChatMessage: chatApi.streamChatMessage as ReturnType<typeof vi.fn>,
     acceptAction: chatApi.acceptAction as ReturnType<typeof vi.fn>,
     cancelAction: chatApi.cancelAction as ReturnType<typeof vi.fn>,
@@ -54,6 +68,9 @@ describe('useChatStore', () => {
         hasHydrated: true,
         conversations: [],
         activeConversationId: null,
+        activeGeneralConversationId: null,
+        activeRecipeConversationIds: {},
+        confirmedRecipeConversationIds: {},
         messagesByConversationId: {},
         hasPreviousMessagesByConversationId: {},
         isLoading: false,
@@ -96,6 +113,1157 @@ describe('useChatStore', () => {
         result.current.conversations[0]!.id
       ]
     ).toEqual([]);
+    expect(result.current.conversations[0]?.recipeContext).toBeUndefined();
+    expect(result.current.activeGeneralConversationId).toBe(
+      result.current.conversations[0]?.id
+    );
+  });
+
+  test('resumeRecipeConversation always reconciles with the server and deduplicates its summary', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'persisted-context',
+            title: 'Persisted',
+            createdAt: '2026-09-01T10:00:00Z',
+            lastMessageAt: '2026-09-01T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'persisted-context',
+        activeRecipeConversationIds: {
+          'recipe-1': 'persisted-context',
+        },
+      });
+    });
+    mocks.resumeRecipeConversation.mockResolvedValue({
+      id: 'server-context',
+      title: 'Server current',
+      created_at: '2026-09-02T10:00:00Z',
+      last_activity_at: '2026-09-02T11:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+
+    expect(mocks.resumeRecipeConversation).toHaveBeenCalledTimes(2);
+    expect(result.current.activeConversationId).toBe('server-context');
+    expect(result.current.activeRecipeConversationIds['recipe-1']).toBe(
+      'server-context'
+    );
+    expect(
+      result.current.conversations.filter(
+        (conversation) => conversation.id === 'server-context'
+      )
+    ).toHaveLength(1);
+    expect(
+      result.current.conversations.find(
+        (conversation) => conversation.id === 'persisted-context'
+      )?.recipeContext?.isCurrent
+    ).toBe(false);
+  });
+
+  test('resumeRecipeConversation ignores a stale route response', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const resolvers = new Map<string, (summary: ConversationSummary) => void>();
+    mocks.resumeRecipeConversation.mockImplementation(
+      (recipeId: string) =>
+        new Promise<ConversationSummary>((resolve) => {
+          resolvers.set(recipeId, resolve);
+        })
+    );
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    const recipeARequest = result.current.resumeRecipeConversation('recipe-a');
+    const recipeBRequest = result.current.resumeRecipeConversation('recipe-b');
+
+    await act(async () => {
+      resolvers.get('recipe-b')?.({
+        id: 'conversation-b',
+        title: 'Recipe B',
+        created_at: '2026-09-29T10:00:00Z',
+        last_activity_at: '2026-09-29T10:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-b',
+          recipe_title: 'Recipe B',
+          is_current: true,
+        },
+      });
+      await recipeBRequest;
+    });
+    await act(async () => {
+      resolvers.get('recipe-a')?.({
+        id: 'conversation-a',
+        title: 'Recipe A',
+        created_at: '2026-09-29T09:00:00Z',
+        last_activity_at: '2026-09-29T09:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-a',
+          recipe_title: 'Recipe A',
+          is_current: true,
+        },
+      });
+      await recipeARequest;
+    });
+
+    expect(result.current.activeConversationId).toBe('conversation-b');
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-b': 'conversation-b',
+    });
+  });
+
+  test('resumeRecipeConversation clears confirmation until the server responds', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'cached-recipe',
+            title: 'Cached',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'cached-recipe',
+        confirmedRecipeConversationIds: {
+          'recipe-1': 'cached-recipe',
+        },
+      });
+    });
+    mocks.resumeRecipeConversation.mockRejectedValue(new Error('offline'));
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+
+    expect(result.current.activeConversationId).toBe('cached-recipe');
+    expect(
+      result.current.confirmedRecipeConversationIds['recipe-1']
+    ).toBeUndefined();
+    expect(result.current.error).toBe(
+      'Unable to resume this recipe conversation. Please try again.'
+    );
+  });
+
+  test('loadConversations removes a server-absent contextual selection', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'removed-context',
+            title: 'Off-page recipe',
+            createdAt: '2026-09-20T10:00:00Z',
+            lastMessageAt: '2026-09-20T10:00:00Z',
+            recipeContext: {
+              recipeId: 'removed-recipe',
+              recipeTitle: 'Off-page recipe',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'removed-general',
+            title: 'Off-page general',
+            createdAt: '2026-09-19T10:00:00Z',
+            lastMessageAt: '2026-09-19T10:00:00Z',
+            isLocalOnly: true,
+          },
+        ],
+        activeConversationId: 'removed-context',
+        activeGeneralConversationId: 'removed-general',
+        activeRecipeConversationIds: {
+          'recipe-1': 'stale-recipe-1',
+          'removed-recipe': 'removed-context',
+        },
+        confirmedRecipeConversationIds: {
+          'removed-recipe': 'removed-context',
+        },
+        messagesByConversationId: {
+          'removed-context': [],
+          'removed-general': [],
+        },
+        hasPreviousMessagesByConversationId: {
+          'removed-context': true,
+          'removed-general': false,
+        },
+      });
+    });
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'general',
+          title: 'General',
+          created_at: '2026-09-29T08:00:00Z',
+          last_activity_at: '2026-09-29T08:00:00Z',
+          recipe_context: null,
+        },
+        {
+          id: 'recipe-1-current',
+          title: 'Pasta',
+          created_at: '2026-09-29T09:00:00Z',
+          last_activity_at: '2026-09-29T09:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: true,
+          },
+        },
+        {
+          id: 'recipe-1-older',
+          title: 'Older pasta',
+          created_at: '2026-09-28T09:00:00Z',
+          last_activity_at: '2026-09-28T09:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: false,
+          },
+        },
+        {
+          id: 'recipe-2-current',
+          title: 'Soup',
+          created_at: '2026-09-29T10:00:00Z',
+          last_activity_at: '2026-09-29T10:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-2',
+            recipe_title: 'Soup',
+            is_current: true,
+          },
+        },
+      ],
+      total: 4,
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadConversations();
+    });
+
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-1-current',
+      'recipe-2': 'recipe-2-current',
+    });
+    expect(result.current.activeGeneralConversationId).toBe('removed-general');
+    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.confirmedRecipeConversationIds).toEqual({});
+    expect(result.current.messagesByConversationId).toEqual({
+      'removed-general': [],
+    });
+    expect(result.current.hasPreviousMessagesByConversationId).toEqual({
+      'removed-general': false,
+    });
+    expect(
+      result.current.conversations.some(
+        (conversation) => conversation.id === 'removed-context'
+      )
+    ).toBe(false);
+  });
+
+  test('loadConversations switches to a server-replaced contextual selection', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'stale-context',
+            title: 'Earlier Pasta chat',
+            createdAt: '2026-09-29T08:00:00Z',
+            lastMessageAt: '2026-09-29T08:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'stale-context',
+        activeRecipeConversationIds: { 'recipe-1': 'stale-context' },
+        confirmedRecipeConversationIds: { 'recipe-1': 'stale-context' },
+        messagesByConversationId: { 'stale-context': [] },
+        hasPreviousMessagesByConversationId: { 'stale-context': true },
+      });
+    });
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'server-current',
+          title: 'Latest Pasta chat',
+          created_at: '2026-09-29T10:00:00Z',
+          last_activity_at: '2026-09-29T10:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: true,
+          },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadConversations();
+    });
+
+    expect(result.current.activeConversationId).toBe('server-current');
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'server-current',
+    });
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-1': 'server-current',
+    });
+    expect(result.current.messagesByConversationId).toEqual({});
+    expect(result.current.hasPreviousMessagesByConversationId).toEqual({});
+    expect(result.current.conversations).toHaveLength(1);
+    expect(result.current.conversations[0]?.id).toBe('server-current');
+  });
+
+  test('loadConversations preserves only the selected local-first general conversation', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    await act(async () => {
+      await result.current.createConversation('Older local chat');
+      await result.current.createConversation('Selected local chat');
+    });
+    const selectedLocalId = result.current.activeGeneralConversationId;
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'recipe-current',
+          title: 'Pasta',
+          created_at: '2026-09-29T09:00:00Z',
+          last_activity_at: '2026-09-29T09:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: true,
+          },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.loadConversations();
+    });
+
+    expect(result.current.activeConversationId).toBe(selectedLocalId);
+    expect(result.current.activeGeneralConversationId).toBe(selectedLocalId);
+    expect(
+      result.current.conversations.find(
+        (conversation) => conversation.id === selectedLocalId
+      )
+    ).toMatchObject({
+      title: 'Selected local chat',
+      isLocalOnly: true,
+    });
+    expect(
+      result.current.conversations.some(
+        (conversation) => conversation.title === 'Older local chat'
+      )
+    ).toBe(false);
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-current',
+    });
+  });
+
+  test('createRecipeConversation persists a contextual thread without changing the general selection', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    await act(async () => {
+      await result.current.createConversation('General');
+    });
+    const generalId = result.current.activeConversationId;
+    mocks.createRecipeConversation.mockResolvedValue({
+      id: 'context-new',
+      title: null,
+      created_at: '2026-09-02T10:00:00Z',
+      last_activity_at: '2026-09-02T10:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
+
+    await act(async () => {
+      await result.current.createRecipeConversation('recipe-1');
+    });
+
+    expect(result.current.activeConversationId).toBe('context-new');
+    expect(result.current.activeGeneralConversationId).toBe(generalId);
+    expect(result.current.messagesByConversationId['context-new']).toEqual([]);
+  });
+
+  test('creates contextual threads per recipe without crossing selections', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    await act(async () => {
+      await result.current.createConversation('General');
+    });
+    const generalId = result.current.activeGeneralConversationId;
+    mocks.createRecipeConversation
+      .mockResolvedValueOnce({
+        id: 'recipe-1-context',
+        title: 'Pasta',
+        created_at: '2026-09-29T10:00:00Z',
+        last_activity_at: '2026-09-29T10:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-1',
+          recipe_title: 'Pasta',
+          is_current: true,
+        },
+      })
+      .mockResolvedValueOnce({
+        id: 'recipe-2-context',
+        title: 'Soup',
+        created_at: '2026-09-29T11:00:00Z',
+        last_activity_at: '2026-09-29T11:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-2',
+          recipe_title: 'Soup',
+          is_current: true,
+        },
+      });
+
+    await act(async () => {
+      await result.current.createRecipeConversation('recipe-1');
+      await result.current.createRecipeConversation('recipe-2');
+    });
+
+    expect(mocks.createRecipeConversation.mock.calls).toEqual([
+      ['recipe-1'],
+      ['recipe-2'],
+    ]);
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-1-context',
+      'recipe-2': 'recipe-2-context',
+    });
+    expect(result.current.activeGeneralConversationId).toBe(generalId);
+    expect(result.current.activeConversationId).toBe('recipe-2-context');
+  });
+
+  test('general New Chat stays context-free after a contextual selection', async () => {
+    const { result } = renderHook(() => useChatStore());
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-context',
+            title: 'Pasta',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'recipe-context',
+        activeRecipeConversationIds: {
+          'recipe-1': 'recipe-context',
+        },
+      });
+    });
+
+    await act(async () => {
+      await result.current.createConversation('General after recipe');
+    });
+
+    const general = result.current.conversations[0];
+    expect(general?.title).toBe('General after recipe');
+    expect(general?.recipeContext).toBeUndefined();
+    expect(result.current.activeGeneralConversationId).toBe(general?.id);
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-context',
+    });
+  });
+
+  test('switchConversation selects contextual history before loading messages', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const callOrder: string[] = [];
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'context-old',
+            title: 'Older',
+            createdAt: '2026-09-01T10:00:00Z',
+            lastMessageAt: '2026-09-01T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: false,
+            },
+          },
+        ],
+      });
+    });
+    mocks.selectRecipeConversation.mockImplementation(async () => {
+      callOrder.push('select');
+      return {
+        id: 'context-old',
+        title: 'Older',
+        created_at: '2026-09-01T10:00:00Z',
+        last_activity_at: '2026-09-02T10:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-1',
+          recipe_title: 'Pasta',
+          is_current: true,
+        },
+      };
+    });
+    mocks.fetchMessages.mockImplementation(async () => {
+      callOrder.push('messages');
+      return { messages: [], has_more: false };
+    });
+
+    await act(async () => {
+      await result.current.switchConversation('context-old');
+    });
+
+    expect(callOrder).toEqual(['select', 'messages']);
+    expect(result.current.activeConversationId).toBe('context-old');
+    expect(result.current.conversations[0]?.recipeContext?.isCurrent).toBe(
+      true
+    );
+  });
+
+  test('removes inaccessible recipe state and surfaces an explicit error without general fallback', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'general',
+            title: 'General',
+            createdAt: '2026-09-01T09:00:00Z',
+            lastMessageAt: '2026-09-01T09:00:00Z',
+          },
+          {
+            id: 'stale-context',
+            title: 'Stale',
+            createdAt: '2026-09-01T10:00:00Z',
+            lastMessageAt: '2026-09-01T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        // A persisted general selection must not become a success-shaped
+        // fallback when opening the recipe fails.
+        activeConversationId: 'general',
+        activeGeneralConversationId: 'general',
+        activeRecipeConversationIds: { 'recipe-1': 'stale-context' },
+        messagesByConversationId: {
+          'stale-context': [
+            {
+              id: 'message-1',
+              conversationId: 'stale-context',
+              role: 'user',
+              content: 'secret context',
+              createdAt: '2026-09-01T10:01:00Z',
+            },
+          ],
+        },
+      });
+    });
+    mocks.resumeRecipeConversation.mockRejectedValue(
+      new ApiErrorImpl('Forbidden', 403, 'http_error')
+    );
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+
+    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.activeGeneralConversationId).toBe('general');
+    expect(result.current.conversations.map(({ id }) => id)).toEqual([
+      'general',
+    ]);
+    expect(
+      result.current.messagesByConversationId['stale-context']
+    ).toBeUndefined();
+    expect(
+      result.current.activeRecipeConversationIds['recipe-1']
+    ).toBeUndefined();
+    expect(result.current.error).toContain('no longer available');
+    expect(mocks.fetchMessages).not.toHaveBeenCalled();
+  });
+
+  test('cleans up confirmed inaccessible state for create and select failures', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const seedRecipeState = () => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-context',
+            title: 'Pasta',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'recipe-context',
+        activeRecipeConversationIds: { 'recipe-1': 'recipe-context' },
+        messagesByConversationId: { 'recipe-context': [] },
+        error: null,
+      });
+    };
+
+    act(seedRecipeState);
+    mocks.createRecipeConversation.mockRejectedValueOnce(
+      new ApiErrorImpl('Not found', 404, 'http_error')
+    );
+    await act(async () => {
+      await result.current.createRecipeConversation('recipe-1');
+    });
+    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.conversations).toEqual([]);
+    expect(result.current.activeRecipeConversationIds).toEqual({});
+
+    act(seedRecipeState);
+    mocks.selectRecipeConversation.mockRejectedValueOnce(
+      new ApiErrorImpl('Forbidden', 403, 'http_error')
+    );
+    await act(async () => {
+      await result.current.switchConversation('recipe-context');
+    });
+    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.conversations).toEqual([]);
+    expect(result.current.activeRecipeConversationIds).toEqual({});
+    expect(mocks.fetchMessages).not.toHaveBeenCalled();
+  });
+
+  test('recovers from an inaccessible recipe error on a later successful resume', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    mocks.resumeRecipeConversation
+      .mockRejectedValueOnce(new ApiErrorImpl('Not found', 404, 'http_error'))
+      .mockResolvedValueOnce({
+        id: 'recipe-recovered',
+        title: 'Recovered recipe chat',
+        created_at: '2026-09-29T12:00:00Z',
+        last_activity_at: '2026-09-29T12:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-1',
+          recipe_title: 'Pasta',
+          is_current: true,
+        },
+      });
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+    expect(result.current.error).toContain('no longer available');
+    expect(result.current.activeConversationId).toBeNull();
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.activeConversationId).toBe('recipe-recovered');
+    expect(result.current.activeRecipeConversationIds['recipe-1']).toBe(
+      'recipe-recovered'
+    );
+    expect(mocks.fetchMessages).toHaveBeenCalledWith(
+      'recipe-recovered',
+      expect.any(Number)
+    );
+  });
+
+  test('preserves recipe state and permits retry after a network resume failure', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const conversation = {
+      id: 'recipe-current',
+      title: 'Pasta',
+      createdAt: '2026-09-29T10:00:00Z',
+      lastMessageAt: '2026-09-29T10:00:00Z',
+      recipeContext: {
+        recipeId: 'recipe-1',
+        recipeTitle: 'Pasta',
+        isCurrent: true,
+      },
+    };
+    act(() => {
+      useChatStore.setState({
+        conversations: [conversation],
+        activeConversationId: conversation.id,
+        activeRecipeConversationIds: { 'recipe-1': conversation.id },
+        messagesByConversationId: { [conversation.id]: [] },
+      });
+    });
+    mocks.resumeRecipeConversation
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce({
+        id: conversation.id,
+        title: conversation.title,
+        created_at: conversation.createdAt,
+        last_activity_at: conversation.lastMessageAt,
+        recipe_context: {
+          recipe_id: 'recipe-1',
+          recipe_title: 'Pasta',
+          is_current: true,
+        },
+      });
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+
+    expect(result.current.activeConversationId).toBe(conversation.id);
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': conversation.id,
+    });
+    expect(result.current.conversations).toEqual([conversation]);
+    expect(result.current.error).toContain('Please try again');
+
+    await act(async () => {
+      await result.current.resumeRecipeConversation('recipe-1');
+    });
+    expect(mocks.resumeRecipeConversation).toHaveBeenCalledTimes(2);
+    expect(result.current.error).toBeNull();
+  });
+
+  test('preserves recipe state and permits retry after a 500 create failure', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    act(() => {
+      useChatStore.setState({
+        activeConversationId: 'recipe-current',
+        activeRecipeConversationIds: { 'recipe-1': 'recipe-current' },
+        conversations: [
+          {
+            id: 'recipe-current',
+            title: 'Pasta',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+      });
+    });
+    mocks.createRecipeConversation
+      .mockRejectedValueOnce(
+        new ApiErrorImpl('Server error', 500, 'http_error')
+      )
+      .mockResolvedValueOnce({
+        id: 'recipe-new',
+        title: 'Pasta',
+        created_at: '2026-09-29T11:00:00Z',
+        last_activity_at: '2026-09-29T11:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-1',
+          recipe_title: 'Pasta',
+          is_current: true,
+        },
+      });
+
+    await act(async () => {
+      await result.current.createRecipeConversation('recipe-1');
+    });
+    expect(result.current.activeConversationId).toBe('recipe-current');
+    expect(result.current.activeRecipeConversationIds['recipe-1']).toBe(
+      'recipe-current'
+    );
+    expect(result.current.error).toContain('Please try again');
+
+    await act(async () => {
+      await result.current.createRecipeConversation('recipe-1');
+    });
+    expect(mocks.createRecipeConversation).toHaveBeenCalledTimes(2);
+    expect(result.current.activeConversationId).toBe('recipe-new');
+    expect(result.current.error).toBeNull();
+  });
+
+  test('preserves recipe state and permits retry after a 500 select failure', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    act(() => {
+      useChatStore.setState({
+        activeConversationId: 'context-current',
+        activeRecipeConversationIds: { 'recipe-1': 'context-current' },
+        conversations: [
+          {
+            id: 'context-current',
+            title: 'Current',
+            createdAt: '2026-09-29T11:00:00Z',
+            lastMessageAt: '2026-09-29T11:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'context-old',
+            title: 'Older',
+            createdAt: '2026-09-28T10:00:00Z',
+            lastMessageAt: '2026-09-28T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: false,
+            },
+          },
+        ],
+      });
+    });
+    mocks.selectRecipeConversation
+      .mockRejectedValueOnce(
+        new ApiErrorImpl('Server error', 500, 'http_error')
+      )
+      .mockResolvedValueOnce({
+        id: 'context-old',
+        title: 'Older',
+        created_at: '2026-09-28T10:00:00Z',
+        last_activity_at: '2026-09-29T12:00:00Z',
+        recipe_context: {
+          recipe_id: 'recipe-1',
+          recipe_title: 'Pasta',
+          is_current: true,
+        },
+      });
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    await act(async () => {
+      await result.current.switchConversation('context-old');
+    });
+    expect(result.current.activeConversationId).toBe('context-current');
+    expect(result.current.activeRecipeConversationIds['recipe-1']).toBe(
+      'context-current'
+    );
+    expect(result.current.error).toContain('Please try again');
+
+    await act(async () => {
+      await result.current.switchConversation('context-old');
+    });
+    expect(mocks.selectRecipeConversation).toHaveBeenCalledTimes(2);
+    expect(result.current.activeConversationId).toBe('context-old');
+    expect(result.current.error).toBeNull();
+  });
+
+  test('rehydrates older persisted general conversations without recipe metadata', async () => {
+    localStorage.setItem(
+      'chat',
+      JSON.stringify({
+        state: {
+          conversations: [
+            {
+              id: 'legacy-general',
+              title: 'Legacy',
+              createdAt: '2026-09-01T10:00:00Z',
+              lastMessageAt: '2026-09-01T10:00:00Z',
+            },
+          ],
+          activeConversationId: 'legacy-general',
+          messagesByConversationId: {},
+          hasPreviousMessagesByConversationId: {},
+        },
+        version: 0,
+      })
+    );
+
+    await act(async () => {
+      await useChatStore.persist.rehydrate();
+    });
+
+    expect(
+      useChatStore.getState().conversations[0]?.recipeContext
+    ).toBeUndefined();
+    expect(useChatStore.getState().activeRecipeConversationIds).toEqual({});
+  });
+
+  test('keeps a legacy persisted general draft through the first list refresh', async () => {
+    const mocks = await getMocks();
+    localStorage.setItem(
+      'chat',
+      JSON.stringify({
+        state: {
+          conversations: [
+            {
+              id: 'legacy-draft',
+              title: 'Draft',
+              createdAt: '2026-09-01T10:00:00Z',
+              lastMessageAt: '2026-09-01T10:00:00Z',
+            },
+            {
+              id: 'legacy-sent',
+              title: 'Sent',
+              createdAt: '2026-09-01T09:00:00Z',
+              lastMessageAt: '2026-09-01T09:00:00Z',
+            },
+          ],
+          activeConversationId: 'legacy-draft',
+          activeGeneralConversationId: 'legacy-draft',
+          messagesByConversationId: {
+            'legacy-draft': [],
+            'legacy-sent': [
+              {
+                id: 'm1',
+                conversationId: 'legacy-sent',
+                role: 'user',
+                content: 'Hi',
+                createdAt: '2026-09-01T09:00:00Z',
+              },
+            ],
+          },
+          hasPreviousMessagesByConversationId: {},
+        },
+        version: 0,
+      })
+    );
+
+    await act(async () => {
+      await useChatStore.persist.rehydrate();
+    });
+
+    const rehydrated = useChatStore.getState().conversations;
+    expect(rehydrated.find((c) => c.id === 'legacy-draft')?.isLocalOnly).toBe(
+      true
+    );
+    expect(
+      rehydrated.find((c) => c.id === 'legacy-sent')?.isLocalOnly
+    ).toBeUndefined();
+
+    mocks.fetchConversations.mockResolvedValueOnce({
+      conversations: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+    });
+    await act(async () => {
+      await useChatStore.getState().loadConversations();
+    });
+
+    expect(useChatStore.getState().activeConversationId).toBe('legacy-draft');
+    expect(
+      useChatStore
+        .getState()
+        .conversations.map((conversation) => conversation.id)
+    ).toEqual(['legacy-draft']);
+  });
+
+  test('createRecipeConversation shares an in-flight create and ignores a superseded response', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const resolvers: Array<(summary: ConversationSummary) => void> = [];
+    mocks.createRecipeConversation.mockImplementation(
+      () =>
+        new Promise<ConversationSummary>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    const recipeSummary = (
+      id: string,
+      recipeId: string
+    ): ConversationSummary => ({
+      id,
+      title: id,
+      created_at: '2026-09-29T10:00:00Z',
+      last_activity_at: '2026-09-29T10:00:00Z',
+      recipe_context: {
+        recipe_id: recipeId,
+        recipe_title: recipeId,
+        is_current: true,
+      },
+    });
+
+    const firstClick = result.current.createRecipeConversation('recipe-a');
+    const secondClick = result.current.createRecipeConversation('recipe-a');
+    expect(secondClick).toBe(firstClick);
+    expect(mocks.createRecipeConversation).toHaveBeenCalledTimes(1);
+
+    const recipeBCreate = result.current.createRecipeConversation('recipe-b');
+    expect(mocks.createRecipeConversation).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolvers[1]?.(recipeSummary('conversation-b', 'recipe-b'));
+      await recipeBCreate;
+    });
+    await act(async () => {
+      resolvers[0]?.(recipeSummary('conversation-a', 'recipe-a'));
+      await firstClick;
+    });
+
+    expect(result.current.activeConversationId).toBe('conversation-b');
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-b': 'conversation-b',
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  test('switchConversation serializes same-recipe selections and applies only the latest', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const resolvers = new Map<string, (summary: ConversationSummary) => void>();
+    mocks.selectRecipeConversation.mockImplementation(
+      (conversationId: string) =>
+        new Promise<ConversationSummary>((resolve) => {
+          resolvers.set(conversationId, resolve);
+        })
+    );
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+    const recipeThread = (id: string, isCurrent: boolean) => ({
+      id,
+      title: id,
+      createdAt: '2026-09-29T10:00:00Z',
+      lastMessageAt: '2026-09-29T10:00:00Z',
+      recipeContext: {
+        recipeId: 'recipe-1',
+        recipeTitle: 'Pasta',
+        isCurrent,
+      },
+    });
+    const summary = (id: string): ConversationSummary => ({
+      id,
+      title: id,
+      created_at: '2026-09-29T10:00:00Z',
+      last_activity_at: '2026-09-29T10:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          recipeThread('thread-a', true),
+          recipeThread('thread-b', false),
+        ],
+      });
+    });
+
+    const selectA = result.current.switchConversation('thread-a');
+    const selectB = result.current.switchConversation('thread-b');
+    expect(mocks.selectRecipeConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.selectRecipeConversation).toHaveBeenCalledWith('thread-a');
+
+    let selectedA: boolean | undefined;
+    await act(async () => {
+      resolvers.get('thread-a')?.(summary('thread-a'));
+      selectedA = await selectA;
+    });
+    expect(selectedA).toBe(false);
+    expect(mocks.selectRecipeConversation).toHaveBeenLastCalledWith('thread-b');
+
+    let selectedB: boolean | undefined;
+    await act(async () => {
+      resolvers.get('thread-b')?.(summary('thread-b'));
+      selectedB = await selectB;
+    });
+
+    expect(selectedB).toBe(true);
+    expect(result.current.activeConversationId).toBe('thread-b');
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-1': 'thread-b',
+    });
+    expect(mocks.fetchMessages).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchMessages).toHaveBeenCalledWith('thread-b', 200);
+  });
+
+  test('switchConversation keeps the previous thread when another recipe is inaccessible', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    mocks.selectRecipeConversation.mockRejectedValueOnce(
+      new ApiErrorImpl('Not found', 404, 'http_error')
+    );
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'thread-a',
+            title: 'A',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-a',
+              recipeTitle: 'A',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'thread-b',
+            title: 'B',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-b',
+              recipeTitle: 'B',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'thread-a',
+        confirmedRecipeConversationIds: { 'recipe-a': 'thread-a' },
+      });
+    });
+
+    let selected: boolean | undefined;
+    await act(async () => {
+      selected = await result.current.switchConversation('thread-b');
+    });
+
+    expect(selected).toBe(false);
+    expect(result.current.activeConversationId).toBe('thread-a');
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['thread-a']);
+    expect(result.current.error).toBe(
+      'This recipe conversation is no longer available. Return to the recipe and try again.'
+    );
   });
 
   test('switchConversation updates activeConversationId', async () => {
@@ -713,6 +1881,273 @@ describe('useChatStore', () => {
 
     // Should switch to the remaining conversation (Chat 1)
     expect(result.current.activeConversationId).toBe(conv1Id);
+  });
+
+  test('deleteConversation activates the server-promoted recipe conversation', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-current',
+            title: 'Current',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'recipe-older',
+            title: 'Older',
+            createdAt: '2026-09-28T10:00:00Z',
+            lastMessageAt: '2026-09-28T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: false,
+            },
+          },
+          {
+            id: 'general',
+            title: 'General',
+            createdAt: '2026-09-27T10:00:00Z',
+            lastMessageAt: '2026-09-27T10:00:00Z',
+          },
+        ],
+        activeConversationId: 'recipe-current',
+        activeGeneralConversationId: 'general',
+        activeRecipeConversationIds: {
+          'recipe-1': 'recipe-current',
+        },
+        messagesByConversationId: {
+          'recipe-current': [],
+          'recipe-older': [],
+        },
+      });
+    });
+    mocks.deleteConversation.mockResolvedValue(undefined);
+    mocks.resumeRecipeConversation.mockResolvedValue({
+      id: 'recipe-older',
+      title: 'Older',
+      created_at: '2026-09-28T10:00:00Z',
+      last_activity_at: '2026-09-28T10:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'recipe-older',
+          title: 'Older',
+          created_at: '2026-09-28T10:00:00Z',
+          last_activity_at: '2026-09-28T10:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: true,
+          },
+        },
+        {
+          id: 'general',
+          title: 'General',
+          created_at: '2026-09-27T10:00:00Z',
+          last_activity_at: '2026-09-27T10:00:00Z',
+          recipe_context: null,
+        },
+      ],
+      total: 2,
+      has_more: false,
+    });
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+
+    await act(async () => {
+      await result.current.deleteConversation('recipe-current');
+    });
+
+    expect(result.current.activeConversationId).toBe('recipe-older');
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-older',
+    });
+    expect(result.current.activeGeneralConversationId).toBe('general');
+    expect(
+      result.current.messagesByConversationId['recipe-current']
+    ).toBeUndefined();
+    expect(mocks.fetchMessages).toHaveBeenCalledWith('recipe-older', 200);
+  });
+
+  test('deleteConversation preserves the active recipe when deleting its history', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-current',
+            title: 'Current',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'recipe-history',
+            title: 'History',
+            createdAt: '2026-09-28T10:00:00Z',
+            lastMessageAt: '2026-09-28T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: false,
+            },
+          },
+        ],
+        activeConversationId: 'recipe-current',
+        activeRecipeConversationIds: {
+          'recipe-1': 'recipe-current',
+        },
+      });
+    });
+    mocks.deleteConversation.mockResolvedValue(undefined);
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [
+        {
+          id: 'recipe-current',
+          title: 'Current',
+          created_at: '2026-09-29T10:00:00Z',
+          last_activity_at: '2026-09-29T10:00:00Z',
+          recipe_context: {
+            recipe_id: 'recipe-1',
+            recipe_title: 'Pasta',
+            is_current: true,
+          },
+        },
+      ],
+      total: 1,
+      has_more: false,
+    });
+
+    await act(async () => {
+      await result.current.deleteConversation('recipe-history');
+    });
+
+    expect(result.current.activeConversationId).toBe('recipe-current');
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-current',
+    });
+    expect(mocks.fetchMessages).not.toHaveBeenCalled();
+  });
+
+  test('deleteConversation creates a contextual replacement for the last recipe thread', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-current',
+            title: 'Current',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'recipe-current',
+        activeRecipeConversationIds: {
+          'recipe-1': 'recipe-current',
+        },
+      });
+    });
+    mocks.deleteConversation.mockResolvedValue(undefined);
+    mocks.fetchConversations.mockResolvedValue({
+      conversations: [],
+      total: 0,
+      has_more: false,
+    });
+    mocks.resumeRecipeConversation.mockResolvedValue({
+      id: 'recipe-replacement',
+      title: null,
+      created_at: '2026-09-29T11:00:00Z',
+      last_activity_at: '2026-09-29T11:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
+
+    await act(async () => {
+      await result.current.deleteConversation('recipe-current');
+    });
+
+    expect(mocks.resumeRecipeConversation).toHaveBeenCalledWith('recipe-1');
+    expect(mocks.createRecipeConversation).not.toHaveBeenCalled();
+    expect(result.current.activeConversationId).toBe('recipe-replacement');
+    expect(result.current.activeRecipeConversationIds).toEqual({
+      'recipe-1': 'recipe-replacement',
+    });
+    expect(result.current.conversations[0]?.recipeContext?.recipeId).toBe(
+      'recipe-1'
+    );
+  });
+
+  test('deleteConversation fails closed when contextual reconciliation cannot reload', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'recipe-current',
+            title: 'Current',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-1',
+              recipeTitle: 'Pasta',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'recipe-current',
+        activeRecipeConversationIds: {
+          'recipe-1': 'recipe-current',
+        },
+        messagesByConversationId: {
+          'recipe-current': [],
+        },
+      });
+    });
+    mocks.deleteConversation.mockResolvedValue(undefined);
+    mocks.fetchConversations.mockRejectedValue(new Error('reload failed'));
+
+    await act(async () => {
+      await result.current.deleteConversation('recipe-current');
+    });
+
+    expect(result.current.activeConversationId).toBeNull();
+    expect(result.current.activeRecipeConversationIds).toEqual({});
+    expect(result.current.conversations).toEqual([]);
+    expect(result.current.error).toBe(
+      'The conversation was deleted, but recipe conversations could not be refreshed. Return to the recipe and try again.'
+    );
   });
 
   test('deleteConversation creates new conversation when deleting the last one', async () => {

@@ -3,10 +3,13 @@ import { persist } from 'zustand/middleware';
 
 import {
   acceptAction,
+  createRecipeConversation as apiCreateRecipeConversation,
   deleteConversation as apiDeleteConversation,
   cancelAction,
   fetchConversations,
   fetchMessages,
+  resumeRecipeConversation as apiResumeRecipeConversation,
+  selectRecipeConversation as apiSelectRecipeConversation,
   streamChatMessage,
 } from '../api/endpoints/chat';
 import { logger } from '../lib/logger';
@@ -16,7 +19,8 @@ import {
   emitProductTelemetryEvent,
   getTelemetryLatencyMs,
 } from '../lib/telemetry';
-import type { ChatContentBlock } from '../types/Chat';
+import { ApiErrorImpl } from '../types/api';
+import type { ChatContentBlock, ConversationSummary } from '../types/Chat';
 
 export type ChatRole = 'user' | 'assistant';
 
@@ -25,6 +29,12 @@ export interface Conversation {
   title: string | null;
   createdAt: string; // ISO
   lastMessageAt: string; // ISO
+  isLocalOnly?: boolean;
+  recipeContext?: {
+    recipeId: string;
+    recipeTitle: string;
+    isCurrent: boolean;
+  };
 }
 
 export interface Message {
@@ -46,6 +56,12 @@ export interface ChatState {
   hasHydrated: boolean;
   conversations: Conversation[];
   activeConversationId: string | null;
+  /** Last selected general conversation, kept separate from recipe context. */
+  activeGeneralConversationId: string | null;
+  /** Last server-reconciled selection for each recipe. */
+  activeRecipeConversationIds: Record<string, string>;
+  /** Recipe selections confirmed by the server during this browser session. */
+  confirmedRecipeConversationIds: Record<string, string>;
   messagesByConversationId: Record<string, Message[]>;
   isLoading: boolean;
   /** Whether an assistant response is currently streaming */
@@ -64,7 +80,10 @@ export interface ChatState {
   loadMessages: (conversationId: string) => Promise<void>;
   loadMoreMessages: (conversationId: string) => Promise<void>;
   createConversation: (title?: string) => Promise<void>;
-  switchConversation: (id: string) => Promise<void>;
+  resumeRecipeConversation: (recipeId: string) => Promise<void>;
+  createRecipeConversation: (recipeId: string) => Promise<void>;
+  /** Resolves true only when this request selected the conversation. */
+  switchConversation: (id: string) => Promise<boolean>;
   deleteConversation: (id: string) => Promise<void>;
   sendMessage: (text: string) => Promise<void>;
   cancelPendingAssistantReply: () => void;
@@ -76,6 +95,63 @@ export interface ChatState {
 }
 
 const MAX_MESSAGES_PER_CONVERSATION = 200;
+const CHAT_STORE_VERSION = 1;
+let recipeResumeRequestSequence = 0;
+const recipeSelectionQueues = new Map<string, Promise<unknown>>();
+let pendingRecipeCreate: {
+  recipeId: string;
+  requestSequence: number;
+  promise: Promise<void>;
+} | null = null;
+
+/**
+ * Resume, create, and select each change the server's current thread for a
+ * recipe, so they run one at a time per recipe in issue order. Combined with
+ * the latest-request guard, the last-issued selection is both applied locally
+ * and current on the server.
+ */
+function enqueueRecipeSelection<T>(
+  recipeId: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = recipeSelectionQueues.get(recipeId);
+  const result = previous ? previous.then(operation, operation) : operation();
+  const settled = result.catch(() => undefined);
+  recipeSelectionQueues.set(recipeId, settled);
+  void settled.then(() => {
+    if (recipeSelectionQueues.get(recipeId) === settled) {
+      recipeSelectionQueues.delete(recipeId);
+    }
+  });
+  return result;
+}
+
+type PersistedChatState = Partial<ChatState>;
+
+/**
+ * Chats persisted before `isLocalOnly` existed have no marker. A general chat
+ * without messages was never sent to the server, so keep it as a local draft
+ * instead of dropping it on the first list refresh.
+ */
+function migratePersistedChatState(
+  persistedState: unknown,
+  version: number
+): PersistedChatState {
+  const state = (persistedState ?? {}) as PersistedChatState;
+  if (version >= 1 || !Array.isArray(state.conversations)) return state;
+
+  const messagesByConversationId = state.messagesByConversationId ?? {};
+  return {
+    ...state,
+    conversations: state.conversations.map((conversation) =>
+      !conversation.recipeContext &&
+      conversation.isLocalOnly === undefined &&
+      (messagesByConversationId[conversation.id]?.length ?? 0) === 0
+        ? { ...conversation, isLocalOnly: true }
+        : conversation
+    ),
+  };
+}
 
 function getNowIso(): string {
   return new Date().toISOString();
@@ -91,6 +167,239 @@ function createId(): string {
 function capMessages(messages: Message[]): Message[] {
   if (messages.length <= MAX_MESSAGES_PER_CONVERSATION) return messages;
   return messages.slice(-MAX_MESSAGES_PER_CONVERSATION);
+}
+
+function toConversation(summary: ConversationSummary): Conversation {
+  return {
+    id: summary.id,
+    title: summary.title,
+    createdAt: summary.created_at,
+    lastMessageAt: summary.last_activity_at,
+    ...(summary.recipe_context
+      ? {
+          recipeContext: {
+            recipeId: summary.recipe_context.recipe_id,
+            recipeTitle: summary.recipe_context.recipe_title,
+            isCurrent: summary.recipe_context.is_current,
+          },
+        }
+      : {}),
+  };
+}
+
+function mergeConversationSummary(
+  conversations: Conversation[],
+  summary: ConversationSummary
+): Conversation[] {
+  const incoming = toConversation(summary);
+  const recipeId = incoming.recipeContext?.recipeId;
+  const withoutIncoming = conversations
+    .filter((conversation) => conversation.id !== incoming.id)
+    .map((conversation) => {
+      if (
+        recipeId &&
+        incoming.recipeContext?.isCurrent &&
+        conversation.recipeContext?.recipeId === recipeId
+      ) {
+        return {
+          ...conversation,
+          recipeContext: {
+            ...conversation.recipeContext,
+            isCurrent: false,
+          },
+        };
+      }
+      return conversation;
+    });
+
+  return [incoming, ...withoutIncoming];
+}
+
+function normalizeConversationSummaries(
+  summaries: ConversationSummary[]
+): Conversation[] {
+  return summaries.reduce<Conversation[]>(
+    (merged, summary) =>
+      mergeConversationSummary(merged, summary).sort(
+        (left, right) =>
+          Date.parse(right.lastMessageAt) - Date.parse(left.lastMessageAt)
+      ),
+    []
+  );
+}
+
+function reconcileLoadedConversationState(
+  state: ChatState,
+  serverConversations: Conversation[]
+): Pick<
+  ChatState,
+  | 'conversations'
+  | 'activeConversationId'
+  | 'activeGeneralConversationId'
+  | 'activeRecipeConversationIds'
+  | 'confirmedRecipeConversationIds'
+  | 'messagesByConversationId'
+  | 'hasPreviousMessagesByConversationId'
+> {
+  const serverRecipeConversationIds = Object.fromEntries(
+    serverConversations
+      .filter(
+        (
+          conversation
+        ): conversation is Conversation & {
+          recipeContext: NonNullable<Conversation['recipeContext']>;
+        } => conversation.recipeContext?.isCurrent === true
+      )
+      .map((conversation) => [
+        conversation.recipeContext.recipeId,
+        conversation.id,
+      ])
+  );
+  const serverConversationIds = new Set(
+    serverConversations.map((conversation) => conversation.id)
+  );
+  const staleRecipeConversationIds = new Set(
+    state.conversations
+      .filter(
+        (conversation) =>
+          conversation.recipeContext &&
+          !serverConversationIds.has(conversation.id)
+      )
+      .map((conversation) => conversation.id)
+  );
+  Object.values(state.activeRecipeConversationIds).forEach((conversationId) => {
+    if (!serverConversationIds.has(conversationId)) {
+      staleRecipeConversationIds.add(conversationId);
+    }
+  });
+  Object.values(state.confirmedRecipeConversationIds).forEach(
+    (conversationId) => {
+      if (!serverConversationIds.has(conversationId)) {
+        staleRecipeConversationIds.add(conversationId);
+      }
+    }
+  );
+  const preservedGeneralDraftIds = new Set(
+    [state.activeConversationId, state.activeGeneralConversationId].filter(
+      (conversationId): conversationId is string => Boolean(conversationId)
+    )
+  );
+  const preservedGeneralDrafts = state.conversations.filter(
+    (conversation) =>
+      conversation.isLocalOnly &&
+      !conversation.recipeContext &&
+      preservedGeneralDraftIds.has(conversation.id) &&
+      !serverConversationIds.has(conversation.id)
+  );
+  const conversations = [...preservedGeneralDrafts, ...serverConversations];
+  const conversationIds = new Set(
+    conversations.map((conversation) => conversation.id)
+  );
+  const generalConversationIds = new Set(
+    conversations
+      .filter((conversation) => !conversation.recipeContext)
+      .map((conversation) => conversation.id)
+  );
+  const activeConversation = state.conversations.find(
+    (conversation) => conversation.id === state.activeConversationId
+  );
+  const activeRecipeId =
+    activeConversation?.recipeContext?.recipeId ??
+    Object.entries(state.activeRecipeConversationIds).find(
+      ([, conversationId]) => conversationId === state.activeConversationId
+    )?.[0];
+  const activeConversationId = activeRecipeId
+    ? (serverRecipeConversationIds[activeRecipeId] ?? null)
+    : state.activeConversationId &&
+        conversationIds.has(state.activeConversationId)
+      ? state.activeConversationId
+      : null;
+  const confirmedRecipeConversationIds: Record<string, string> =
+    Object.fromEntries(
+      Object.entries(state.confirmedRecipeConversationIds).filter(
+        ([recipeId, conversationId]) =>
+          serverRecipeConversationIds[recipeId] === conversationId
+      )
+    );
+  if (activeRecipeId && activeConversationId) {
+    confirmedRecipeConversationIds[activeRecipeId] = activeConversationId;
+  }
+  const messagesByConversationId = { ...state.messagesByConversationId };
+  const hasPreviousMessagesByConversationId = {
+    ...state.hasPreviousMessagesByConversationId,
+  };
+  staleRecipeConversationIds.forEach((conversationId) => {
+    delete messagesByConversationId[conversationId];
+    delete hasPreviousMessagesByConversationId[conversationId];
+  });
+
+  return {
+    conversations,
+    activeRecipeConversationIds: serverRecipeConversationIds,
+    confirmedRecipeConversationIds,
+    messagesByConversationId,
+    hasPreviousMessagesByConversationId,
+    activeConversationId,
+    activeGeneralConversationId:
+      state.activeGeneralConversationId &&
+      generalConversationIds.has(state.activeGeneralConversationId)
+        ? state.activeGeneralConversationId
+        : state.activeConversationId &&
+            generalConversationIds.has(state.activeConversationId)
+          ? state.activeConversationId
+          : null,
+  };
+}
+
+function removeRecipeContextState(
+  state: ChatState,
+  recipeId: string,
+  error: string
+): Partial<ChatState> {
+  const inaccessibleIds = new Set(
+    state.conversations
+      .filter(
+        (conversation) => conversation.recipeContext?.recipeId === recipeId
+      )
+      .map((conversation) => conversation.id)
+  );
+  const messagesByConversationId = { ...state.messagesByConversationId };
+  const hasPreviousMessagesByConversationId = {
+    ...state.hasPreviousMessagesByConversationId,
+  };
+  inaccessibleIds.forEach((id) => {
+    delete messagesByConversationId[id];
+    delete hasPreviousMessagesByConversationId[id];
+  });
+  const activeRecipeConversationIds = {
+    ...state.activeRecipeConversationIds,
+  };
+  delete activeRecipeConversationIds[recipeId];
+  const confirmedRecipeConversationIds = {
+    ...state.confirmedRecipeConversationIds,
+  };
+  delete confirmedRecipeConversationIds[recipeId];
+
+  return {
+    conversations: state.conversations.filter(
+      (conversation) => !inaccessibleIds.has(conversation.id)
+    ),
+    messagesByConversationId,
+    hasPreviousMessagesByConversationId,
+    activeRecipeConversationIds,
+    confirmedRecipeConversationIds,
+    // Keep the remembered general selection separate, but do not display it
+    // as a success-shaped fallback for a failed contextual open.
+    activeConversationId: null,
+    error,
+  };
+}
+
+function isConfirmedInaccessible(error: unknown): boolean {
+  return (
+    error instanceof ApiErrorImpl &&
+    (error.status === 403 || error.status === 404)
+  );
 }
 
 /**
@@ -120,6 +429,9 @@ export const useChatStore = create<ChatState>()(
       hasHydrated: false,
       conversations: [],
       activeConversationId: null,
+      activeGeneralConversationId: null,
+      activeRecipeConversationIds: {},
+      confirmedRecipeConversationIds: {},
       messagesByConversationId: {},
       hasPreviousMessagesByConversationId: {},
       isLoading: false,
@@ -132,15 +444,12 @@ export const useChatStore = create<ChatState>()(
         set({ isLoading: true, error: null });
         try {
           const response = await fetchConversations();
-          const conversations: Conversation[] = response.conversations.map(
-            (c) => ({
-              id: c.id,
-              title: c.title,
-              createdAt: c.created_at,
-              lastMessageAt: c.last_activity_at,
-            })
+          const conversations = normalizeConversationSummaries(
+            response.conversations
           );
-          set({ conversations });
+          set((state) =>
+            reconcileLoadedConversationState(state, conversations)
+          );
         } catch (err) {
           logger.error('Failed to load conversations:', err);
           set({ error: 'Failed to load conversations' });
@@ -254,6 +563,7 @@ export const useChatStore = create<ChatState>()(
       },
 
       createConversation: async (title?: string) => {
+        recipeResumeRequestSequence += 1;
         // Create a local conversation optimistically
         // The backend will create the real one on first message
         const now = getNowIso();
@@ -275,11 +585,13 @@ export const useChatStore = create<ChatState>()(
           title: conversationTitle,
           createdAt: now,
           lastMessageAt: now,
+          isLocalOnly: true,
         };
 
         set((state) => ({
           conversations: [newConversation, ...state.conversations],
           activeConversationId: newConversation.id,
+          activeGeneralConversationId: newConversation.id,
           messagesByConversationId: {
             ...state.messagesByConversationId,
             [newConversation.id]: [],
@@ -287,54 +599,341 @@ export const useChatStore = create<ChatState>()(
         }));
       },
 
+      resumeRecipeConversation: async (recipeId: string) => {
+        const requestSequence = ++recipeResumeRequestSequence;
+        set((state) => {
+          const confirmedRecipeConversationIds = {
+            ...state.confirmedRecipeConversationIds,
+          };
+          delete confirmedRecipeConversationIds[recipeId];
+          return {
+            isLoading: true,
+            error: null,
+            confirmedRecipeConversationIds,
+          };
+        });
+        try {
+          // The server is authoritative even when persisted state names a
+          // different conversation for this recipe.
+          const summary = await enqueueRecipeSelection(recipeId, () =>
+            apiResumeRecipeConversation(recipeId)
+          );
+          if (requestSequence !== recipeResumeRequestSequence) return;
+          set((state) => ({
+            conversations: mergeConversationSummary(
+              state.conversations,
+              summary
+            ),
+            activeConversationId: summary.id,
+            activeRecipeConversationIds: {
+              ...state.activeRecipeConversationIds,
+              [recipeId]: summary.id,
+            },
+            confirmedRecipeConversationIds: {
+              ...state.confirmedRecipeConversationIds,
+              [recipeId]: summary.id,
+            },
+          }));
+          await get().loadMessages(summary.id);
+        } catch (err) {
+          if (requestSequence !== recipeResumeRequestSequence) return;
+          logger.error('Failed to resume recipe conversation:', err);
+          if (isConfirmedInaccessible(err)) {
+            set((state) =>
+              removeRecipeContextState(
+                state,
+                recipeId,
+                'This recipe conversation is no longer available. Return to the recipe and try again.'
+              )
+            );
+          } else {
+            set({
+              error:
+                'Unable to resume this recipe conversation. Please try again.',
+            });
+          }
+        } finally {
+          if (requestSequence === recipeResumeRequestSequence) {
+            set({ isLoading: false });
+          }
+        }
+      },
+
+      createRecipeConversation: (recipeId: string) => {
+        // Repeated clicks for the same recipe share the in-flight create
+        // instead of creating extra empty threads.
+        if (
+          pendingRecipeCreate?.recipeId === recipeId &&
+          pendingRecipeCreate.requestSequence === recipeResumeRequestSequence
+        ) {
+          return pendingRecipeCreate.promise;
+        }
+
+        const requestSequence = ++recipeResumeRequestSequence;
+        const isLatestRequest = () =>
+          requestSequence === recipeResumeRequestSequence;
+        const promise = (async () => {
+          set({ isLoading: true, error: null });
+          try {
+            const summary = await enqueueRecipeSelection(recipeId, () =>
+              apiCreateRecipeConversation(recipeId)
+            );
+            if (!isLatestRequest()) return;
+            set((state) => ({
+              conversations: mergeConversationSummary(
+                state.conversations,
+                summary
+              ),
+              activeConversationId: summary.id,
+              activeRecipeConversationIds: {
+                ...state.activeRecipeConversationIds,
+                [recipeId]: summary.id,
+              },
+              confirmedRecipeConversationIds: {
+                ...state.confirmedRecipeConversationIds,
+                [recipeId]: summary.id,
+              },
+              messagesByConversationId: {
+                ...state.messagesByConversationId,
+                [summary.id]: [],
+              },
+              hasPreviousMessagesByConversationId: {
+                ...state.hasPreviousMessagesByConversationId,
+                [summary.id]: false,
+              },
+            }));
+          } catch (err) {
+            if (!isLatestRequest()) return;
+            logger.error('Failed to create recipe conversation:', err);
+            if (isConfirmedInaccessible(err)) {
+              set((state) =>
+                removeRecipeContextState(
+                  state,
+                  recipeId,
+                  'Unable to create a conversation for this recipe. Return to the recipe and try again.'
+                )
+              );
+            } else {
+              set({
+                error:
+                  'Unable to create a conversation for this recipe. Please try again.',
+              });
+            }
+          } finally {
+            if (isLatestRequest()) {
+              set({ isLoading: false });
+            }
+            if (pendingRecipeCreate?.requestSequence === requestSequence) {
+              pendingRecipeCreate = null;
+            }
+          }
+        })();
+        pendingRecipeCreate = { recipeId, requestSequence, promise };
+        return promise;
+      },
+
       switchConversation: async (id: string) => {
-        set({ activeConversationId: id, error: null });
+        const requestSequence = ++recipeResumeRequestSequence;
+        const isLatestRequest = () =>
+          requestSequence === recipeResumeRequestSequence;
+        const conversation = get().conversations.find(
+          (candidate) => candidate.id === id
+        );
+        const recipeId = conversation?.recipeContext?.recipeId;
+
+        if (recipeId) {
+          set({ isLoading: true, error: null });
+          try {
+            // Selecting contextual history is a server mutation and must
+            // complete before its messages become active.
+            const summary = await enqueueRecipeSelection(recipeId, () =>
+              apiSelectRecipeConversation(id)
+            );
+            if (!isLatestRequest()) return false;
+            set((state) => ({
+              conversations: mergeConversationSummary(
+                state.conversations,
+                summary
+              ),
+              activeConversationId: summary.id,
+              activeRecipeConversationIds: {
+                ...state.activeRecipeConversationIds,
+                [recipeId]: summary.id,
+              },
+              confirmedRecipeConversationIds: {
+                ...state.confirmedRecipeConversationIds,
+                [recipeId]: summary.id,
+              },
+            }));
+          } catch (err) {
+            if (!isLatestRequest()) return false;
+            logger.error('Failed to select recipe conversation:', err);
+            if (isConfirmedInaccessible(err)) {
+              set((state) => {
+                const removed = removeRecipeContextState(
+                  state,
+                  recipeId,
+                  'This recipe conversation is no longer available. Return to the recipe and try again.'
+                );
+                // A failed selection leaves the previous thread in place
+                // unless it belonged to the inaccessible recipe.
+                const previousStillAvailable = removed.conversations?.some(
+                  (candidate) => candidate.id === state.activeConversationId
+                );
+                return previousStillAvailable
+                  ? {
+                      ...removed,
+                      activeConversationId: state.activeConversationId,
+                    }
+                  : removed;
+              });
+            } else {
+              set({
+                error:
+                  'Unable to select this recipe conversation. Please try again.',
+              });
+            }
+            return false;
+          } finally {
+            if (isLatestRequest()) {
+              set({ isLoading: false });
+            }
+          }
+        } else {
+          set({
+            activeConversationId: id,
+            activeGeneralConversationId: id,
+            error: null,
+          });
+        }
         // Always reload from server to ensure consistency across devices.
         // Cached messages remain visible while the fresh load completes.
         await get().loadMessages(id);
+        return isLatestRequest();
       },
 
       deleteConversation: async (id: string) => {
         set({ isLoading: true, error: null });
+        let deletedOnServer = false;
+        const deletedConversation = get().conversations.find(
+          (conversation) => conversation.id === id
+        );
+        const deletedRecipeId = deletedConversation?.recipeContext?.recipeId;
+        const wasActive = get().activeConversationId === id;
         try {
-          // Call API to delete the conversation
           await apiDeleteConversation(id);
+          deletedOnServer = true;
 
-          // Remove conversation from local state
+          if (deletedRecipeId) {
+            recipeResumeRequestSequence += 1;
+            const resumedConversation = wasActive
+              ? await apiResumeRecipeConversation(deletedRecipeId)
+              : null;
+            const response = await fetchConversations();
+            let conversations = normalizeConversationSummaries(
+              response.conversations
+            );
+            if (resumedConversation) {
+              conversations = mergeConversationSummary(
+                conversations,
+                resumedConversation
+              );
+            }
+            const currentRecipeConversation = resumedConversation
+              ? toConversation(resumedConversation)
+              : conversations.find(
+                  (conversation) =>
+                    conversation.recipeContext?.recipeId === deletedRecipeId &&
+                    conversation.recipeContext.isCurrent
+                );
+
+            set((state) => {
+              const reconciled = reconcileLoadedConversationState(
+                state,
+                conversations
+              );
+              const { [id]: _removedMessages, ...messagesByConversationId } =
+                state.messagesByConversationId;
+              const {
+                [id]: _removedPagination,
+                ...hasPreviousMessagesByConversationId
+              } = state.hasPreviousMessagesByConversationId;
+
+              return {
+                ...reconciled,
+                activeConversationId: wasActive
+                  ? (currentRecipeConversation?.id ?? null)
+                  : reconciled.activeConversationId,
+                confirmedRecipeConversationIds:
+                  wasActive && currentRecipeConversation
+                    ? {
+                        ...state.confirmedRecipeConversationIds,
+                        [deletedRecipeId]: currentRecipeConversation.id,
+                      }
+                    : state.confirmedRecipeConversationIds,
+                messagesByConversationId,
+                hasPreviousMessagesByConversationId,
+              };
+            });
+
+            if (wasActive && currentRecipeConversation) {
+              await get().loadMessages(currentRecipeConversation.id);
+            }
+            return;
+          }
+
+          let nextActiveConversationId: string | null = null;
+          let shouldCreateGeneralConversation = false;
           set((state) => {
             const updatedConversations = state.conversations.filter(
               (c) => c.id !== id
             );
-
-            // Remove messages for this conversation
-            const { [id]: _removed, ...remainingMessages } =
+            const remainingGeneralConversation =
+              updatedConversations.find(
+                (conversation) => !conversation.recipeContext
+              ) ?? null;
+            const { [id]: _removedMessages, ...messagesByConversationId } =
               state.messagesByConversationId;
-
-            // If the deleted conversation was active, switch to another one or create new
-            let newActiveId = state.activeConversationId;
-            if (state.activeConversationId === id) {
-              if (updatedConversations.length > 0) {
-                // Switch to the most recent conversation
-                newActiveId = updatedConversations[0].id;
-              } else {
-                // No conversations left, will create a new one
-                newActiveId = null;
-              }
-            }
+            const {
+              [id]: _removedPagination,
+              ...hasPreviousMessagesByConversationId
+            } = state.hasPreviousMessagesByConversationId;
+            const activeGeneralConversationId =
+              state.activeGeneralConversationId === id
+                ? (remainingGeneralConversation?.id ?? null)
+                : state.activeGeneralConversationId;
+            nextActiveConversationId =
+              state.activeConversationId === id
+                ? activeGeneralConversationId
+                : state.activeConversationId;
+            shouldCreateGeneralConversation =
+              state.activeConversationId === id &&
+              nextActiveConversationId === null;
 
             return {
               conversations: updatedConversations,
-              messagesByConversationId: remainingMessages,
-              activeConversationId: newActiveId,
+              messagesByConversationId,
+              hasPreviousMessagesByConversationId,
+              activeConversationId: nextActiveConversationId,
+              activeGeneralConversationId,
             };
           });
 
-          // If there were no conversations left, create a new one
-          if (get().conversations.length === 0) {
+          if (shouldCreateGeneralConversation) {
             await get().createConversation();
           }
         } catch (err) {
           logger.error('Failed to delete conversation:', err);
+          if (deletedOnServer && deletedRecipeId) {
+            set((state) =>
+              removeRecipeContextState(
+                state,
+                deletedRecipeId,
+                'The conversation was deleted, but recipe conversations could not be refreshed. Return to the recipe and try again.'
+              )
+            );
+            return;
+          }
           set({ error: 'Failed to delete conversation' });
           throw err;
         } finally {
@@ -900,9 +1499,14 @@ export const useChatStore = create<ChatState>()(
     }),
     {
       name: 'chat',
+      version: CHAT_STORE_VERSION,
+      migrate: (persistedState, version) =>
+        migratePersistedChatState(persistedState, version) as ChatState,
       partialize: (state) => ({
         conversations: state.conversations,
         activeConversationId: state.activeConversationId,
+        activeGeneralConversationId: state.activeGeneralConversationId,
+        activeRecipeConversationIds: state.activeRecipeConversationIds,
         messagesByConversationId: state.messagesByConversationId,
         hasPreviousMessagesByConversationId:
           state.hasPreviousMessagesByConversationId,

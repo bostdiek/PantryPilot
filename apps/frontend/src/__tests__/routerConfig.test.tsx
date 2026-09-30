@@ -1,10 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchRoutes, type RouteObject } from 'react-router-dom';
+
+const { mockCreateBrowserRouter } = vi.hoisted(() => ({
+  mockCreateBrowserRouter: vi.fn((_routes: unknown[]) => ({})),
+}));
 
 // Prevent createBrowserRouter side-effects when importing the router module
 // by mocking only createBrowserRouter to a noop while preserving other exports.
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
-  return { ...actual, createBrowserRouter: () => ({}) } as any;
+  return {
+    ...actual,
+    createBrowserRouter: mockCreateBrowserRouter,
+  } as any;
 });
 
 // Mock logger to avoid noisy logs
@@ -55,6 +63,13 @@ import {
   recipeDetailLoader,
   recipesLoader,
 } from '../routerConfig';
+
+const configuredRoutes = mockCreateBrowserRouter.mock.calls[0]?.[0] as Array<{
+  children?: Array<{
+    path?: string;
+    children?: Array<{ path?: string; loader?: unknown }>;
+  }>;
+}>;
 
 /**
  * Helper function to assert that a result is a redirect to the clean /recipes/new URL
@@ -192,6 +207,20 @@ describe('routerConfig loaders', () => {
     const res = await recipeDetailLoader({ params: { id: 'r2' } } as any);
     expect(fetchByIdMock).toHaveBeenCalledWith('r2');
     expect(res).toEqual({ id: 'r2' });
+  });
+
+  it.each([
+    ['/recipes/recipe-42', 'recipes/:id', { id: 'recipe-42' }],
+    ['/assistant', 'assistant', {}],
+  ])('matches %s to the protected feature route', (pathname, path, params) => {
+    const matches = matchRoutes(configuredRoutes as RouteObject[], pathname);
+
+    expect(matches).not.toBeNull();
+    expect(matches?.at(-1)?.route.path).toBe(path);
+    expect(matches?.at(-1)?.params).toEqual(params);
+    if (path === 'recipes/:id') {
+      expect(matches?.at(-1)?.route.loader).toBe(recipeDetailLoader);
+    }
   });
 
   it('mealPlanLoader loads week and conditional recipes', async () => {

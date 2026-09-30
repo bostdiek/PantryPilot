@@ -35,7 +35,9 @@ async def chat_retention_db() -> AsyncGenerator[AsyncSession, None]:
         await conn.exec_driver_sql(
             "CREATE TABLE chat_conversations ("
             "id TEXT PRIMARY KEY, "
-            "user_id TEXT NOT NULL)"
+            "user_id TEXT NOT NULL, "
+            "recipe_id TEXT, "
+            "is_current_for_recipe BOOLEAN NOT NULL DEFAULT FALSE)"
         )
         await conn.exec_driver_sql(
             """
@@ -109,6 +111,22 @@ async def test_retention_deletes_messages_older_than_ttl(
     old = now - timedelta(days=CHAT_MESSAGE_TTL_DAYS + 1)
     recent = now - timedelta(days=1)
 
+    await db.execute(
+        sa.text(
+            """
+            INSERT INTO chat_conversations (
+                id, user_id, recipe_id, is_current_for_recipe
+            ) VALUES (
+                :id, :user_id, :recipe_id, TRUE
+            )
+            """
+        ),
+        {
+            "id": conversation_id.hex,
+            "user_id": user_id.hex,
+            "recipe_id": uuid.uuid4().hex,
+        },
+    )
     await _seed_message(
         db,
         message_id=uuid.uuid4(),
@@ -129,6 +147,20 @@ async def test_retention_deletes_messages_older_than_ttl(
 
     assert deleted == 1
     assert await _count_messages(db) == 1
+    conversation = (
+        await db.execute(
+            sa.text(
+                """
+                SELECT recipe_id, is_current_for_recipe
+                FROM chat_conversations
+                WHERE id = :id
+                """
+            ),
+            {"id": conversation_id.hex},
+        )
+    ).one()
+    assert conversation.recipe_id is not None
+    assert bool(conversation.is_current_for_recipe) is True
 
 
 @pytest.mark.asyncio

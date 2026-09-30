@@ -17,6 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .chat_messages import ChatMessage
     from .chat_pending_actions import ChatPendingAction
     from .chat_tool_calls import ChatToolCall
+    from .recipes_names import Recipe
     from .users import User
 
 
@@ -31,6 +32,18 @@ class ChatConversation(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    recipe_id: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("recipe_names.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    is_current_for_recipe: Mapped[bool] = mapped_column(
+        sa.Boolean,
+        nullable=False,
+        default=False,
+        server_default=sa.false(),
     )
 
     title: Mapped[str | None] = mapped_column(
@@ -89,6 +102,10 @@ class ChatConversation(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="chat_conversations")
+    recipe: Mapped[Recipe | None] = relationship(
+        "Recipe",
+        back_populates="chat_conversations",
+    )
     messages: Mapped[list[ChatMessage]] = relationship(
         "ChatMessage",
         back_populates="conversation",
@@ -110,3 +127,24 @@ class ChatConversation(Base):
         back_populates="conversation",
         cascade="all, delete-orphan",
     )
+
+
+sa.Index(
+    "ix_chat_conversations_user_recipe",
+    ChatConversation.user_id,
+    ChatConversation.recipe_id,
+)
+sa.Index(
+    "uq_chat_conversations_current_recipe",
+    ChatConversation.user_id,
+    ChatConversation.recipe_id,
+    unique=True,
+    postgresql_where=sa.and_(
+        ChatConversation.recipe_id.is_not(None),
+        ChatConversation.is_current_for_recipe,
+    ),
+    sqlite_where=sa.and_(
+        ChatConversation.recipe_id.is_not(None),
+        ChatConversation.is_current_for_recipe,
+    ),
+)

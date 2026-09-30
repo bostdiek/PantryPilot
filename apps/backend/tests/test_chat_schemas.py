@@ -6,13 +6,48 @@ from uuid import uuid4
 
 import pytest
 
-from schemas.chat_streaming import MAX_SSE_EVENT_BYTES, ChatSseEvent, ChatStreamRequest
+from schemas.chat_streaming import (
+    MAX_SSE_EVENT_BYTES,
+    ChatSseEvent,
+    ChatStreamRequest,
+    ConversationSummary,
+    RecipeConversationContext,
+)
 
 
 def test_chat_stream_request_validation() -> None:
     """Test that ChatStreamRequest validates content properly."""
     request = ChatStreamRequest(content="Hello Nibble!")
     assert request.content == "Hello Nibble!"
+
+
+def test_conversation_summary_recipe_context_contract() -> None:
+    """Conversation summaries distinguish contextual and general threads."""
+    recipe_id = uuid4()
+    contextual = ConversationSummary(
+        id=uuid4(),
+        title="Recipe chat",
+        created_at="2026-09-28T12:00:00+00:00",
+        last_activity_at="2026-09-28T12:00:00+00:00",
+        recipe_context=RecipeConversationContext(
+            recipe_id=recipe_id,
+            recipe_title="Tomato Soup",
+            is_current=True,
+        ),
+    )
+    general = ConversationSummary(
+        id=uuid4(),
+        title="General chat",
+        created_at="2026-09-28T12:00:00+00:00",
+        last_activity_at="2026-09-28T12:00:00+00:00",
+    )
+
+    assert contextual.model_dump(mode="json")["recipe_context"] == {
+        "recipe_id": str(recipe_id),
+        "recipe_title": "Tomato Soup",
+        "is_current": True,
+    }
+    assert general.model_dump(mode="json")["recipe_context"] is None
 
 
 def test_chat_sse_event_creation() -> None:

@@ -1,5 +1,11 @@
-import { useMemo, useState, type FC } from 'react';
-import { Link, useLoaderData, useNavigate, useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState, type FC } from 'react';
+import {
+  Link,
+  useLoaderData,
+  useLocation,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Container } from '../components/ui/Container';
@@ -9,10 +15,44 @@ import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import type { Recipe } from '../types/Recipe';
 
+const NIBBLE_TRIGGER_ID = 'recipe-nibble-trigger';
+
+interface RecipeDetailLocationState {
+  recipeRestoration?: {
+    scrollY: number;
+    triggerId: string;
+  };
+}
+
+function replaceCurrentHistoryRestoration(
+  recipeRestoration: NonNullable<RecipeDetailLocationState['recipeRestoration']>
+) {
+  const historyState =
+    window.history.state && typeof window.history.state === 'object'
+      ? (window.history.state as Record<string, unknown>)
+      : {};
+  const userState =
+    historyState.usr && typeof historyState.usr === 'object'
+      ? (historyState.usr as Record<string, unknown>)
+      : {};
+
+  window.history.replaceState(
+    {
+      ...historyState,
+      usr: {
+        ...userState,
+        recipeRestoration,
+      },
+    },
+    ''
+  );
+}
+
 const RecipesDetail: FC = () => {
   // Get recipe data from loader as fallback
   const loaderRecipe = useLoaderData() as Recipe | null;
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
 
   // Get recipe from store (primary source for latest data)
@@ -34,6 +74,20 @@ const RecipesDetail: FC = () => {
 
   // Store actions
   const { deleteRecipe, duplicateRecipe, isLoading } = useRecipeStore();
+
+  useEffect(() => {
+    const state = location.state as RecipeDetailLocationState | null;
+    const restoration = state?.recipeRestoration;
+    if (!recipe || !restoration) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: restoration.scrollY });
+      document.getElementById(restoration.triggerId)?.focus();
+      navigate(location.pathname, { replace: true, state: null });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [location.pathname, location.state, navigate, recipe]);
 
   // Handle delete action
   const handleDelete = async () => {
@@ -77,6 +131,27 @@ const RecipesDetail: FC = () => {
     }
   };
 
+  const handleAskNibble = (recipeToDiscuss: Recipe) => {
+    const recipeOrigin = {
+      pathname: location.pathname,
+      scrollY: window.scrollY,
+      triggerId: NIBBLE_TRIGGER_ID,
+    };
+    replaceCurrentHistoryRestoration({
+      scrollY: recipeOrigin.scrollY,
+      triggerId: recipeOrigin.triggerId,
+    });
+    navigate('/assistant', {
+      state: {
+        recipeContext: {
+          recipeId: recipeToDiscuss.id,
+          recipeTitle: recipeToDiscuss.title,
+        },
+        recipeOrigin,
+      },
+    });
+  };
+
   // Show loading state if recipe is being fetched
   if (isLoading && !recipe) {
     return (
@@ -97,7 +172,7 @@ const RecipesDetail: FC = () => {
   if (!recipe) {
     return (
       <Container>
-        <div className="py-8">
+        <div className="py-8 pb-24">
           <Card variant="elevated" className="p-6">
             <div className="py-8 text-center">
               <h1 className="mb-4 text-2xl font-bold text-gray-900">
@@ -118,14 +193,14 @@ const RecipesDetail: FC = () => {
 
   return (
     <Container>
-      <div className="py-8">
+      <div className="pt-8 pb-[calc(5rem+env(safe-area-inset-bottom))]">
         <article>
           {/* Header with Actions */}
           <header className="mb-6">
-            <Card variant="elevated" className="p-6">
-              <div className="flex items-start justify-between gap-4">
+            <Card variant="elevated" className="p-4 sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <h1 className="mb-2 text-3xl font-bold text-gray-900">
+                  <h1 className="mb-2 text-2xl font-bold text-gray-900 sm:text-3xl">
                     {recipe.title}
                   </h1>
                   {recipe.description && (
@@ -134,7 +209,7 @@ const RecipesDetail: FC = () => {
                     </p>
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:shrink-0">
                   <Button
                     variant="outline"
                     size="md"
@@ -383,6 +458,18 @@ const RecipesDetail: FC = () => {
             }}
           />
         </Dialog>
+
+        {loaderRecipe ? (
+          <button
+            id={NIBBLE_TRIGGER_ID}
+            type="button"
+            onClick={() => handleAskNibble(loaderRecipe)}
+            aria-label={`Ask Nibble about ${loaderRecipe.title}`}
+            className="fixed right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] z-40 inline-flex min-h-12 min-w-12 items-center justify-center rounded-full bg-orange-600 px-5 py-3 text-base font-semibold text-white shadow-lg hover:bg-orange-700 focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:outline-none"
+          >
+            Ask Nibble
+          </button>
+        ) : null}
       </div>
     </Container>
   );

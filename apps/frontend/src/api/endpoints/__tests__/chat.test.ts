@@ -30,9 +30,12 @@ import { ApiErrorImpl } from '../../../types/api';
 import {
   acceptAction,
   cancelAction,
+  createRecipeConversation,
   deleteConversation,
   fetchConversations,
   fetchMessages,
+  resumeRecipeConversation,
+  selectRecipeConversation,
   streamChatMessage,
 } from '../chat';
 
@@ -100,6 +103,9 @@ describe('chat API endpoints', () => {
       expect(body.client_context).toBeDefined();
       expect(body.client_context.user_timezone).toBeDefined();
       expect(body.client_context.current_datetime).toBeDefined();
+      expect(body).not.toHaveProperty('recipe_context');
+      expect(body.client_context).not.toHaveProperty('recipe');
+      expect(body.client_context).not.toHaveProperty('recipe_content');
       expect(callbacks.onDone).toHaveBeenCalled();
     });
 
@@ -847,9 +853,21 @@ describe('chat API endpoints', () => {
             title: 'Test conversation',
             created_at: '2026-01-17T10:00:00Z',
             last_activity_at: '2026-01-17T11:00:00Z',
+            recipe_context: {
+              recipe_id: 'recipe-1',
+              recipe_title: 'Tomato Soup',
+              is_current: true,
+            },
+          },
+          {
+            id: 'conv-2',
+            title: 'General conversation',
+            created_at: '2026-01-16T10:00:00Z',
+            last_activity_at: '2026-01-16T11:00:00Z',
+            recipe_context: null,
           },
         ],
-        total: 1,
+        total: 2,
         has_more: false,
       };
 
@@ -868,6 +886,12 @@ describe('chat API endpoints', () => {
         })
       );
       expect(result).toEqual(mockResponse);
+      expect(result.conversations[0].recipe_context).toEqual({
+        recipe_id: 'recipe-1',
+        recipe_title: 'Tomato Soup',
+        is_current: true,
+      });
+      expect(result.conversations[1].recipe_context).toBeNull();
     });
 
     it('fetches conversations with custom pagination', async () => {
@@ -904,6 +928,188 @@ describe('chat API endpoints', () => {
         status: 500,
         message: 'DB error',
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Recipe conversation lifecycle
+  // ---------------------------------------------------------------------------
+
+  describe('recipe conversation lifecycle', () => {
+    const contextualSummary = {
+      id: 'conv-recipe-1',
+      title: 'Tomato Soup',
+      created_at: '2026-09-29T10:00:00Z',
+      last_activity_at: '2026-09-29T10:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Tomato Soup',
+        is_current: true,
+      },
+    };
+
+    it('resumes the current recipe conversation with POST and returns its summary', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(contextualSummary),
+      });
+
+      const result = await resumeRecipeConversation('recipe-1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://api/api/v1/chat/recipes/recipe-1/conversations/resume',
+        {
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: expect.any(String),
+          }),
+        }
+      );
+      expect(result).toEqual(contextualSummary);
+    });
+
+    it('keeps resume requests isolated to the requested recipe', async () => {
+      const secondSummary = {
+        ...contextualSummary,
+        id: 'conv-recipe-2',
+        title: 'Vegetable Curry',
+        recipe_context: {
+          recipe_id: 'recipe-2',
+          recipe_title: 'Vegetable Curry',
+          is_current: true,
+        },
+      };
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: vi.fn().mockResolvedValue(contextualSummary),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: vi.fn().mockResolvedValue(secondSummary),
+        });
+
+      const first = await resumeRecipeConversation('recipe-1');
+      const second = await resumeRecipeConversation('recipe-2');
+
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        1,
+        'http://api/api/v1/chat/recipes/recipe-1/conversations/resume',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(global.fetch).toHaveBeenNthCalledWith(
+        2,
+        'http://api/api/v1/chat/recipes/recipe-2/conversations/resume',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(first.recipe_context?.recipe_id).toBe('recipe-1');
+      expect(second.recipe_context?.recipe_id).toBe('recipe-2');
+    });
+
+    it('creates and selects a new recipe conversation with POST', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        json: vi.fn().mockResolvedValue(contextualSummary),
+      });
+
+      const result = await createRecipeConversation('recipe-1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://api/api/v1/chat/recipes/recipe-1/conversations',
+        {
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: expect.any(String),
+          }),
+        }
+      );
+      expect(result).toEqual(contextualSummary);
+    });
+
+    it('selects an older contextual conversation with POST', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue(contextualSummary),
+      });
+
+      const result = await selectRecipeConversation('conv-recipe-1');
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://api/api/v1/chat/conversations/conv-recipe-1/select',
+        {
+          method: 'POST',
+          headers: expect.objectContaining({
+            Authorization: expect.any(String),
+          }),
+        }
+      );
+      expect(result).toEqual(contextualSummary);
+    });
+
+    it.each([403, 404, 500])(
+      'retains HTTP status %i for every lifecycle operation',
+      async (status) => {
+        const requests = [
+          () => resumeRecipeConversation('missing-recipe'),
+          () => createRecipeConversation('missing-recipe'),
+          () => selectRecipeConversation('missing-conversation'),
+        ];
+
+        for (const request of requests) {
+          global.fetch = vi.fn().mockResolvedValueOnce({
+            ok: false,
+            status,
+            statusText: 'Request failed',
+            text: vi
+              .fn()
+              .mockResolvedValue(JSON.stringify({ detail: 'Request failed' })),
+          });
+
+          await expect(request()).rejects.toMatchObject({
+            name: 'ApiError',
+            status,
+            message: 'Request failed',
+          });
+        }
+      }
+    );
+
+    it('preserves network failures for every lifecycle operation', async () => {
+      const networkError = new TypeError('Failed to fetch');
+      const requests = [
+        () => resumeRecipeConversation('recipe-1'),
+        () => createRecipeConversation('recipe-1'),
+        () => selectRecipeConversation('conversation-1'),
+      ];
+
+      for (const request of requests) {
+        global.fetch = vi.fn().mockRejectedValueOnce(networkError);
+        await expect(request()).rejects.toBe(networkError);
+      }
+    });
+
+    it('preserves session-expiry logout behavior on lifecycle 401 responses', async () => {
+      global.fetch = vi.fn().mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        text: vi.fn().mockResolvedValue(
+          JSON.stringify({
+            detail: 'Could not validate credentials',
+          })
+        ),
+      });
+
+      await expect(resumeRecipeConversation('recipe-1')).rejects.toMatchObject({
+        status: 401,
+      });
+      expect(logoutMock).toHaveBeenCalledWith('expired');
     });
   });
 
