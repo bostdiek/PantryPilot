@@ -76,6 +76,7 @@ class ProductTelemetryEventName(StrEnum):
     ASSISTANT_MESSAGE_FAILED = "assistant_message_failed"
     ASSISTANT_TOOL_STARTED = "assistant_tool_started"
     ASSISTANT_TOOL_COMPLETED = "assistant_tool_completed"
+    ASSISTANT_TOOL_RETRY = "assistant_tool_retry"
     URL_IMPORT_STARTED = "url_import_started"
     URL_IMPORT_STREAM_FALLBACK = "url_import_stream_fallback"
     URL_IMPORT_COMPLETED = "url_import_completed"

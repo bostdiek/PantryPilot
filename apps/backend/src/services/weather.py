@@ -12,6 +12,7 @@ from uuid import UUID
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.transient_errors import classify_tool_error
 from crud.user_preferences import user_preferences_crud
 from models.user_preferences import UserPreferences
 
@@ -106,8 +107,9 @@ async def get_daily_forecast_for_preferences(
     *,
     user_id: UUID,
     preferences: UserPreferences | None,
+    propagate_transient_errors: bool = False,
 ) -> dict[str, Any]:
-    """Fetch daily forecast data for already-loaded user preferences."""
+    """Fetch daily forecast, optionally surfacing transient errors after fallback."""
     if preferences is None:
         return {
             "status": "missing_location",
@@ -139,31 +141,69 @@ async def get_daily_forecast_for_preferences(
     )
     cached = _weather_cache.get(cache_key)
     now = datetime.now(UTC)
-    if cached and now - cached.fetched_at < WEATHER_CACHE_TTL:
+    if (
+        cached
+        and now - cached.fetched_at < WEATHER_CACHE_TTL
+        and (not propagate_transient_errors or cached.payload.get("status") == "ok")
+    ):
         return cached.payload
 
-    location_label = _format_location(preferences)
-
-    payload = await _fetch_open_meteo(
+    payload = await _fetch_forecast_with_fallback(
         latitude=latitude,
         longitude=longitude,
         timezone=timezone,
         unit=unit,
-        location_label=location_label,
+        country=(preferences.country or "").upper(),
+        location_label=_format_location(preferences),
+        propagate_transient_errors=propagate_transient_errors,
     )
 
-    if payload.get("status") != "ok":
-        country = (preferences.country or "").upper()
-        if country in {"US", "USA"}:
+    if payload.get("status") == "ok" or not propagate_transient_errors:
+        _weather_cache[cache_key] = WeatherCacheEntry(fetched_at=now, payload=payload)
+    return payload
+
+
+async def _fetch_forecast_with_fallback(
+    *,
+    latitude: float,
+    longitude: float,
+    timezone: str,
+    unit: str,
+    country: str,
+    location_label: str | None,
+    propagate_transient_errors: bool,
+) -> dict[str, Any]:
+    transient_error: httpx.HTTPError | None = None
+    try:
+        payload = await _fetch_open_meteo(
+            latitude=latitude,
+            longitude=longitude,
+            timezone=timezone,
+            unit=unit,
+            location_label=location_label,
+            propagate_transient_errors=propagate_transient_errors,
+        )
+    except httpx.HTTPError as exc:
+        transient_error = exc
+        payload = {"status": "error"}
+    if payload.get("status") != "ok" and country in {"US", "USA"}:
+        try:
             fallback = await _fetch_weather_gov(
                 latitude=latitude,
                 longitude=longitude,
                 location_label=location_label,
+                propagate_transient_errors=propagate_transient_errors,
             )
+        except httpx.HTTPError as exc:
+            transient_error = exc
+        else:
             if fallback.get("status") == "ok":
                 payload = fallback
+                transient_error = None
 
-    _weather_cache[cache_key] = WeatherCacheEntry(fetched_at=now, payload=payload)
+    if transient_error is not None:
+        raise transient_error
+
     return payload
 
 
@@ -174,6 +214,7 @@ async def _fetch_open_meteo(
     timezone: str,
     unit: str,
     location_label: str | None,
+    propagate_transient_errors: bool = False,
 ) -> dict[str, Any]:
     try:
         params: dict[str, str | int | float] = {
@@ -217,6 +258,8 @@ async def _fetch_open_meteo(
         }
     except httpx.HTTPError as exc:
         logger.warning("Open-Meteo request failed: %s", type(exc).__name__)
+        if propagate_transient_errors and classify_tool_error(exc) is not None:
+            raise
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("Open-Meteo response parse failed: %s", type(exc).__name__)
 
@@ -232,6 +275,7 @@ async def _fetch_weather_gov(
     latitude: float,
     longitude: float,
     location_label: str | None,
+    propagate_transient_errors: bool = False,
 ) -> dict[str, Any]:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -267,6 +311,8 @@ async def _fetch_weather_gov(
         }
     except httpx.HTTPError as exc:
         logger.warning("weather.gov request failed: %s", type(exc).__name__)
+        if propagate_transient_errors and classify_tool_error(exc) is not None:
+            raise
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("weather.gov response parse failed: %s", type(exc).__name__)
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import (
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 
 def _load_env_files() -> None:  # pragma: no cover - side-effect only
@@ -89,7 +90,10 @@ def _get_database_url() -> str:
 
 
 DATABASE_URL = _get_database_url()
-engine: AsyncEngine = create_async_engine(DATABASE_URL, future=True, echo=False)
+engine_options: dict[str, Any] = {"future": True, "echo": False}
+if os.getenv("ENVIRONMENT") == "test":
+    engine_options["poolclass"] = NullPool
+engine: AsyncEngine = create_async_engine(DATABASE_URL, **engine_options)
 AsyncSessionLocal = async_sessionmaker(
     engine,
     expire_on_commit=False,

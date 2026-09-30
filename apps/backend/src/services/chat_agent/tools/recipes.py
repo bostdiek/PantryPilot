@@ -218,6 +218,7 @@ async def _load_full_recipes(
     stmt = (
         select(Recipe)
         .where(Recipe.id.in_(recipe_ids))
+        .where(Recipe.user_id == ctx.deps.user.id)
         .options(
             selectinload(Recipe.recipeingredients).selectinload(
                 RecipeIngredient.ingredient
@@ -266,12 +267,7 @@ async def _hybrid_search_with_query(
     cte_limit: int,
     rrf_k: int,
 ) -> list[dict[str, Any]]:
-    base_predicates: list[Any] = [
-        or_(
-            Recipe.user_id == ctx.deps.user.id,
-            Recipe.user_id.is_(None),
-        )
-    ]
+    base_predicates: list[Any] = [Recipe.user_id == ctx.deps.user.id]
 
     times_cooked_expr = func.coalesce(times_cooked_sq.c.cook_count, 0)
     _apply_optional_filters(
@@ -550,12 +546,7 @@ async def tool_search_recipes(
             func.coalesce(times_cooked_sq.c.cook_count, 0).label("times_cooked"),
         )
         .outerjoin(times_cooked_sq, Recipe.id == times_cooked_sq.c.recipe_id)
-        .where(
-            or_(
-                Recipe.user_id == ctx.deps.user.id,
-                Recipe.user_id.is_(None),
-            )
-        )
+        .where(Recipe.user_id == ctx.deps.user.id)
     )
 
     if filters:
@@ -661,12 +652,7 @@ async def tool_get_recipe_details(
     stmt = (
         select(Recipe)
         .where(Recipe.id == recipe_id)
-        .where(
-            or_(
-                Recipe.user_id == ctx.deps.user.id,
-                Recipe.user_id.is_(None),
-            )
-        )
+        .where(Recipe.user_id == ctx.deps.user.id)
         .options(
             selectinload(Recipe.recipeingredients).selectinload(
                 RecipeIngredient.ingredient

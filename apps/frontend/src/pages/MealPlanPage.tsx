@@ -1042,13 +1042,11 @@ const MealPlanPage: FC = () => {
         onDaySelect={handleDaySelect}
         recipeTitle={selectedRecipeForDay?.title || ''}
         availableDays={
-          currentWeek?.days.map(
-            (day): DayOption => ({
-              dayOfWeek: day.dayOfWeek,
-              date: day.date,
-              isToday: day.date === toLocalYyyyMmDd(today),
-            })
-          ) || []
+          currentWeek?.days.map((day): DayOption => ({
+            dayOfWeek: day.dayOfWeek,
+            date: day.date,
+            isToday: day.date === toLocalYyyyMmDd(today),
+          })) || []
         }
       />
 

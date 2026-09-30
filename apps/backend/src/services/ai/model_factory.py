@@ -23,7 +23,10 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pydantic_ai.models import Model
 from pydantic_ai.models.google import GoogleModel
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import (
+    OpenAIChatModel,
+    OpenAIChatModelSettings,
+)
 from pydantic_ai.providers.google import GoogleProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -43,7 +46,7 @@ REASONING_MODELS = {
 
 
 if TYPE_CHECKING:
-    from httpx import AsyncClient
+    from httpx2 import AsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -115,14 +118,14 @@ def _create_azure_model(
     # Apply low reasoning effort for reasoning models
     if model_name in REASONING_MODELS:
         logger.info(f"Applying low reasoning effort for reasoning model: {model_name}")
-        # reasoning_effort is a newer parameter not in TypedDict yet
-        return OpenAIModel(  # type: ignore[call-overload,no-any-return]
+        model_settings: OpenAIChatModelSettings = {"openai_reasoning_effort": "low"}
+        return OpenAIChatModel(
             model_name,
             provider=provider,
-            settings={"reasoning_effort": "low"},
+            settings=model_settings,
         )
 
-    return OpenAIModel(model_name, provider=provider)
+    return OpenAIChatModel(model_name, provider=provider)
 
 
 def _create_gemini_model(

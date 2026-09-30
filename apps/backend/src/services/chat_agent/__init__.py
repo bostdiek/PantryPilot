@@ -7,7 +7,7 @@ from services.chat_agent.agent import (
     get_chat_agent,
     normalize_agent_output,
 )
-from services.chat_agent.deps import ChatAgentDeps
+from services.chat_agent.deps import ChatAgentDeps, LiveRecipeContext
 from services.chat_agent.schemas import (
     DayOfWeekMeals,
     MealEntry,
@@ -19,6 +19,7 @@ from services.chat_agent.schemas import (
 __all__ = [
     # Agent construction
     "ChatAgentDeps",
+    "LiveRecipeContext",
     "CHAT_SYSTEM_PROMPT",
     "build_datetime_instructions",
     "build_user_context_instructions",

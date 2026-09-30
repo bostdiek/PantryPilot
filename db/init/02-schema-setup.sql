@@ -182,38 +182,10 @@ BEGIN
             'User'
         ) ON CONFLICT (email) DO NOTHING;
 
-        -- Insert sample ingredient names
-        INSERT INTO ingredient_names (ingredient_name)
-        SELECT unnest(ARRAY['Flour', 'Sugar', 'Eggs', 'Milk', 'Chicken Breast', 'Tomatoes', 'Onions', 'Garlic'])
-        ON CONFLICT DO NOTHING;
-
-        -- Insert a sample recipe and link a couple of ingredients
-        WITH r AS (
-            -- instructions as a text array (one entry per step)
-            INSERT INTO recipe_names (name, instructions, user_notes)
-            VALUES ('Simple Omelette', ARRAY['Beat eggs, cook in butter, fold and serve.'], 'Basic demo recipe')
-            RETURNING id
-        )
-        INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity_value, quantity_unit, prep)
-        SELECT r.id,
-               i.id,
-               x.qty::numeric,
-               x.unit,
-               CASE i.ingredient_name
-                   WHEN 'Eggs' THEN '{"size_descriptor": "large", "size_unit": "count"}'::jsonb
-                   WHEN 'Milk' THEN '{"method": "none"}'::jsonb
-                   ELSE '{}'::jsonb
-               END
-        FROM r
-        JOIN ingredient_names i ON i.ingredient_name = ANY(ARRAY['Eggs','Milk'])
-        JOIN (
-            SELECT unnest(ARRAY['2','1']) AS qty, unnest(ARRAY['count','cup']) AS unit
-        ) x ON TRUE
-        ON CONFLICT DO NOTHING;
-
         RAISE NOTICE '========================================';
         RAISE NOTICE 'DEMO DATA NOTICE:';
-        RAISE NOTICE 'Sample development data inserted for testing only!';
+        RAISE NOTICE 'Demo user inserted for connectivity testing only!';
+        RAISE NOTICE 'Ownerless recipes and ingredients are intentionally omitted.';
         RAISE NOTICE 'This is NOT the final AI-powered schema design.';
         RAISE NOTICE '========================================';
     END IF;

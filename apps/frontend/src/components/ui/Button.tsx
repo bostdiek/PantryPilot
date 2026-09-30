@@ -9,11 +9,7 @@ import {
 import { Icon } from './Icon';
 
 export type ButtonVariant =
-  | 'primary'
-  | 'secondary'
-  | 'danger'
-  | 'outline'
-  | 'ghost';
+  'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends Omit<

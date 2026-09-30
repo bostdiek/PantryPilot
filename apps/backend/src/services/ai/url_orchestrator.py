@@ -182,7 +182,7 @@ class UrlOrchestrator(AIExtractionService):
             yield (
                 SSEEvent.terminal_error(
                     step="fetch_html",
-                    detail=f"Fetch failed: {e}",
+                    detail="Fetch failed: Unable to fetch the recipe page.",
                     error_code="fetch_failed",
                 ).to_sse()
             )

@@ -26,6 +26,7 @@ from api.v1.chat import (
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from main import app
+from services.chat_agent.tool_recovery import failure_result
 
 
 # -----------------------------------------------------------------------------
@@ -44,12 +45,14 @@ class _MockChatMessage:
         content_blocks: list[dict[str, Any]] | None = None,
         tool_calls: list[Any] | None = None,
         created_at: datetime | None = None,
+        message_metadata: dict[str, Any] | None = None,
     ) -> None:
         self.id = id or uuid4()
         self.role = role
         self.content_blocks = content_blocks or []
         self.tool_calls = tool_calls or []
         self.created_at = created_at or datetime.now(UTC)
+        self.message_metadata = message_metadata or {}
 
 
 class _MockChatToolCall:
@@ -90,12 +93,22 @@ class _MockConversation:
         title: str | None = None,
         created_at: datetime | None = None,
         last_activity_at: datetime | None = None,
+        recipe_id: UUID | None = None,
+        recipe_title: str | None = None,
+        is_current_for_recipe: bool = False,
     ) -> None:
         self.id = id or uuid4()
         self.user_id = user_id or uuid4()
         self.title = title
         self.created_at = created_at or datetime.now(UTC)
         self.last_activity_at = last_activity_at or datetime.now(UTC)
+        self.recipe_id = recipe_id
+        self.recipe = (
+            SimpleNamespace(id=recipe_id, name=recipe_title)
+            if recipe_id is not None and recipe_title is not None
+            else None
+        )
+        self.is_current_for_recipe = is_current_for_recipe
 
 
 class _ScalarsResult:
@@ -145,9 +158,11 @@ class _FakeDbSession:
         self.added: list[Any] = []
         self.commits: int = 0
         self._call_count = 0
+        self.statements: list[Any] = []
 
     async def execute(self, stmt: Any) -> _ExecuteResult:
         self._call_count += 1
+        self.statements.append(stmt)
         # First call is usually count query
         if self._call_count == 1 and self._total_count > 0:
             result = _ExecuteResult()
@@ -351,11 +366,71 @@ class TestConvertDbMessagesToPydanticAi:
         )
 
         request_parts = history[1].parts
-        assert len(request_parts) == 1
+        assert len(request_parts) == 2
         assert isinstance(request_parts[0], ToolReturnPart)
         assert request_parts[0].tool_name == "get_daily_weather"
         assert request_parts[0].content == {"temperature": 72, "conditions": "sunny"}
         assert request_parts[0].tool_call_id == "call_123"
+        assert isinstance(request_parts[1], ToolReturnPart)
+        assert request_parts[1].tool_call_id == str(tool_call_error.id)
+        assert request_parts[1].content == failure_result(
+            "tool_unavailable", retryable=False
+        )
+
+    def test_given_failed_tool_when_replayed_then_preserves_sanitized_result(
+        self,
+    ) -> None:
+        # Arrange
+        result = failure_result("transient_database_error")
+        tool_call = _MockChatToolCall(
+            tool_name="search_recipes",
+            arguments={"query": "pasta"},
+            result=result,
+            status="error",
+            call_metadata={"tool_call_id": "failed-1"},
+        )
+        messages = [
+            _MockChatMessage(
+                role="assistant",
+                content_blocks=[{"type": "text", "text": "Search was unavailable"}],
+                tool_calls=[tool_call],
+            )
+        ]
+
+        # Act
+        history = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
+
+        # Assert
+        assert isinstance(history[1], ModelRequest)
+        assert isinstance(history[1].parts[0], ToolReturnPart)
+        assert history[1].parts[0].content == result
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [{"streaming": False, "error": True}, {"streaming": True}],
+    )
+    def test_given_incomplete_assistant_when_replayed_then_omits_its_calls(
+        self,
+        metadata: dict[str, bool],
+    ) -> None:
+        # Arrange
+        messages = [
+            _MockChatMessage(
+                role="assistant",
+                tool_calls=[
+                    _MockChatToolCall(
+                        tool_name="search_recipes", result={"recipes": []}
+                    )
+                ],
+                message_metadata=metadata,
+            )
+        ]
+
+        # Act
+        history = _convert_db_messages_to_pydantic_ai(messages)  # type: ignore[arg-type]
+
+        # Assert
+        assert history == []
 
     def test_tool_returns_fallbacks_and_empty_text(self) -> None:
         started_at = datetime(2026, 1, 1, 12, 0, tzinfo=UTC)
@@ -446,6 +521,10 @@ async def test_list_conversations_empty() -> None:
         assert body["conversations"] == []
         assert body["total"] == 0
         assert body["has_more"] is False
+        assert len(db.statements) == 2
+        assert all(
+            "recipe_names.user_id =" in str(statement) for statement in db.statements
+        )
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
@@ -557,7 +636,11 @@ async def test_get_message_history_conversation_not_found() -> None:
     conversation_id = uuid4()
 
     class _NotFoundDbSession:
+        def __init__(self) -> None:
+            self.statements: list[Any] = []
+
         async def execute(self, stmt):
+            self.statements.append(stmt)
             return _ExecuteResult(single=None)  # No conversation found
 
     db = _NotFoundDbSession()
@@ -583,6 +666,8 @@ async def test_get_message_history_conversation_not_found() -> None:
         assert resp.status_code == status.HTTP_404_NOT_FOUND
         body = resp.json()
         assert "not found" in body["detail"].lower()
+        assert len(db.statements) == 1
+        assert "recipe_names.user_id =" in str(db.statements[0])
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)
@@ -813,7 +898,14 @@ async def test_list_conversations_only_returns_user_owned() -> None:
     current_user_id = uuid4()
 
     # Create conversations - only the ones belonging to current user should be returned
-    user_conv1 = _MockConversation(user_id=current_user_id, title="My chat 1")
+    recipe_id = uuid4()
+    user_conv1 = _MockConversation(
+        user_id=current_user_id,
+        title="My chat 1",
+        recipe_id=recipe_id,
+        recipe_title="Tomato Soup",
+        is_current_for_recipe=True,
+    )
     user_conv2 = _MockConversation(user_id=current_user_id, title="My chat 2")
     # Note: Other user's conversations would not be returned by the filtered query
 
@@ -858,6 +950,14 @@ async def test_list_conversations_only_returns_user_owned() -> None:
         titles = [c["title"] for c in body["conversations"]]
         assert "My chat 1" in titles
         assert "My chat 2" in titles
+        contextual = next(c for c in body["conversations"] if c["title"] == "My chat 1")
+        general = next(c for c in body["conversations"] if c["title"] == "My chat 2")
+        assert contextual["recipe_context"] == {
+            "recipe_id": str(recipe_id),
+            "recipe_title": "Tomato Soup",
+            "is_current": True,
+        }
+        assert general["recipe_context"] is None
     finally:
         app.dependency_overrides.pop(get_db, None)
         app.dependency_overrides.pop(get_current_user, None)

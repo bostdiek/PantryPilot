@@ -91,7 +91,7 @@ class TestAuthorizationHelpers:
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
     def test_check_resource_access_legacy_null_user_id(self):
-        """Test that legacy resources with null user_id are accessible."""
+        """Test that legacy resources with null user_id are denied."""
         user_id = uuid.uuid4()
         user = User(
             id=user_id,
@@ -104,8 +104,25 @@ class TestAuthorizationHelpers:
         # Create a resource without user_id (legacy data)
         legacy_resource = MockResource(user_id=None)
 
-        result = check_resource_access(legacy_resource, user)
-        assert result == legacy_resource
+        with pytest.raises(HTTPException) as exc_info:
+            check_resource_access(legacy_resource, user)
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
+
+    def test_check_resource_write_access_denies_null_user_id(self):
+        """Test that null ownership never grants write access."""
+        user = User(
+            id=uuid.uuid4(),
+            username="user",
+            email="user@test.com",
+            hashed_password="hash",
+            is_admin=False,
+        )
+
+        with pytest.raises(HTTPException) as exc_info:
+            check_resource_write_access(MockResource(user_id=None), user)
+
+        assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
     def test_check_resource_write_access_delegates_to_read_access(self):
         """Test that write access check delegates to read access check."""

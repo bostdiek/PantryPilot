@@ -1,6 +1,6 @@
 # Makefile for PantryPilot
 
-.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations backfill-embeddings backfill-embeddings-dry-run backfill-embeddings-local backfill-embeddings-local-dry-run clean-keep-db lan-ip frontend-lan backend-lan dev-lan dev-lan-docker check-node test-frontend-docker test-frontend-coverage-docker
+.PHONY: help validate-env up up-dev up-prod down down-dev down-prod logs reset-db reset-db-dev reset-db-prod reset-db-volume db-backup db-restore db-maintenance db-shell lint lint-backend lint-frontend type-check type-check-backend type-check-frontend format format-backend format-frontend format-check format-check-backend format-check-frontend test test-backend test-frontend test-coverage secrets-scan secrets-audit secrets-update install install-backend install-frontend check ci dev-setup clean migrate migrate-dev migrate-prod check-migrations backfill-embeddings backfill-embeddings-dry-run backfill-embeddings-local backfill-embeddings-local-dry-run clean-keep-db lan-ip frontend-lan backend-lan dev-lan dev-lan-docker check-node test-frontend-docker test-frontend-coverage-docker
 
 # Image / build targets (added)
 .PHONY: build-frontend build-backend build-all build-prod-frontend build-prod-backend build-prod-all buildx-setup buildx-push
@@ -67,6 +67,9 @@ help:
 	@echo "  format             - Format all code"
 	@echo "  format-backend     - Format backend code (Ruff)"
 	@echo "  format-frontend    - Format frontend code (Prettier)"
+	@echo "  format-check       - Check formatting for all code"
+	@echo "  format-check-backend - Check backend formatting (Ruff)"
+	@echo "  format-check-frontend - Check frontend formatting (Prettier)"
 	@echo ""
 	@echo "Security:"
 	@echo "  secrets-scan       - Run secret scanning with detect-secrets"
@@ -238,6 +241,16 @@ format-frontend: check-node
 	# Format frontend code
 	cd apps/frontend && npm run format
 
+format-check: format-check-backend format-check-frontend
+
+format-check-backend:
+	# Check backend formatting
+	cd apps/backend && uv run ruff format --check --diff .
+
+format-check-frontend: check-node
+	# Check frontend formatting
+	cd apps/frontend && npm run format:check
+
 # LAN / mobile testing (local dev servers; nginx not required)
 lan-ip:
 	@/bin/sh -lc 'set -eu; \
@@ -343,7 +356,7 @@ create-dev-user:
 
 
 # Convenience targets
-check: lint type-check check-migrations
+check: lint type-check format-check check-migrations
 	# Run all code quality checks
 
 ci: install check test

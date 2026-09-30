@@ -154,6 +154,31 @@ class TestGetChatModel:
     @patch("services.ai.model_factory._validate_azure_credentials")
     @patch("services.ai.model_factory._is_azure_provider")
     @patch("services.ai.model_factory.get_settings")
+    def test_reasoning_model_uses_low_reasoning_effort(
+        self,
+        mock_settings: MagicMock,
+        mock_is_azure: MagicMock,
+        mock_validate: MagicMock,
+    ) -> None:
+        """Test reasoning models use the low-effort cost and latency safeguard."""
+        mock_is_azure.return_value = True
+        mock_validate.return_value = True
+        mock_settings.return_value.CHAT_MODEL = "gpt-5-mini"
+        mock_settings.return_value.AZURE_OPENAI_ENDPOINT = (
+            "https://test.openai.azure.com"
+        )
+        mock_settings.return_value.AZURE_OPENAI_API_KEY = "test-key"
+        mock_settings.return_value.AZURE_OPENAI_API_VERSION = "2024-01-01"
+
+        from services.ai.model_factory import get_chat_model
+
+        model = get_chat_model()
+
+        assert model.settings == {"openai_reasoning_effort": "low"}
+
+    @patch("services.ai.model_factory._validate_azure_credentials")
+    @patch("services.ai.model_factory._is_azure_provider")
+    @patch("services.ai.model_factory.get_settings")
     def test_returns_gemini_model_when_azure_not_configured(
         self,
         mock_settings: MagicMock,

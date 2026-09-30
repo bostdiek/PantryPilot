@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
+from types import SimpleNamespace
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
@@ -8,9 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import and_, asc, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies.auth import check_resource_write_access, get_current_user
+from dependencies.auth import (
+    check_resource_access,
+    check_resource_write_access,
+    get_current_user,
+)
 from dependencies.db import get_db
 from models.meal_history import Meal
+from models.recipes_names import Recipe
 from models.users import User
 from schemas.api import ApiResponse
 from schemas.mealplans import (
@@ -106,6 +112,25 @@ def _apply_cooked_patch(meal: Meal, patch: MealEntryPatch) -> None:
             m_any.cooked_at = None
 
 
+async def _validate_recipe_access(
+    db: AsyncSession,
+    current_user: User,
+    recipe_id: UUID | None,
+) -> None:
+    """Require an owned recipe, or an administrator override, when provided."""
+    if recipe_id is None:
+        return
+
+    result = await db.execute(select(Recipe.user_id).where(Recipe.id == recipe_id))
+    owner_id = result.scalar_one_or_none()
+    recipe = None if owner_id is None else SimpleNamespace(user_id=owner_id)
+    check_resource_access(
+        recipe,
+        current_user,
+        not_found_message="Recipe not found",
+    )
+
+
 @router.get(
     "/weekly",
     summary="Get weekly meal plan",
@@ -199,6 +224,7 @@ async def replace_weekly_plan(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="All entries must be within the specified week",
             )
+        await _validate_recipe_access(db, current_user, e.recipe_id)
 
     # Delete existing entries for the week
     await db.execute(
@@ -258,6 +284,7 @@ async def create_meal_entry(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> ApiResponse[MealEntryOut]:
     """Create a new meal plan entry for the authenticated user."""
+    await _validate_recipe_access(db, current_user, entry.recipe_id)
 
     # Determine next order_index if not provided
     idx = entry.order_index
@@ -321,6 +348,8 @@ async def update_meal_entry(
         not_found_message="Meal entry not found",
         forbidden_message="Not allowed to modify this meal entry",
     )
+    if patch.recipe_id is not None:
+        await _validate_recipe_access(db, current_user, patch.recipe_id)
     _apply_meal_patch(meal, patch)
 
     await db.commit()

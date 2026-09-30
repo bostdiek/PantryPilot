@@ -70,6 +70,16 @@ class ChatStreamRequest(BaseModel):
 # -----------------------------------------------------------------------------
 
 
+class RecipeConversationContext(BaseModel):
+    """Minimal recipe metadata attached to a contextual conversation."""
+
+    recipe_id: UUID
+    recipe_title: str
+    is_current: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ConversationSummary(BaseModel):
     """Summary of a chat conversation for list views."""
 
@@ -77,6 +87,7 @@ class ConversationSummary(BaseModel):
     title: str | None = None
     created_at: str
     last_activity_at: str
+    recipe_context: RecipeConversationContext | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

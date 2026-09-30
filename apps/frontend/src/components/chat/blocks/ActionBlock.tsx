@@ -18,11 +18,7 @@ interface ActionBlockProps {
 }
 
 export type ActionStatus =
-  | 'pending'
-  | 'accepting'
-  | 'canceling'
-  | 'accepted'
-  | 'canceled';
+  'pending' | 'accepting' | 'canceling' | 'accepted' | 'canceled';
 
 /**
  * Renders an action block with Accept/Cancel buttons.

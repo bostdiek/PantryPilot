@@ -64,12 +64,7 @@ export interface AIDraftResponse {
  * SSE Event types for streaming extraction
  */
 export type SSEEventStatus =
-  | 'started'
-  | 'fetching'
-  | 'ai_call'
-  | 'converting'
-  | 'complete'
-  | 'error';
+  'started' | 'fetching' | 'ai_call' | 'converting' | 'complete' | 'error';
 
 export interface SSEEvent {
   status: SSEEventStatus;

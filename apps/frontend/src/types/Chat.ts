@@ -97,11 +97,7 @@ export interface MealProposalBlock {
  * Use `block.type` to discriminate between variants.
  */
 export type ChatContentBlock =
-  | TextBlock
-  | LinkBlock
-  | RecipeCardBlock
-  | ActionBlock
-  | MealProposalBlock;
+  TextBlock | LinkBlock | RecipeCardBlock | ActionBlock | MealProposalBlock;
 
 // -----------------------------------------------------------------------------
 // SSE Event Types
@@ -214,6 +210,16 @@ export interface ConversationListResponse {
 }
 
 /**
+ * Minimal recipe metadata attached to a contextual conversation.
+ * Matches backend RecipeConversationContext schema.
+ */
+export interface RecipeConversationContext {
+  recipe_id: string;
+  recipe_title: string;
+  is_current: boolean;
+}
+
+/**
  * Conversation summary from backend.
  * Uses snake_case to match backend JSON serialization.
  */
@@ -222,6 +228,7 @@ export interface ConversationSummary {
   title: string | null;
   created_at: string;
   last_activity_at: string;
+  recipe_context: RecipeConversationContext | null;
 }
 
 /**

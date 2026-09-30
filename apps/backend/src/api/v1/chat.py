@@ -8,13 +8,13 @@ import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from pydantic_ai import Agent as PydanticAgent, AgentRunResultEvent
+from pydantic_ai import Agent as PydanticAgent, AgentRunResultEvent, UsageLimits
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -27,7 +27,7 @@ from pydantic_ai.messages import (
     ToolReturnPart,
     UserPromptPart,
 )
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -42,12 +42,14 @@ from core.observability import (
 )
 from core.ratelimit import check_rate_limit
 from crud.user_preferences import UserPreferencesCRUD
-from dependencies.auth import get_current_user
+from dependencies.auth import check_resource_access, get_current_user
 from dependencies.db import get_db
 from models.chat_conversations import ChatConversation
 from models.chat_messages import ChatMessage
 from models.chat_pending_actions import ChatPendingAction
 from models.chat_tool_calls import ChatToolCall
+from models.recipe_ingredients import RecipeIngredient
+from models.recipes_names import Recipe
 from models.users import User
 from schemas.chat_content import TextBlock
 from schemas.chat_streaming import (
@@ -57,16 +59,19 @@ from schemas.chat_streaming import (
     ConversationSummary,
     MessageHistoryResponse,
     MessageSummary,
+    RecipeConversationContext,
 )
 from schemas.chat_tools import ToolCancelRequest, ToolCancelResponse, ToolResultEnvelope
 from services.chat_agent import (
     CHAT_SYSTEM_PROMPT,
     ChatAgentDeps,
+    LiveRecipeContext,
     build_datetime_instructions,
     build_user_context_instructions,
     get_chat_agent,
     normalize_agent_output,
 )
+from services.chat_agent.tool_recovery import failure_result, is_failure_result
 from services.chat_agent.training_capture import capture_training_sample
 from services.memory_update import MemoryUpdateService
 
@@ -470,7 +475,7 @@ def _get_user_friendly_error_message(exc: Exception) -> str:
         )
 
     # Fall back to a generic message for unknown errors
-    logger.error(f"Unhandled chat error: {exc}")
+    logger.error("Unhandled chat error type: %s", type(exc).__name__)
     return "Something went wrong. Please try again."
 
 
@@ -491,13 +496,95 @@ async def _mark_message_as_failed(db: AsyncSession, message_id: UUID) -> None:
         if orphaned_message and orphaned_message.message_metadata.get("streaming"):
             orphaned_message.message_metadata = {"streaming": False, "error": True}
             await db.commit()
-    except Exception:
-        logger.exception("Failed to mark message as failed during error cleanup")
+    except Exception as exc:
+        logger.error(
+            "Failed to mark message as failed during error cleanup: %s",
+            type(exc).__name__,
+        )
 
 
 # -----------------------------------------------------------------------------
 # Conversation History Endpoints
 # -----------------------------------------------------------------------------
+
+
+def _conversation_summary(
+    conversation: ChatConversation,
+    recipe: Recipe | None = None,
+) -> ConversationSummary:
+    """Build the public summary without exposing recipe content."""
+    recipe_id = getattr(conversation, "recipe_id", None)
+    if recipe is None:
+        recipe = getattr(conversation, "recipe", None)
+    recipe_context = (
+        RecipeConversationContext(
+            recipe_id=recipe_id,
+            recipe_title=cast(str, recipe.name),
+            is_current=getattr(conversation, "is_current_for_recipe", False),
+        )
+        if recipe_id is not None and recipe is not None
+        else None
+    )
+    return ConversationSummary(
+        id=conversation.id,
+        title=conversation.title,
+        created_at=conversation.created_at.isoformat(),
+        last_activity_at=conversation.last_activity_at.isoformat(),
+        recipe_context=recipe_context,
+    )
+
+
+async def _lock_owned_recipe(
+    db: AsyncSession,
+    *,
+    recipe_id: UUID,
+    user_id: UUID,
+) -> Recipe | None:
+    """Lock an authorized recipe as the lifecycle serialization boundary."""
+    result = await db.execute(
+        select(Recipe)
+        .where(
+            Recipe.id == recipe_id,
+            Recipe.user_id == user_id,
+        )
+        .with_for_update()
+    )
+    return result.scalars().one_or_none()
+
+
+async def _clear_current_recipe_conversation(
+    db: AsyncSession,
+    *,
+    recipe_id: UUID,
+    user_id: UUID,
+) -> None:
+    await db.execute(
+        update(ChatConversation)
+        .where(
+            ChatConversation.user_id == user_id,
+            ChatConversation.recipe_id == recipe_id,
+            ChatConversation.is_current_for_recipe.is_(True),
+        )
+        .values(is_current_for_recipe=False)
+    )
+
+
+async def _persist_contextual_conversation(
+    db: AsyncSession,
+    *,
+    recipe: Recipe,
+    user_id: UUID,
+) -> ChatConversation:
+    conversation = ChatConversation(
+        user_id=user_id,
+        recipe_id=recipe.id,
+        is_current_for_recipe=True,
+        title=_generate_conversation_title(),
+    )
+    db.add(conversation)
+    await db.commit()
+    await db.refresh(conversation)
+    return conversation
 
 
 @router.get(
@@ -517,9 +604,17 @@ async def list_conversations(
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
 
-    # Count total conversations for the user
+    conversation_visibility = (
+        ChatConversation.user_id == current_user.id,
+        or_(
+            ChatConversation.recipe_id.is_(None),
+            ChatConversation.recipe.has(Recipe.user_id == current_user.id),
+        ),
+    )
+    # Count only general conversations and contextual conversations whose
+    # linked recipe is still owned by the caller.
     count_query = select(func.count(ChatConversation.id)).where(
-        ChatConversation.user_id == current_user.id
+        *conversation_visibility
     )
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
@@ -527,7 +622,8 @@ async def list_conversations(
     # Fetch conversations with pagination, ordered by most recent activity
     query = (
         select(ChatConversation)
-        .where(ChatConversation.user_id == current_user.id)
+        .where(*conversation_visibility)
+        .options(selectinload(ChatConversation.recipe))
         .order_by(ChatConversation.last_activity_at.desc())
         .limit(limit)
         .offset(offset)
@@ -535,21 +631,152 @@ async def list_conversations(
     result = await db.execute(query)
     conversations = result.scalars().all()
 
-    summaries = [
-        ConversationSummary(
-            id=conv.id,
-            title=conv.title,
-            created_at=conv.created_at.isoformat(),
-            last_activity_at=conv.last_activity_at.isoformat(),
-        )
-        for conv in conversations
-    ]
+    summaries = [_conversation_summary(conv) for conv in conversations]
 
     return ConversationListResponse(
         conversations=summaries,
         total=total,
         has_more=(offset + len(conversations)) < total,
     )
+
+
+@router.post(
+    "/recipes/{recipe_id}/conversations/resume",
+    response_model=ConversationSummary,
+    status_code=status.HTTP_200_OK,
+    summary="Resume the current recipe conversation",
+)
+async def resume_recipe_conversation(
+    recipe_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ConversationSummary:
+    """Return the current recipe thread, creating it when none exists."""
+    recipe = await _lock_owned_recipe(
+        db,
+        recipe_id=recipe_id,
+        user_id=current_user.id,
+    )
+    if recipe is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recipe not found",
+        )
+
+    result = await db.execute(
+        select(ChatConversation).where(
+            ChatConversation.user_id == current_user.id,
+            ChatConversation.recipe_id == recipe_id,
+            ChatConversation.is_current_for_recipe.is_(True),
+        )
+    )
+    conversation = result.scalars().one_or_none()
+    if conversation is None:
+        conversation = await _persist_contextual_conversation(
+            db,
+            recipe=recipe,
+            user_id=current_user.id,
+        )
+    return _conversation_summary(conversation, recipe)
+
+
+@router.post(
+    "/recipes/{recipe_id}/conversations",
+    response_model=ConversationSummary,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new recipe conversation",
+)
+async def create_recipe_conversation(
+    recipe_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ConversationSummary:
+    """Create and select a distinct current thread for a recipe."""
+    recipe = await _lock_owned_recipe(
+        db,
+        recipe_id=recipe_id,
+        user_id=current_user.id,
+    )
+    if recipe is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Recipe not found",
+        )
+
+    await _clear_current_recipe_conversation(
+        db,
+        recipe_id=recipe_id,
+        user_id=current_user.id,
+    )
+    conversation = await _persist_contextual_conversation(
+        db,
+        recipe=recipe,
+        user_id=current_user.id,
+    )
+    return _conversation_summary(conversation, recipe)
+
+
+@router.post(
+    "/conversations/{conversation_id}/select",
+    response_model=ConversationSummary,
+    status_code=status.HTTP_200_OK,
+    summary="Select a recipe conversation",
+)
+async def select_recipe_conversation(
+    conversation_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> ConversationSummary:
+    """Make an authorized contextual conversation current for its recipe."""
+    initial_result = await db.execute(
+        select(ChatConversation).where(
+            ChatConversation.id == conversation_id,
+            ChatConversation.user_id == current_user.id,
+            ChatConversation.recipe_id.is_not(None),
+        )
+    )
+    initial_conversation = initial_result.scalars().one_or_none()
+    if initial_conversation is None or initial_conversation.recipe_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        )
+
+    recipe = await _lock_owned_recipe(
+        db,
+        recipe_id=initial_conversation.recipe_id,
+        user_id=current_user.id,
+    )
+    if recipe is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        )
+
+    selected_result = await db.execute(
+        select(ChatConversation).where(
+            ChatConversation.id == conversation_id,
+            ChatConversation.user_id == current_user.id,
+            ChatConversation.recipe_id == recipe.id,
+        )
+    )
+    conversation = selected_result.scalars().one_or_none()
+    if conversation is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Conversation not found",
+        )
+
+    if not conversation.is_current_for_recipe:
+        await _clear_current_recipe_conversation(
+            db,
+            recipe_id=cast(UUID, recipe.id),
+            user_id=current_user.id,
+        )
+        conversation.is_current_for_recipe = True
+        await db.commit()
+        await db.refresh(conversation)
+    return _conversation_summary(conversation, recipe)
 
 
 @router.delete(
@@ -581,8 +808,61 @@ async def delete_conversation(
             detail="Conversation not found",
         )
 
-    # Delete the conversation (messages will cascade delete automatically)
+    recipe_id = getattr(conversation, "recipe_id", None)
+    was_current = getattr(conversation, "is_current_for_recipe", False)
+    if recipe_id is not None:
+        recipe = await _lock_owned_recipe(
+            db,
+            recipe_id=recipe_id,
+            user_id=current_user.id,
+        )
+        if recipe is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+
+        locked_result = await db.execute(
+            select(ChatConversation).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == current_user.id,
+                ChatConversation.recipe_id == recipe_id,
+            )
+        )
+        conversation = locked_result.scalars().one_or_none()
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+        was_current = conversation.is_current_for_recipe
+
+    replacement = None
+    if recipe_id is not None and was_current:
+        conversation.is_current_for_recipe = False
+        await db.flush()
+        replacement_result = await db.execute(
+            select(ChatConversation)
+            .where(
+                ChatConversation.user_id == current_user.id,
+                ChatConversation.recipe_id == recipe_id,
+                ChatConversation.id != conversation_id,
+            )
+            .order_by(
+                ChatConversation.last_activity_at.desc(),
+                ChatConversation.created_at.desc(),
+                ChatConversation.id.desc(),
+            )
+            .limit(1)
+        )
+        replacement = replacement_result.scalars().one_or_none()
+
+    # Delete the conversation (messages will cascade delete automatically).
     await db.delete(conversation)
+    if replacement is not None:
+        # The prior current row was removed from the unique predicate by the
+        # explicit flush above, so this promotion is safe in the final flush.
+        replacement.is_current_for_recipe = True
     await db.commit()
 
 
@@ -607,6 +887,10 @@ async def get_message_history(
     conv_query = select(ChatConversation).where(
         ChatConversation.id == conversation_id,
         ChatConversation.user_id == current_user.id,
+        or_(
+            ChatConversation.recipe_id.is_(None),
+            ChatConversation.recipe.has(Recipe.user_id == current_user.id),
+        ),
     )
     conv_result = await db.execute(conv_query)
     conversation = conv_result.scalars().one_or_none()
@@ -683,6 +967,10 @@ class _ToolCallStart:
     call_order: int = 0
 
 
+class ToolResultPersistenceError(RuntimeError):
+    """A failed tool result could not be recorded for later replay."""
+
+
 # Maximum messages to include in history for multi-turn context.
 # Kept low to avoid blowing past Gemini's practical token budget —
 # each tool-call cycle can add thousands of tokens.
@@ -743,7 +1031,7 @@ def _truncate_json(data: Any, max_chars: int) -> Any:
     return rendered[:max_chars] + "…[truncated]"
 
 
-def _convert_db_messages_to_pydantic_ai(
+def _convert_db_messages_to_pydantic_ai(  # noqa: C901
     messages: list[ChatMessage],
 ) -> list[ModelMessage]:
     """Convert database ChatMessage records to PydanticAI ModelMessage format.
@@ -757,6 +1045,11 @@ def _convert_db_messages_to_pydantic_ai(
     result: list[ModelMessage] = []
 
     for msg in messages:
+        metadata = getattr(msg, "message_metadata", {}) or {}
+        if msg.role == "assistant" and (
+            metadata.get("error") or metadata.get("streaming")
+        ):
+            continue
         if msg.role == "user":
             text_content = _extract_text_from_blocks(msg.content_blocks)
             if not text_content:
@@ -808,7 +1101,13 @@ def _convert_db_messages_to_pydantic_ai(
                     ToolReturnPart(
                         tool_name=tool_call.tool_name,
                         content=_truncate_json(
-                            tool_call.result or {}, _MAX_TOOL_RESULT_CHARS
+                            tool_call.result
+                            or (
+                                failure_result("tool_unavailable", retryable=False)
+                                if tool_call.status == "error"
+                                else {}
+                            ),
+                            _MAX_TOOL_RESULT_CHARS,
                         ),
                         tool_call_id=tool_call.call_metadata.get(
                             "tool_call_id", str(tool_call.id)
@@ -816,7 +1115,6 @@ def _convert_db_messages_to_pydantic_ai(
                         timestamp=tool_call.finished_at or tool_call.started_at,
                     )
                     for tool_call in tool_calls
-                    if tool_call.status == "success"
                 ]
                 if return_parts:
                     result.append(ModelRequest(parts=return_parts))
@@ -886,27 +1184,91 @@ async def _get_or_create_conversation(
     db: AsyncSession,
     *,
     conversation_id: UUID,
-    user_id: UUID,
+    current_user: User,
     title: str | None = None,
 ) -> ChatConversation:
     result = await db.execute(
-        select(ChatConversation).where(
-            ChatConversation.id == conversation_id,
-            ChatConversation.user_id == user_id,
-        )
+        select(ChatConversation).where(ChatConversation.id == conversation_id)
     )
     conversation = result.scalars().one_or_none()
     if conversation is not None:
-        return conversation
+        return check_resource_access(
+            conversation,
+            current_user,
+            allow_admin_override=False,
+            not_found_message="Conversation not found",
+        )
 
     conversation = ChatConversation(
         id=conversation_id,
-        user_id=user_id,
+        user_id=current_user.id,
         title=title or _generate_conversation_title(),
     )
     db.add(conversation)
     await db.commit()
     return conversation
+
+
+def _format_live_recipe_ingredient(recipe_ingredient: Any) -> str:
+    """Format authoritative ingredient data for the live agent context."""
+    parts = [
+        str(value)
+        for value in (
+            recipe_ingredient.quantity_value,
+            recipe_ingredient.quantity_unit,
+            recipe_ingredient.ingredient.ingredient_name,
+        )
+        if value is not None and str(value).strip()
+    ]
+    ingredient = " ".join(parts)
+    prep = recipe_ingredient.prep or {}
+    if prep:
+        ingredient = f"{ingredient} ({json.dumps(prep, sort_keys=True)})"
+    if recipe_ingredient.is_optional:
+        ingredient = f"{ingredient} (optional)"
+    if recipe_ingredient.user_notes:
+        ingredient = f"{ingredient} — {recipe_ingredient.user_notes}"
+    return ingredient
+
+
+async def _load_live_recipe_context(
+    db: AsyncSession,
+    *,
+    recipe_id: UUID,
+    current_user: User,
+) -> LiveRecipeContext:
+    """Load and authorize authoritative recipe data for a contextual stream."""
+    result = await db.execute(
+        select(Recipe)
+        .where(Recipe.id == recipe_id)
+        .options(
+            selectinload(Recipe.recipeingredients).selectinload(
+                RecipeIngredient.ingredient
+            )
+        )
+    )
+    recipe = check_resource_access(
+        result.scalars().one_or_none(),
+        current_user,
+        allow_admin_override=False,
+        not_found_message="Recipe not found",
+    )
+    return LiveRecipeContext(
+        recipe_id=cast(UUID, recipe.id),
+        title=cast(str, recipe.name),
+        description=cast(str | None, recipe.description),
+        prep_time_minutes=cast(int | None, recipe.prep_time_minutes),
+        cook_time_minutes=cast(int | None, recipe.cook_time_minutes),
+        total_time_minutes=cast(int | None, recipe.total_time_minutes),
+        serving_min=cast(int | None, recipe.serving_min),
+        serving_max=cast(int | None, recipe.serving_max),
+        notes=cast(str | None, recipe.user_notes),
+        ingredients=tuple(
+            _format_live_recipe_ingredient(recipe_ingredient)
+            for recipe_ingredient in recipe.recipeingredients
+        ),
+        instructions=tuple(recipe.instructions or ()),
+    )
 
 
 async def _create_assistant_message(
@@ -1045,6 +1407,7 @@ def _record_tool_lifecycle_event_on_current_span(
     tool_name: str,
     success: bool | None = None,
     latency_ms: int | None = None,
+    error_type: str | None = None,
 ) -> None:
     """Attach supplemental tool lifecycle metadata to the active assistant span."""
     attrs = build_product_telemetry_attributes(
@@ -1054,6 +1417,7 @@ def _record_tool_lifecycle_event_on_current_span(
         conversation_id=str(conversation_id),
         success=success,
         latency_ms=latency_ms,
+        error_type=error_type,
         tool_count=1,
         tool_names=[tool_name],
         streamed=True,
@@ -1121,16 +1485,7 @@ async def _handle_agent_stream_event(  # noqa: C901
         finished_at = datetime.now(UTC)
         duration_ms = (finished_at - started_at).total_seconds() * 1000
 
-        _record_tool_lifecycle_event_on_current_span(
-            event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
-            request_id=request_id,
-            conversation_id=conversation_id,
-            tool_name=tool_name,
-            success=True,
-            latency_ms=int(duration_ms),
-        )
-
-        result_content = getattr(event.result, "content", None)
+        result_content = event.part.content
         if isinstance(result_content, dict):
             persisted_result: dict[str, object] | None = result_content
         elif result_content is None:
@@ -1154,6 +1509,19 @@ async def _handle_agent_stream_event(  # noqa: C901
             )
             persisted_result = {"content": str(result_content)}
 
+        failure = persisted_result if is_failure_result(persisted_result) else None
+        failed = failure is not None
+        error_code = str(failure["error_code"]) if failure else None
+        _record_tool_lifecycle_event_on_current_span(
+            event=ProductTelemetryEventName.ASSISTANT_TOOL_COMPLETED,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            tool_name=tool_name,
+            success=not failed,
+            latency_ms=int(duration_ms),
+            error_type=error_code,
+        )
+
         async with deps.use_db() as db:
             db.add(
                 ChatToolCall(
@@ -1163,17 +1531,29 @@ async def _handle_agent_stream_event(  # noqa: C901
                     tool_name=tool_name,
                     arguments=arguments,
                     result=persisted_result,
-                    status="success",
-                    error=None,
+                    status="error" if failed else "success",
+                    error=str(failure["message"]) if failure else None,
                     started_at=started_at,
                     finished_at=finished_at,
                     call_metadata={
                         "tool_call_id": event.tool_call_id,
                         "source": "pydantic_ai",
+                        **({"error_code": error_code} if failed else {}),
                     },
                 )
             )
-            await db.commit()
+            try:
+                await db.commit()
+            except Exception as exc:
+                if failed:
+                    logger.error(
+                        "Failed to persist failed assistant tool result: %s",
+                        type(exc).__name__,
+                    )
+                    raise ToolResultPersistenceError(
+                        "Unable to save assistant tool result"
+                    ) from None
+                raise
 
         # Build list of SSE events to emit
         sse_events: list[str] = []
@@ -1189,8 +1569,9 @@ async def _handle_agent_stream_event(  # noqa: C901
                 data={
                     "tool_call_id": event.tool_call_id,
                     "tool_name": tool_name,
-                    "status": "success",
+                    "status": "error" if failed else "success",
                     "result": sse_safe_result,
+                    **({"error_code": error_code} if failed else {}),
                 },
             ).to_sse()
         )
@@ -1199,7 +1580,11 @@ async def _handle_agent_stream_event(  # noqa: C901
         # These blocks require user acceptance (recipe cards, meal proposals) and
         # are automatically included in the final response - the agent does not
         # need to manually add them to its output blocks.
-        emitted_blocks = _extract_interactive_blocks_from_tool_result(persisted_result)
+        emitted_blocks = (
+            []
+            if failed
+            else _extract_interactive_blocks_from_tool_result(persisted_result)
+        )
 
         for block in emitted_blocks:
             sse_events.append(
@@ -1350,16 +1735,25 @@ async def stream_chat_message(  # noqa: C901
 ) -> StreamingResponse:
     """Stream assistant responses using the canonical SSE envelope."""
     message_id = uuid4()
-    agent = get_chat_agent()
 
     # Enforce scoping. If the conversation doesn't exist yet, create it so the
     # client can choose the UUID and begin streaming immediately.
-    await _get_or_create_conversation(
+    conversation = await _get_or_create_conversation(
         db,
         conversation_id=conversation_id,
-        user_id=current_user.id,
+        current_user=current_user,
         title=payload.title,
     )
+
+    recipe_context = None
+    if conversation.recipe_id is not None:
+        recipe_context = await _load_live_recipe_context(
+            db,
+            recipe_id=conversation.recipe_id,
+            current_user=current_user,
+        )
+
+    agent = get_chat_agent()
 
     # Save the user's message to the conversation
     user_message = ChatMessage(
@@ -1406,6 +1800,8 @@ async def stream_chat_message(  # noqa: C901
         agent_result: object | None = None  # Avoid NameError if stream ends early
         # Track blocks emitted from tool results (e.g., recipe cards)
         tool_emitted_blocks: list[dict[str, Any]] = []
+        failed_tool_results = 0
+        successful_tool_results = 0
         yield ChatSseEvent(
             event="status",
             conversation_id=conversation_id,
@@ -1456,43 +1852,54 @@ async def stream_chat_message(  # noqa: C901
                     user_timezone=user_timezone,
                     user_preferences=user_prefs,
                     memory_content=memory_content,
+                    recipe_context=recipe_context,
                 )
-                async for agent_event in agent.run_stream_events(
-                    payload.content, deps=deps, message_history=message_history
-                ):
-                    (
-                        sse_events,
-                        result,
-                        emitted_blocks,
-                    ) = await _handle_agent_stream_event(
-                        agent_event,
-                        conversation_id=conversation_id,
-                        message_id=message_id,
-                        user_id=current_user.id,
-                        deps=deps,
-                        tool_calls_by_id=tool_calls_by_id,
-                        tool_call_order=tool_call_order,
-                        request_id=request_id,
-                    )
+                async with agent.run_stream_events(
+                    payload.content,
+                    deps=deps,
+                    message_history=message_history,
+                    usage_limits=UsageLimits(request_limit=30, tool_calls_limit=60),
+                ) as agent_events:
+                    async for agent_event in agent_events:
+                        (
+                            sse_events,
+                            result,
+                            emitted_blocks,
+                        ) = await _handle_agent_stream_event(
+                            agent_event,
+                            conversation_id=conversation_id,
+                            message_id=message_id,
+                            user_id=current_user.id,
+                            deps=deps,
+                            tool_calls_by_id=tool_calls_by_id,
+                            tool_call_order=tool_call_order,
+                            request_id=request_id,
+                        )
 
-                    # Track memory updates and warn if excessive
-                    if isinstance(agent_event, FunctionToolCallEvent):
-                        tool_name = _extract_tool_name(agent_event.part)
-                        if tool_name == "update_user_memory":
-                            memory_update_count += 1
-                            if memory_update_count > 2:
-                                logger.warning(
-                                    f"Excessive memory updates detected "
-                                    f"(count={memory_update_count}) in conversation "
-                                    f"{conversation_id} - possible agent loop"
-                                )
+                        # Track memory updates and warn if excessive
+                        if isinstance(agent_event, FunctionToolCallEvent):
+                            tool_name = _extract_tool_name(agent_event.part)
+                            if tool_name == "update_user_memory":
+                                memory_update_count += 1
+                                if memory_update_count > 2:
+                                    logger.warning(
+                                        f"Excessive memory updates detected "
+                                        f"(count={memory_update_count}) in "
+                                        f"conversation "
+                                        f"{conversation_id} - possible agent loop"
+                                    )
 
-                    for sse_line in sse_events:
-                        yield sse_line
-                    if emitted_blocks:
-                        tool_emitted_blocks.extend(emitted_blocks)
-                    if result is not None:
-                        agent_result = result  # Full result object with new_messages()
+                        for sse_line in sse_events:
+                            yield sse_line
+                        if isinstance(agent_event, FunctionToolResultEvent):
+                            if is_failure_result(agent_event.part.content):
+                                failed_tool_results += 1
+                            else:
+                                successful_tool_results += 1
+                        if emitted_blocks:
+                            tool_emitted_blocks.extend(emitted_blocks)
+                        if result is not None:
+                            agent_result = result
 
                 # Extract output for normalization
                 if hasattr(agent_result, "output"):
@@ -1503,6 +1910,19 @@ async def stream_chat_message(  # noqa: C901
                     raw_output = agent_result
 
                 message = normalize_agent_output(raw_output)
+                if deps.failed_tools and not any(
+                    isinstance(block, TextBlock)
+                    and block.text.strip()
+                    and block.text != "Unable to parse agent response."
+                    for block in message.blocks
+                ):
+                    message.blocks = [
+                        TextBlock(
+                            type="text",
+                            text="Some lookups are unavailable right now. "
+                            "Please try again shortly.",
+                        )
+                    ]
                 for block in message.blocks:
                     if isinstance(block, TextBlock):
                         yield ChatSseEvent(
@@ -1628,6 +2048,23 @@ async def stream_chat_message(  # noqa: C901
                 await db.commit()
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
                 tool_names = sorted({tc.tool_name for tc in tool_calls_by_id.values()})
+                outcome = (
+                    "partially_completed"
+                    if failed_tool_results and successful_tool_results
+                    else "exhausted"
+                    if failed_tool_results
+                    else "recovered"
+                    if deps.recovered_tools
+                    else "success"
+                )
+                message_span.add_event(
+                    "assistant_tool_outcome",
+                    attributes={
+                        "tool.outcome": outcome,
+                        "tool.failed_count": failed_tool_results,
+                        "tool.success_count": successful_tool_results,
+                    },
+                )
 
                 message_span.set_attribute(
                     "assistant.output_block_count", len(all_blocks)
@@ -1667,6 +2104,10 @@ async def stream_chat_message(  # noqa: C901
             try:
                 latency_ms = int((time.monotonic() - run_started_at) * 1000)
                 with _tracer.start_as_current_span("assistant_message_error") as span:
+                    span.add_event(
+                        "assistant_tool_outcome",
+                        attributes={"tool.outcome": "terminal"},
+                    )
                     record_product_telemetry_event(
                         span,
                         event=ProductTelemetryEventName.ASSISTANT_MESSAGE_FAILED,
