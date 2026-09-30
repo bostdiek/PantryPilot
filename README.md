@@ -62,6 +62,44 @@ make down
 
 API versioning strategy: path-based under `/api/v1`. Swagger UI available at `/api/v1/docs`.
 
+### Releases and production promotion
+
+Release Please tracks one **application-wide** semantic version for the monorepo. Its
+manifest starts at `0.1.0`, and it considers commits after the bootstrap commit in
+`release-please-config.json`. The versions in the backend and frontend package
+metadata are separate and are not updated by this release process.
+
+1. For PRs into `main`, use a Conventional Commit title with a type and scope
+   listed in `.github/instructions/commit-message.instructions.md`, such as
+   `fix(application): correct recipe search`. Add `!` before `:` or a
+   `BREAKING CHANGE:` footer to the **squash commit** for an incompatible change.
+   Changing unit tests alone is not a breaking change. CI checks PR titles; when
+   squashing, keep that title in the resulting commit.
+2. On a push to `main`, Release Please proposes a release PR from conventional
+   commits. Review and merge it to create the `vMAJOR.MINOR.PATCH` GitHub release
+   and tag. The release PR uses the generated `chore(main): release ...` title,
+   which CI also accepts. Version tags mark releases on `main`, not deployments.
+3. After the release is ready for production, open a PR from **`main` into
+   `production`**, titled `chore(application): promote main to production`.
+   Select GitHub's **Create a merge commit** (not Squash and merge or Rebase and
+   merge) so subsequent promotion PRs retain their ancestry. The existing
+   branch-push workflows continue to deploy dev and prod.
+
+Repository setup is required: create a `RELEASE_PLEASE_TOKEN` Actions secret
+using a GitHub App installation token or a fine-grained PAT with Contents,
+Pull requests, and Issues read/write permissions for this repository. A separate
+token is needed because release PRs created with the default `GITHUB_TOKEN` do
+not trigger PR checks. Allow Actions to create pull requests in repository
+Actions settings. In branch protection/rulesets, require the **Release Policy**
+and existing CI checks on `main` and `production`, require PRs, allow squash
+merges into `main`, and use merge commits for promotions into `production`.
+The PR title check cannot itself control which merge button is clicked; restrict
+merge methods in repository settings where possible. Do not promote until the
+release PR and CI have succeeded.
+
+Production currently pulls the moving `:prod` backend image tag, so a release
+tag alone does not guarantee an immutable production artifact or rollback.
+
 ## API Endpoints
 
 ### User Registration
