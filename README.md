@@ -77,8 +77,9 @@ metadata are separate and are not updated by this release process.
    squashing, keep that title in the resulting commit.
 2. On a push to `main`, Release Please proposes a release PR from conventional
    commits. Review and merge it to create the `vMAJOR.MINOR.PATCH` GitHub release
-   and tag. The release PR uses the generated `chore(main): release ...` title,
-   which CI also accepts. Version tags mark releases on `main`, not deployments.
+   and tag. The release PR uses the generated `chore(application): release ...`
+   title, which CI also accepts. Version tags mark releases on `main`, not
+   deployments.
 3. After the release is ready for production, open a PR from **`main` into
    `production`**, titled `chore(application): promote main to production`.
    Select GitHub's **Create a merge commit** (not Squash and merge or Rebase and

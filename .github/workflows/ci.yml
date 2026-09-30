@@ -5,6 +5,7 @@ on:
     branches: [main, production, develop]
   pull_request:
     branches: [main, production, develop]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -22,15 +23,17 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           BASE_BRANCH: ${{ github.base_ref }}
           HEAD_BRANCH: ${{ github.head_ref }}
+          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPOSITORY: ${{ github.repository }}
         run: |
           if [[ "$BASE_BRANCH" == "production" ]]; then
-            if [[ "$HEAD_BRANCH" != "main" || "$PR_TITLE" != "chore(application): promote main to production" ]]; then
+            if [[ "$HEAD_BRANCH" != "main" || "$HEAD_REPOSITORY" != "$BASE_REPOSITORY" ||
+                  "$PR_TITLE" != "chore(application): promote main to production" ]]; then
               echo "Production PRs must promote main with the title 'chore(application): promote main to production'." >&2
               exit 1
             fi
-          elif [[ ! "$PR_TITLE" =~ ^(feat|fix|refactor|perf|style|test|docs|build|ops|chore)\((prompts|instructions|settings|cloud|edge|application|tools|resource-group|security-identity|observability|data|fabric|messaging|vm-host|cncf-cluster|iot-ops|blueprints|terraform|bicep|scripts|adrs|build|azureml)\)!?:\ .+ ]] &&
-                 [[ ! "$PR_TITLE" =~ ^chore\(main\):\ release\ v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "Use a Conventional Commit PR title with an allowed type and scope (or the generated release title)." >&2
+          elif [[ ! "$PR_TITLE" =~ ^(feat|fix|refactor|perf|style|test|docs|build|ops|chore)\((prompts|instructions|settings|cloud|edge|application|tools|resource-group|security-identity|observability|data|fabric|messaging|vm-host|cncf-cluster|iot-ops|blueprints|terraform|bicep|scripts|adrs|build|azureml)\)!?:\ .+ ]]; then
+            echo "Use a Conventional Commit PR title with an allowed type and scope." >&2
             exit 1
           fi
 

@@ -1,5 +1,6 @@
 {
   "bootstrap-sha": "0e584d5fc5f3470f6ec638771d502f6a97a0e99a",
+  "group-pull-request-title-pattern": "chore(application): release ${version}",
   "packages": {
     ".": {
       "release-type": "simple",
