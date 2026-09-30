@@ -62,11 +62,6 @@ export default function AssistantPage() {
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const bottomAnchorRef = useRef<HTMLDivElement | null>(null);
 
-  const messages = useMemo(() => {
-    if (!activeConversationId) return [];
-    return messagesByConversationId[activeConversationId] ?? [];
-  }, [activeConversationId, messagesByConversationId]);
-
   const activeConversation = useMemo(
     () =>
       conversations.find(
@@ -74,14 +69,34 @@ export default function AssistantPage() {
       ),
     [activeConversationId, conversations]
   );
-  const activeRecipeContext =
-    activeConversation?.recipeContext ??
-    (activeConversationId ? undefined : requestedRecipeContext);
+  const activeConversationRecipeId =
+    activeConversation?.recipeContext?.recipeId;
+  const isActiveRecipeConversationConfirmed =
+    !activeConversationRecipeId ||
+    confirmedRecipeConversationIds[activeConversationRecipeId] ===
+      activeConversation?.id;
   const isRequestedRecipeConversationActive =
     !requestedRecipeId ||
-    (activeConversation?.recipeContext?.recipeId === requestedRecipeId &&
-      confirmedRecipeConversationIds[requestedRecipeId] ===
-        activeConversation.id);
+    (activeConversationRecipeId === requestedRecipeId &&
+      isActiveRecipeConversationConfirmed);
+  // Recipe threads accept messages only after the server confirms them as
+  // current in this session, with or without route context.
+  const canSendMessage =
+    isRequestedRecipeConversationActive && isActiveRecipeConversationConfirmed;
+  // While a requested recipe is reconciling or has failed, show its context
+  // rather than the previously active thread.
+  const activeRecipeContext = isRequestedRecipeConversationActive
+    ? (activeConversation?.recipeContext ??
+      (activeConversationId ? undefined : requestedRecipeContext))
+    : requestedRecipeContext;
+  const displayedConversationId = isRequestedRecipeConversationActive
+    ? activeConversationId
+    : null;
+
+  const messages = useMemo(() => {
+    if (!displayedConversationId) return [];
+    return messagesByConversationId[displayedConversationId] ?? [];
+  }, [displayedConversationId, messagesByConversationId]);
 
   const handleNewGeneralChat = useCallback(() => {
     clearError();
@@ -94,7 +109,10 @@ export default function AssistantPage() {
 
   const handleSelectConversation = useCallback(
     async (conversationId: string) => {
-      await switchConversation(conversationId);
+      const selected = await switchConversation(conversationId);
+      // Keep the current route and error when the selection failed or was
+      // superseded by a later one.
+      if (!selected) return;
       const selectedConversation = useChatStore
         .getState()
         .conversations.find(
@@ -133,8 +151,8 @@ export default function AssistantPage() {
     ]
   );
 
-  const hasPreviousMessages = activeConversationId
-    ? (hasPreviousMessagesByConversationId[activeConversationId] ?? false)
+  const hasPreviousMessages = displayedConversationId
+    ? (hasPreviousMessagesByConversationId[displayedConversationId] ?? false)
     : false;
 
   const lastMessage = useMemo(() => {
@@ -428,8 +446,8 @@ export default function AssistantPage() {
                     <button
                       type="button"
                       onClick={() =>
-                        activeConversationId &&
-                        void loadMoreMessages(activeConversationId)
+                        displayedConversationId &&
+                        void loadMoreMessages(displayedConversationId)
                       }
                       disabled={isLoading}
                       className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-50"
@@ -454,7 +472,7 @@ export default function AssistantPage() {
           </section>
 
           <div className="shrink-0 border-t border-gray-200 pt-4">
-            <ChatInput disabled={!isRequestedRecipeConversationActive} />
+            <ChatInput disabled={!canSendMessage} />
           </div>
         </section>
       </div>

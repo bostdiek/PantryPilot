@@ -1026,6 +1026,246 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().activeRecipeConversationIds).toEqual({});
   });
 
+  test('keeps a legacy persisted general draft through the first list refresh', async () => {
+    const mocks = await getMocks();
+    localStorage.setItem(
+      'chat',
+      JSON.stringify({
+        state: {
+          conversations: [
+            {
+              id: 'legacy-draft',
+              title: 'Draft',
+              createdAt: '2026-09-01T10:00:00Z',
+              lastMessageAt: '2026-09-01T10:00:00Z',
+            },
+            {
+              id: 'legacy-sent',
+              title: 'Sent',
+              createdAt: '2026-09-01T09:00:00Z',
+              lastMessageAt: '2026-09-01T09:00:00Z',
+            },
+          ],
+          activeConversationId: 'legacy-draft',
+          activeGeneralConversationId: 'legacy-draft',
+          messagesByConversationId: {
+            'legacy-draft': [],
+            'legacy-sent': [
+              {
+                id: 'm1',
+                conversationId: 'legacy-sent',
+                role: 'user',
+                content: 'Hi',
+                createdAt: '2026-09-01T09:00:00Z',
+              },
+            ],
+          },
+          hasPreviousMessagesByConversationId: {},
+        },
+        version: 0,
+      })
+    );
+
+    await act(async () => {
+      await useChatStore.persist.rehydrate();
+    });
+
+    const rehydrated = useChatStore.getState().conversations;
+    expect(rehydrated.find((c) => c.id === 'legacy-draft')?.isLocalOnly).toBe(
+      true
+    );
+    expect(
+      rehydrated.find((c) => c.id === 'legacy-sent')?.isLocalOnly
+    ).toBeUndefined();
+
+    mocks.fetchConversations.mockResolvedValueOnce({
+      conversations: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      has_more: false,
+    });
+    await act(async () => {
+      await useChatStore.getState().loadConversations();
+    });
+
+    expect(useChatStore.getState().activeConversationId).toBe('legacy-draft');
+    expect(
+      useChatStore
+        .getState()
+        .conversations.map((conversation) => conversation.id)
+    ).toEqual(['legacy-draft']);
+  });
+
+  test('createRecipeConversation shares an in-flight create and ignores a superseded response', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const resolvers: Array<(summary: ConversationSummary) => void> = [];
+    mocks.createRecipeConversation.mockImplementation(
+      () =>
+        new Promise<ConversationSummary>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    const recipeSummary = (
+      id: string,
+      recipeId: string
+    ): ConversationSummary => ({
+      id,
+      title: id,
+      created_at: '2026-09-29T10:00:00Z',
+      last_activity_at: '2026-09-29T10:00:00Z',
+      recipe_context: {
+        recipe_id: recipeId,
+        recipe_title: recipeId,
+        is_current: true,
+      },
+    });
+
+    const firstClick = result.current.createRecipeConversation('recipe-a');
+    const secondClick = result.current.createRecipeConversation('recipe-a');
+    expect(secondClick).toBe(firstClick);
+    expect(mocks.createRecipeConversation).toHaveBeenCalledTimes(1);
+
+    const recipeBCreate = result.current.createRecipeConversation('recipe-b');
+    expect(mocks.createRecipeConversation).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      resolvers[1]?.(recipeSummary('conversation-b', 'recipe-b'));
+      await recipeBCreate;
+    });
+    await act(async () => {
+      resolvers[0]?.(recipeSummary('conversation-a', 'recipe-a'));
+      await firstClick;
+    });
+
+    expect(result.current.activeConversationId).toBe('conversation-b');
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-b': 'conversation-b',
+    });
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  test('switchConversation serializes same-recipe selections and applies only the latest', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    const resolvers = new Map<string, (summary: ConversationSummary) => void>();
+    mocks.selectRecipeConversation.mockImplementation(
+      (conversationId: string) =>
+        new Promise<ConversationSummary>((resolve) => {
+          resolvers.set(conversationId, resolve);
+        })
+    );
+    mocks.fetchMessages.mockResolvedValue({ messages: [], has_more: false });
+    const recipeThread = (id: string, isCurrent: boolean) => ({
+      id,
+      title: id,
+      createdAt: '2026-09-29T10:00:00Z',
+      lastMessageAt: '2026-09-29T10:00:00Z',
+      recipeContext: {
+        recipeId: 'recipe-1',
+        recipeTitle: 'Pasta',
+        isCurrent,
+      },
+    });
+    const summary = (id: string): ConversationSummary => ({
+      id,
+      title: id,
+      created_at: '2026-09-29T10:00:00Z',
+      last_activity_at: '2026-09-29T10:00:00Z',
+      recipe_context: {
+        recipe_id: 'recipe-1',
+        recipe_title: 'Pasta',
+        is_current: true,
+      },
+    });
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          recipeThread('thread-a', true),
+          recipeThread('thread-b', false),
+        ],
+      });
+    });
+
+    const selectA = result.current.switchConversation('thread-a');
+    const selectB = result.current.switchConversation('thread-b');
+    expect(mocks.selectRecipeConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.selectRecipeConversation).toHaveBeenCalledWith('thread-a');
+
+    let selectedA: boolean | undefined;
+    await act(async () => {
+      resolvers.get('thread-a')?.(summary('thread-a'));
+      selectedA = await selectA;
+    });
+    expect(selectedA).toBe(false);
+    expect(mocks.selectRecipeConversation).toHaveBeenLastCalledWith('thread-b');
+
+    let selectedB: boolean | undefined;
+    await act(async () => {
+      resolvers.get('thread-b')?.(summary('thread-b'));
+      selectedB = await selectB;
+    });
+
+    expect(selectedB).toBe(true);
+    expect(result.current.activeConversationId).toBe('thread-b');
+    expect(result.current.confirmedRecipeConversationIds).toEqual({
+      'recipe-1': 'thread-b',
+    });
+    expect(mocks.fetchMessages).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchMessages).toHaveBeenCalledWith('thread-b', 200);
+  });
+
+  test('switchConversation keeps the previous thread when another recipe is inaccessible', async () => {
+    const { result } = renderHook(() => useChatStore());
+    const mocks = await getMocks();
+    mocks.selectRecipeConversation.mockRejectedValueOnce(
+      new ApiErrorImpl('Not found', 404, 'http_error')
+    );
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'thread-a',
+            title: 'A',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-a',
+              recipeTitle: 'A',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'thread-b',
+            title: 'B',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-b',
+              recipeTitle: 'B',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'thread-a',
+        confirmedRecipeConversationIds: { 'recipe-a': 'thread-a' },
+      });
+    });
+
+    let selected: boolean | undefined;
+    await act(async () => {
+      selected = await result.current.switchConversation('thread-b');
+    });
+
+    expect(selected).toBe(false);
+    expect(result.current.activeConversationId).toBe('thread-a');
+    expect(result.current.conversations.map((c) => c.id)).toEqual(['thread-a']);
+    expect(result.current.error).toBe(
+      'This recipe conversation is no longer available. Return to the recipe and try again.'
+    );
+  });
+
   test('switchConversation updates activeConversationId', async () => {
     const { result } = renderHook(() => useChatStore());
     const mocks = await getMocks();

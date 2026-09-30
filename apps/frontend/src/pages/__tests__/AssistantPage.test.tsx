@@ -164,7 +164,7 @@ describe('AssistantPage', () => {
     await waitFor(() => expect(resumeSpy).toHaveBeenCalledWith('recipe-1'));
   });
 
-  test('does not display requested recipe context over an active general conversation', async () => {
+  test('shows requested recipe context without the previous general thread while reconciling', async () => {
     vi.spyOn(useChatStore.getState(), 'loadConversations').mockResolvedValue(
       undefined
     );
@@ -184,6 +184,17 @@ describe('AssistantPage', () => {
         ],
         activeConversationId: 'general-chat',
         activeGeneralConversationId: 'general-chat',
+        messagesByConversationId: {
+          'general-chat': [
+            {
+              id: 'general-message',
+              conversationId: 'general-chat',
+              role: 'user',
+              content: 'General pantry question',
+              createdAt: '2026-09-29T10:00:00Z',
+            },
+          ],
+        },
       });
     });
 
@@ -194,15 +205,187 @@ describe('AssistantPage', () => {
       },
     });
 
-    expect(screen.queryByText('Recipe: Tomato Soup')).not.toBeInTheDocument();
+    expect(screen.getByText('Recipe: Tomato Soup')).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', {
+      screen.getByRole('button', {
         name: 'New conversation for Tomato Soup',
       })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText('General pantry question')
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole('textbox', { name: 'Message Nibble' })
     ).toBeDisabled();
+  });
+
+  test('shows the requested recipe instead of a different active recipe thread', async () => {
+    vi.spyOn(useChatStore.getState(), 'loadConversations').mockResolvedValue(
+      undefined
+    );
+    vi.spyOn(
+      useChatStore.getState(),
+      'resumeRecipeConversation'
+    ).mockResolvedValue(undefined);
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'conversation-a',
+            title: 'Recipe A chat',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-a',
+              recipeTitle: 'Recipe A',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'conversation-a',
+        confirmedRecipeConversationIds: { 'recipe-a': 'conversation-a' },
+        messagesByConversationId: {
+          'conversation-a': [
+            {
+              id: 'recipe-a-message',
+              conversationId: 'conversation-a',
+              role: 'user',
+              content: 'Recipe A question',
+              createdAt: '2026-09-29T09:00:00Z',
+            },
+          ],
+        },
+      });
+    });
+
+    renderAssistant('/assistant', {
+      recipeContext: { recipeId: 'recipe-b', recipeTitle: 'Recipe B' },
+    });
+
+    expect(screen.getByText('Recipe: Recipe B')).toBeInTheDocument();
+    expect(screen.queryByText('Recipe: Recipe A')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'New conversation for Recipe B' })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Recipe A question')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('textbox', { name: 'Message Nibble' })
+    ).toBeDisabled();
+  });
+
+  test('disables sending in an unconfirmed recipe thread without route context', async () => {
+    vi.spyOn(useChatStore.getState(), 'loadConversations').mockResolvedValue(
+      undefined
+    );
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'conversation-a',
+            title: 'Recipe A chat',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-a',
+              recipeTitle: 'Recipe A',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'conversation-a',
+        confirmedRecipeConversationIds: {},
+      });
+    });
+
+    renderAssistant();
+
+    expect(screen.getByText('Recipe: Recipe A')).toBeInTheDocument();
+    expect(
+      screen.getByRole('textbox', { name: 'Message Nibble' })
+    ).toBeDisabled();
+
+    act(() => {
+      useChatStore.setState({
+        confirmedRecipeConversationIds: { 'recipe-a': 'conversation-a' },
+      });
+    });
+
+    expect(
+      screen.getByRole('textbox', { name: 'Message Nibble' })
+    ).toBeEnabled();
+  });
+
+  test('keeps the route when selecting a recipe conversation fails', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(useChatStore.getState(), 'loadConversations').mockResolvedValue(
+      undefined
+    );
+    vi.spyOn(
+      useChatStore.getState(),
+      'resumeRecipeConversation'
+    ).mockResolvedValue(undefined);
+    vi.spyOn(useChatStore.getState(), 'switchConversation').mockImplementation(
+      async () => {
+        act(() => {
+          useChatStore.setState({
+            error:
+              'Unable to select this recipe conversation. Please try again.',
+          });
+        });
+        return false;
+      }
+    );
+    act(() => {
+      useChatStore.setState({
+        conversations: [
+          {
+            id: 'conversation-a',
+            title: 'Recipe A chat',
+            createdAt: '2026-09-29T09:00:00Z',
+            lastMessageAt: '2026-09-29T09:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-a',
+              recipeTitle: 'Recipe A',
+              isCurrent: true,
+            },
+          },
+          {
+            id: 'conversation-b',
+            title: 'Recipe B chat',
+            createdAt: '2026-09-29T10:00:00Z',
+            lastMessageAt: '2026-09-29T10:00:00Z',
+            recipeContext: {
+              recipeId: 'recipe-b',
+              recipeTitle: 'Recipe B',
+              isCurrent: true,
+            },
+          },
+        ],
+        activeConversationId: 'conversation-a',
+        confirmedRecipeConversationIds: { 'recipe-a': 'conversation-a' },
+      });
+    });
+    const routeState = {
+      recipeContext: { recipeId: 'recipe-a', recipeTitle: 'Recipe A' },
+    };
+    const router = createMemoryRouter(
+      [{ path: '/assistant', element: <AssistantPage /> }],
+      { initialEntries: [{ pathname: '/assistant', state: routeState }] }
+    );
+    render(<RouterProvider router={router} />);
+
+    await user.selectOptions(
+      screen.getByLabelText('Select a conversation'),
+      'conversation-b'
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Unable to select this recipe conversation. Please try again.'
+      )
+    );
+    expect(router.state.location.state).toEqual(routeState);
+    expect(screen.getByText('Recipe: Recipe A')).toBeInTheDocument();
   });
 
   test('requires explicit general-chat recovery after recipe resume fails with a general conversation active', async () => {
@@ -389,6 +572,7 @@ describe('AssistantPage', () => {
             },
           }));
         });
+        return true;
       }
     );
     act(() => {
