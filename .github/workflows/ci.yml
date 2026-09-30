@@ -15,6 +15,7 @@ jobs:
     name: Release Policy
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions: {}
     steps:
       - name: Check PR title and promotion source
         env:
