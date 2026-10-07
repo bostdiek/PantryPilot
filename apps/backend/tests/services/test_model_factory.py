@@ -2,14 +2,71 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from httpx2 import AsyncClient, MockTransport, Request, Response
 from pydantic_ai import models
+from pydantic_ai.messages import ModelRequest, TextPart, UserPromptPart
 
 
 # Block any real model requests in tests
 models.ALLOW_MODEL_REQUESTS = False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("model_kind", ["chat", "text", "multimodal"])
+async def test_given_gemini_factory_when_requesting_then_omits_deprecated_parameters(
+    model_kind: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Verify SDK serialization preserves default factory generation settings."""
+    from services.ai import model_factory
+
+    settings = MagicMock(
+        LLM_PROVIDER="gemini",
+        GEMINI_API_KEY="test-key",
+        CHAT_MODEL="gemini-3-flash-preview",
+        TEXT_MODEL="gemini-3.1-flash-lite",
+        MULTIMODAL_MODEL="gemini-3.1-flash-lite",
+    )
+    monkeypatch.setattr(model_factory, "get_settings", lambda: settings)
+
+    def handle_request(request: Request) -> Response:
+        config = json.loads(request.content).get("generationConfig", {})
+        assert {"temperature", "topP", "topK"}.isdisjoint(config)
+        assert "thinkingConfig" not in config
+        return Response(
+            200,
+            json={
+                "candidates": [
+                    {
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": "Test response"}],
+                        },
+                        "finishReason": "STOP",
+                    }
+                ]
+            },
+        )
+
+    factory = {
+        "chat": model_factory.get_chat_model,
+        "text": model_factory.get_text_model,
+        "multimodal": model_factory.get_multimodal_model,
+    }[model_kind]
+    async with AsyncClient(transport=MockTransport(handle_request)) as http_client:
+        model = factory(http_client=http_client)
+        with models.override_allow_model_requests(True):
+            result = await model.request(
+                [ModelRequest(parts=[UserPromptPart("Test prompt")])],
+                None,
+                models.ModelRequestParameters(),
+            )
+
+    assert isinstance(result.parts[0], TextPart)
+    assert result.parts[0].content == "Test response"
 
 
 class TestIsAzureProvider:

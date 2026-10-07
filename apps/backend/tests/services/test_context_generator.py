@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from google import genai
+from google.genai import types
+from httpx2 import AsyncClient, MockTransport, Request, Response
 from pydantic_ai import models
 
 
@@ -185,6 +189,49 @@ class TestGenerateFallbackContext:
 
 class TestGenerateContext:
     """Tests for generate_context async method."""
+
+    @pytest.mark.asyncio
+    async def test_given_gemini_when_generating_context_then_omits_deprecated_fields(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Verify the SDK omits deprecated fields from the outgoing request."""
+        from services.context_generator import (
+            CONTEXT_MAX_TOKENS,
+            RecipeContextGenerator,
+        )
+
+        def handle_request(request: Request) -> Response:
+            payload = json.loads(request.content)
+            config = payload["generationConfig"]
+            assert config["maxOutputTokens"] == CONTEXT_MAX_TOKENS
+            assert {"temperature", "topP", "topK"}.isdisjoint(config)
+            assert "thinkingConfig" not in config
+            return Response(
+                200,
+                json={
+                    "candidates": [
+                        {
+                            "content": {
+                                "role": "model",
+                                "parts": [{"text": "  A quick Italian dinner.  "}],
+                            },
+                            "finishReason": "STOP",
+                        }
+                    ]
+                },
+            )
+
+        async with AsyncClient(transport=MockTransport(handle_request)) as http_client:
+            client = genai.Client(
+                api_key="test-key",
+                http_options=types.HttpOptions(httpx_async_client=http_client),
+            )
+            generator = RecipeContextGenerator(api_key="test-key")
+            monkeypatch.setattr(generator, "_get_gemini_client", lambda: client)
+
+            result = await generator._generate_with_gemini("Test prompt", "Test Recipe")
+
+        assert result == "A quick Italian dinner."
 
     @pytest.mark.asyncio
     async def test_generate_context_success(self) -> None:

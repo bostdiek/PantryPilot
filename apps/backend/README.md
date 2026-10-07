@@ -184,6 +184,13 @@ TEXT_MODEL=gemini-3.1-flash-lite
 EMBEDDING_MODEL=gemini-embedding-001
 ```
 
+Gemini generation requests omit `temperature`, `top_p`, `top_k`, and
+`thinking_budget` so they use the model's default sampling and thinking settings.
+Recipe-context generation retains its 150-token output limit. No explicit
+`thinking_level` is set because supported levels vary by model; see
+[Google's thinking documentation](https://ai.google.dev/gemini-api/docs/thinking)
+before adding an override. Azure OpenAI generation settings are unchanged.
+
 **Preview rollout guardrail:**
 - Re-check Google's `models.list`, models docs, and pricing docs before rollout.
 - Gemini preview IDs can change and may have stricter rate limits.

@@ -225,7 +225,6 @@ class RecipeContextGenerator:
             contents=prompt,
             config=types.GenerateContentConfig(
                 max_output_tokens=CONTEXT_MAX_TOKENS,
-                temperature=0.3,
             ),
         )
         if response.text:
