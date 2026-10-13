@@ -556,11 +556,11 @@ def _build_compact_response(
     for r in recipes:
         compact_items.append(
             RecipeSearchResult(
-                id=r.id,  # type: ignore[arg-type]
-                title=r.name,  # type: ignore[arg-type]
-                description=r.user_notes,  # type: ignore[arg-type]
-                cook_time_minutes=r.cook_time_minutes or 0,  # type: ignore[arg-type]
-                prep_time_minutes=r.prep_time_minutes or 0,  # type: ignore[arg-type]
+                id=r.id,
+                title=r.name,
+                description=r.user_notes,
+                cook_time_minutes=r.cook_time_minutes or 0,
+                prep_time_minutes=r.prep_time_minutes or 0,
             )
         )
     return ApiResponse(
