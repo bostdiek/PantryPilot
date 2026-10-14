@@ -14,7 +14,7 @@ import pytest
 import pytest_asyncio
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -99,6 +99,28 @@ async def mealplans_client() -> AsyncIterator[AsyncClient]:
             app.dependency_overrides.pop(get_db, None)
             app.dependency_overrides.pop(get_current_user, None)
             await engine.dispose()
+
+
+def test_given_date_range_when_querying_meals_then_preserves_typed_bounds() -> None:
+    # Arrange
+    start_date = date(2025, 1, 12)
+    end_date = date(2025, 1, 19)
+
+    # Act
+    statement = select(Meal).where(
+        and_(
+            Meal.planned_for_date >= start_date,
+            Meal.planned_for_date <= end_date,
+        )
+    )
+    compiled = str(statement.compile())
+
+    # Assert
+    column = Meal.__table__.c.planned_for_date
+    assert column.type.python_type is date
+    assert column.nullable is False
+    assert "meal_history.planned_for_date >=" in compiled
+    assert "meal_history.planned_for_date <=" in compiled
 
 
 @pytest.mark.asyncio

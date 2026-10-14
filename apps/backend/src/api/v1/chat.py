@@ -8,7 +8,7 @@ import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Any, cast
+from typing import Annotated, Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -519,7 +519,7 @@ def _conversation_summary(
     recipe_context = (
         RecipeConversationContext(
             recipe_id=recipe_id,
-            recipe_title=cast(str, recipe.name),
+            recipe_title=recipe.name,
             is_current=getattr(conversation, "is_current_for_recipe", False),
         )
         if recipe_id is not None and recipe is not None
@@ -770,7 +770,7 @@ async def select_recipe_conversation(
     if not conversation.is_current_for_recipe:
         await _clear_current_recipe_conversation(
             db,
-            recipe_id=cast(UUID, recipe.id),
+            recipe_id=recipe.id,
             user_id=current_user.id,
         )
         conversation.is_current_for_recipe = True
@@ -1254,15 +1254,15 @@ async def _load_live_recipe_context(
         not_found_message="Recipe not found",
     )
     return LiveRecipeContext(
-        recipe_id=cast(UUID, recipe.id),
-        title=cast(str, recipe.name),
-        description=cast(str | None, recipe.description),
-        prep_time_minutes=cast(int | None, recipe.prep_time_minutes),
-        cook_time_minutes=cast(int | None, recipe.cook_time_minutes),
-        total_time_minutes=cast(int | None, recipe.total_time_minutes),
-        serving_min=cast(int | None, recipe.serving_min),
-        serving_max=cast(int | None, recipe.serving_max),
-        notes=cast(str | None, recipe.user_notes),
+        recipe_id=recipe.id,
+        title=recipe.name,
+        description=recipe.description,
+        prep_time_minutes=recipe.prep_time_minutes,
+        cook_time_minutes=recipe.cook_time_minutes,
+        total_time_minutes=recipe.total_time_minutes,
+        serving_min=recipe.serving_min,
+        serving_max=recipe.serving_max,
+        notes=recipe.user_notes,
         ingredients=tuple(
             _format_live_recipe_ingredient(recipe_ingredient)
             for recipe_ingredient in recipe.recipeingredients

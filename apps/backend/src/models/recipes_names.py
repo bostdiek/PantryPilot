@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import UUID, Column, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import UUID, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,26 +17,28 @@ if TYPE_CHECKING:
 class Recipe(Base):
     __tablename__ = "recipe_names"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
-    user_id = Column(
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
-    name = Column(String(255), nullable=False, index=True)
-    description = Column(Text, nullable=True)
-    prep_time_minutes = Column(Integer, nullable=True)
-    cook_time_minutes = Column(Integer, nullable=True)
-    total_time_minutes = Column(Integer, nullable=True)
-    serving_min = Column(Integer, nullable=True)
-    serving_max = Column(Integer, nullable=True)
-    ethnicity = Column(String(255), nullable=True)
-    difficulty = Column(String(50), nullable=True)
-    course_type = Column(String(255), nullable=True)
-    oven_temperature_f = Column(Integer, nullable=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    prep_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cook_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_time_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    serving_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    serving_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ethnicity: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    difficulty: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    course_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    oven_temperature_f: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Stored as a Postgres TEXT[] (list of instruction steps)
     instructions: Mapped[list[str] | None] = mapped_column(ARRAY(Text), nullable=True)
-    user_notes = Column(Text, nullable=True)
-    ai_summary = Column(Text, nullable=True)
-    link_source = Column(Text, nullable=True)
+    user_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    link_source: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Semantic search fields
     embedding: Mapped[list[float] | None] = mapped_column(Vector(768), nullable=True)
@@ -51,8 +53,12 @@ class Recipe(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     # Relationships
     recipeingredients = relationship("RecipeIngredient", back_populates="recipe")
