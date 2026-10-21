@@ -1,6 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { apiClient } from '../client';
+import { authenticatedFetch, refreshAccessToken } from '../session';
+import type { AuthState } from '../../types/auth';
+
+function accessToken(
+  subject = 'cook-a',
+  session = 'session-a',
+  generation = 0
+) {
+  return `header.${btoa(JSON.stringify({ sub: subject, sid: session, generation }))}.signature`;
+}
+
+const originalToken = accessToken();
+const renewedToken = accessToken('cook-a', 'session-a', 1);
 
 vi.mock('../../stores/useAuthStore', () => ({
   useAuthStore: {
@@ -12,12 +25,13 @@ describe('active session renewal', () => {
   const fetchMock = vi.fn();
   const setToken = vi.fn();
   const logout = vi.fn();
+  let state: AuthState;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', fetchMock);
-    vi.mocked(useAuthStore.getState).mockReturnValue({
-      token: 'expired-access-token',
+    state = {
+      token: originalToken,
       user: null,
       hasHydrated: true,
       login: vi.fn(),
@@ -25,7 +39,14 @@ describe('active session renewal', () => {
       setToken,
       setUser: vi.fn(),
       getDisplayName: vi.fn(() => 'Cook'),
+    };
+    setToken.mockImplementation((token: string) => {
+      state.token = token;
     });
+    logout.mockImplementation(() => {
+      state.token = null;
+    });
+    vi.mocked(useAuthStore.getState).mockImplementation(() => state);
   });
 
   it('renews once and retries an unauthorized write once', async () => {
@@ -39,7 +60,7 @@ describe('active session renewal', () => {
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
-        json: async () => ({ access_token: 'renewed-access-token' }),
+        json: async () => ({ access_token: renewedToken }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -60,7 +81,7 @@ describe('active session renewal', () => {
       credentials: 'include',
       body: JSON.stringify({ activity: false }),
     });
-    expect(setToken).toHaveBeenCalledWith('renewed-access-token');
+    expect(setToken).toHaveBeenCalledWith(renewedToken);
   });
 
   it('does not renew for a resource-specific 401', async () => {
@@ -87,7 +108,7 @@ describe('active session renewal', () => {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: async () => ({ access_token: 'renewed-access-token' }),
+          json: async () => ({ access_token: renewedToken }),
         });
       }
 
@@ -160,5 +181,82 @@ describe('active session renewal', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(logout).toHaveBeenCalledWith('expired');
+  });
+
+  it.each(['client', 'fetch'])(
+    'does not replay a delayed %s write after another account signs in',
+    async (transport) => {
+      let finish!: (response: Response) => void;
+      fetchMock.mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          })
+      );
+      const pending =
+        transport === 'client'
+          ? apiClient.request('/api/v1/recipes', {
+              method: 'POST',
+              body: '{"title":"A"}',
+            })
+          : authenticatedFetch('/api/v1/recipes', {
+              method: 'POST',
+              body: '{"title":"A"}',
+            });
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      state.token = accessToken('cook-b', 'session-b');
+      finish(
+        new Response(
+          JSON.stringify({ detail: 'Could not validate credentials' }),
+          { status: 401 }
+        )
+      );
+
+      if (transport === 'client') {
+        await expect(pending).rejects.toThrow();
+      } else {
+        expect(((await pending) as Response).status).toBe(401);
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(setToken).not.toHaveBeenCalled();
+      expect(logout).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ['cook-b', 'session-b'],
+    ['cook-a', 'session-b'],
+    ['cook-b', 'session-a'],
+  ])(
+    'rejects renewal for mismatched subject/session %s %s',
+    async (subject, session) => {
+      fetchMock.mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ access_token: accessToken(subject, session) })
+        )
+      );
+
+      await expect(refreshAccessToken(false)).resolves.toBeNull();
+
+      expect(setToken).not.toHaveBeenCalled();
+      expect(logout).toHaveBeenCalledWith('expired');
+    }
+  );
+
+  it('does not install a pending renewal after the local session changes', async () => {
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const pending = refreshAccessToken(false);
+    state.token = accessToken('cook-b', 'session-b');
+    finish(new Response(JSON.stringify({ access_token: renewedToken })));
+
+    await expect(pending).resolves.toBeNull();
+    expect(setToken).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
   });
 });

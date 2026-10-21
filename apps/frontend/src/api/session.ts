@@ -1,8 +1,10 @@
 import { getApiBaseUrl } from './apiConfig';
 import { useAuthStore } from '../stores/useAuthStore';
+import { getSessionIdentity, isSameSession } from '../utils/authSession';
+import { logger } from '../lib/logger';
 
 let refreshInFlight:
-  | { activity: boolean; promise: Promise<string | null> }
+  | { activity: boolean; token: string; promise: Promise<string | null> }
   | undefined;
 let lastActivityRefreshAt = 0;
 const ACTIVITY_REFRESH_INTERVAL_MS = 60_000;
@@ -22,25 +24,41 @@ async function requestAccessToken(activity: boolean): Promise<string | null> {
 
     const body = (await response.json()) as { access_token?: string };
     const accessToken = body.access_token;
-    if (!accessToken || useAuthStore.getState().token !== expectedToken) {
+    if (!isSameSession(expectedToken, useAuthStore.getState().token)) {
+      return null;
+    }
+    if (
+      !accessToken ||
+      !getSessionIdentity(expectedToken) ||
+      getSessionIdentity(accessToken) !== getSessionIdentity(expectedToken)
+    ) {
+      logger.warn('Session renewal returned a different or invalid identity');
+      useAuthStore.getState().logout('expired');
       return null;
     }
 
     useAuthStore.getState().setToken(accessToken);
     return accessToken;
-  } catch {
+  } catch (error) {
+    logger.warn('Session renewal failed', error);
     return null;
   }
 }
 
 export function refreshAccessToken(activity: boolean): Promise<string | null> {
-  if (refreshInFlight) {
+  const token = useAuthStore.getState().token;
+  if (!token) return Promise.resolve(null);
+  if (refreshInFlight && isSameSession(token, refreshInFlight.token)) {
     if (!activity || refreshInFlight.activity) {
       return refreshInFlight.promise;
     }
 
     const pendingRefresh = refreshInFlight.promise;
-    return pendingRefresh.then(() => refreshAccessToken(true));
+    return pendingRefresh.then(() =>
+      isSameSession(token, useAuthStore.getState().token)
+        ? refreshAccessToken(true)
+        : null
+    );
   }
 
   const promise = requestAccessToken(activity).finally(() => {
@@ -48,7 +66,7 @@ export function refreshAccessToken(activity: boolean): Promise<string | null> {
       refreshInFlight = undefined;
     }
   });
-  refreshInFlight = { activity, promise };
+  refreshInFlight = { activity, token, promise };
   return promise;
 }
 
@@ -98,7 +116,11 @@ export async function authenticatedFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
 ): Promise<Response> {
+  const initiatingToken = useAuthStore.getState().token;
   await waitForSessionActivity();
+  if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
+    throw new Error('Session changed before the request could be sent');
+  }
   const headers: Record<string, string> = {};
   if (
     init.headers &&
@@ -116,7 +138,7 @@ export async function authenticatedFetch(
     Object.keys(headers).find((key) => key.toLowerCase() === 'authorization') ??
     'Authorization';
   const token = useAuthStore.getState().token;
-  if (token) headers[authorizationHeader] = `******;
+  if (token) headers[authorizationHeader] = `Bearer ${token}`;
 
   const requestOptions: RequestInit = {
     ...init,
@@ -138,19 +160,26 @@ export async function authenticatedFetch(
   }
 
   if (!(await isSessionAuthenticationFailure(response))) return response;
+  if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
+    return response;
+  }
 
   const renewedToken = await refreshAccessToken(false);
+  if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
+    return response;
+  }
   if (!renewedToken) {
     if (useAuthStore.getState().token) {
       useAuthStore.getState().logout('expired');
     }
     return response;
   }
-  headers[authorizationHeader] = `******;
+  headers[authorizationHeader] = `Bearer ${renewedToken}`;
   const retryResponse = await fetch(input, requestOptions);
   if (
     retryResponse.status === 401 &&
     (await isSessionAuthenticationFailure(retryResponse)) &&
+    isSameSession(initiatingToken, useAuthStore.getState().token) &&
     useAuthStore.getState().token
   ) {
     useAuthStore.getState().logout('expired');

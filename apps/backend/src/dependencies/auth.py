@@ -10,8 +10,8 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from core.session import session_has_expired
 from core.security import decode_token
+from core.session import session_has_expired
 from crud.user import get_user_by_id
 from dependencies.db import DbSession
 from models.auth_sessions import AuthSession

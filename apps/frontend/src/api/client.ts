@@ -8,6 +8,7 @@ import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
 import { getApiBaseUrl } from './apiConfig';
 import { refreshAccessToken, waitForSessionActivity } from './session';
+import { isSameSession } from '../utils/authSession';
 import {
   getUserFriendlyErrorMessage,
   shouldLogoutOnError,
@@ -33,17 +34,20 @@ class ApiClient {
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
-  async request<T>(
-    endpoint: string,
-    options?: ApiRequestOptions
-  ): Promise<T> {
-    return this.execute<T>(endpoint, options, false);
+  async request<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
+    return this.execute<T>(
+      endpoint,
+      options,
+      false,
+      useAuthStore.getState().token
+    );
   }
 
   private async execute<T>(
     endpoint: string,
     options: ApiRequestOptions | undefined,
-    hasRetried: boolean
+    hasRetried: boolean,
+    initiatingToken: string | null
   ): Promise<T> {
     // Ensure endpoint starts with /
     const normalizedEndpoint = endpoint.startsWith('/')
@@ -80,6 +84,11 @@ class ApiClient {
 
     try {
       await waitForSessionActivity();
+      if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
+        throw new ApiErrorImpl(
+          'Session changed before the request could be sent'
+        );
+      }
       const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
       const headers = {
         'Content-Type': 'application/json',
@@ -109,7 +118,9 @@ class ApiClient {
       // Check if user was logged in before processing any errors
       // This is used to determine if a 401 should trigger "session expired" message
       // (only if the user actually had a session)
-      const wasLoggedIn = useAuthStore.getState().token !== null;
+      const wasLoggedIn =
+        initiatingToken !== null &&
+        isSameSession(initiatingToken, useAuthStore.getState().token);
 
       if (!resp.ok) {
         const errorDetail =
@@ -134,8 +145,11 @@ class ApiClient {
           !hasRetried
         ) {
           const accessToken = await refreshAccessToken(false);
-          if (accessToken) {
-            return this.execute<T>(endpoint, options, true);
+          if (
+            accessToken &&
+            isSameSession(initiatingToken, useAuthStore.getState().token)
+          ) {
+            return this.execute<T>(endpoint, options, true, initiatingToken);
           }
         }
 
@@ -166,6 +180,7 @@ class ApiClient {
         // is expected behavior, not a session expiration
         if (
           wasLoggedIn &&
+          isSameSession(initiatingToken, useAuthStore.getState().token) &&
           !shouldSkipLogoutOn401 &&
           isAuthenticationFailure &&
           shouldLogoutOnError(body, resp.status)
@@ -223,6 +238,7 @@ class ApiClient {
           // is expected behavior, not a session expiration
           if (
             wasLoggedIn &&
+            isSameSession(initiatingToken, useAuthStore.getState().token) &&
             !shouldSkipLogoutOn401 &&
             isAuthenticationFailure &&
             shouldLogoutOnError(apiResponse, resp.status)

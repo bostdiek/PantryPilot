@@ -961,6 +961,7 @@ describe('chat API endpoints', () => {
         'http://api/api/v1/chat/recipes/recipe-1/conversations/resume',
         {
           method: 'POST',
+          credentials: 'include',
           headers: expect.objectContaining({
             Authorization: expect.any(String),
           }),
@@ -1023,6 +1024,7 @@ describe('chat API endpoints', () => {
         'http://api/api/v1/chat/recipes/recipe-1/conversations',
         {
           method: 'POST',
+          credentials: 'include',
           headers: expect.objectContaining({
             Authorization: expect.any(String),
           }),
@@ -1044,6 +1046,7 @@ describe('chat API endpoints', () => {
         'http://api/api/v1/chat/conversations/conv-recipe-1/select',
         {
           method: 'POST',
+          credentials: 'include',
           headers: expect.objectContaining({
             Authorization: expect.any(String),
           }),
@@ -1095,24 +1098,27 @@ describe('chat API endpoints', () => {
     });
 
     it('preserves session-expiry logout behavior on lifecycle 401 responses', async () => {
-      global.fetch = vi.fn().mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized',
-        clone: () => ({
-          json: async () => ({
-            detail: 'Could not validate credentials',
+      global.fetch = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          clone: () => ({
+            json: async () => ({
+              detail: 'Could not validate credentials',
+            }),
           }),
-        }),
-        text: vi.fn().mockResolvedValue(
-          JSON.stringify({
-            detail: 'Could not validate credentials',
-          })
-        ),
-      }).mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-      });
+          text: vi.fn().mockResolvedValue(
+            JSON.stringify({
+              detail: 'Could not validate credentials',
+            })
+          ),
+        })
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+        });
 
       await expect(resumeRecipeConversation('recipe-1')).rejects.toMatchObject({
         status: 401,

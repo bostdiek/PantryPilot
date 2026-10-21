@@ -1,6 +1,10 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useAuthStore, useDisplayName } from '../useAuthStore';
+import {
+  listenForSessionChanges,
+  useAuthStore,
+  useDisplayName,
+} from '../useAuthStore';
 
 describe('useAuthStore', () => {
   beforeEach(() => {
@@ -83,13 +87,57 @@ describe('useAuthStore', () => {
     expect(result.current.token).toBe('test-token');
     expect(result.current.user).toEqual(testUser);
 
-    // Then logout
     act(() => {
       result.current.logout();
     });
 
     expect(result.current.token).toBeNull();
     expect(result.current.user).toBeNull();
+  });
+
+  it('invalidates a stale tab without overwriting the other account in storage', () => {
+    const user = { id: 'a', username: 'a', email: 'a@example.test' };
+    useAuthStore.getState().login('token-a', user);
+    const stop = listenForSessionChanges();
+    const remote = JSON.stringify({
+      state: { token: 'token-b', user: { ...user, id: 'b' } },
+    });
+    localStorage.setItem('auth', remote);
+
+    act(() =>
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'auth',
+          newValue: remote,
+        })
+      )
+    );
+
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(localStorage.getItem('auth')).toBe(remote);
+    stop();
+  });
+
+  it('keeps the local session when another tab only rotates its token', () => {
+    const token = (generation: number) =>
+      `header.${btoa(JSON.stringify({ sub: 'a', sid: 'same-session', generation }))}.signature`;
+    useAuthStore
+      .getState()
+      .login(token(0), { id: 'a', username: 'a', email: 'a@example.test' });
+    const stop = listenForSessionChanges();
+
+    act(() =>
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'auth',
+          newValue: JSON.stringify({ state: { token: token(1) } }),
+        })
+      )
+    );
+
+    expect(useAuthStore.getState().token).toBe(token(0));
+    stop();
   });
 
   describe('getDisplayName', () => {

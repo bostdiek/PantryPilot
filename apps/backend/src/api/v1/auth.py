@@ -16,7 +16,6 @@ from core.config import get_settings
 from core.email import send_password_reset_email, send_verification_email
 from core.exceptions import DuplicateUserError
 from core.ratelimit import check_rate_limit
-from core.session import SESSION_ABSOLUTE_TIMEOUT, session_has_expired
 from core.security import (
     create_access_token,
     generate_password_reset_token,
@@ -26,6 +25,7 @@ from core.security import (
     verify_password,
     verify_password_reset_token,
 )
+from core.session import SESSION_ABSOLUTE_TIMEOUT, session_has_expired
 from crud.user import create_user, get_user_by_email, get_user_by_username, user_crud
 from dependencies.db import DbSession
 from models.auth_sessions import AuthSession
@@ -60,7 +60,7 @@ def _refresh_token_hash(token: str) -> str:
 
 def _refresh_secret(session_id: UUID, generation: int) -> str:
     key = get_settings().SECRET_KEY.encode("utf-8")
-    message = f"pantrypilot-refresh:{session_id}:{generation}".encode("utf-8")
+    message = f"pantrypilot-refresh:{session_id}:{generation}".encode()
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
@@ -70,7 +70,7 @@ def _set_refresh_cookie(response: Response, token: str, max_age: int) -> None:
         key=REFRESH_COOKIE,
         # The browser-only credential is protected by HttpOnly/SameSite and
         # the Secure flag in production.
-        value=token,  # codeql[py/clear-text-storage-sensitive-data]
+        value=token,
         max_age=max_age,
         httponly=True,
         secure=settings.ENVIRONMENT == "production",
@@ -275,13 +275,55 @@ async def verify_email(
     )
 
 
+async def _validate_refresh_rotation(
+    auth_session: AuthSession,
+    presented_generation: int,
+    refresh_secret: str,
+    now: datetime,
+    db: DbSession,
+    response: Response,
+) -> bool:
+    """Validate the credential and return whether it should rotate."""
+    secret_is_valid = secrets.compare_digest(
+        _refresh_secret(auth_session.id, presented_generation), refresh_secret
+    )
+    is_current_token = (
+        presented_generation == auth_session.refresh_generation
+        and secrets.compare_digest(
+            auth_session.refresh_token_hash, _refresh_token_hash(refresh_secret)
+        )
+        and secret_is_valid
+    )
+    grace_started_at = auth_session.refresh_grace_started_at
+    if grace_started_at is not None and grace_started_at.tzinfo is None:
+        grace_started_at = grace_started_at.replace(tzinfo=UTC)
+    grace_is_active = (
+        grace_started_at is not None and now - grace_started_at <= timedelta(seconds=30)
+    )
+    is_recent_previous_token = (
+        auth_session.refresh_grace_generation is not None
+        and auth_session.refresh_grace_generation
+        <= presented_generation
+        < auth_session.refresh_generation
+        and secret_is_valid
+        and grace_is_active
+    )
+    if not is_current_token and not is_recent_previous_token:
+        if secret_is_valid and presented_generation < auth_session.refresh_generation:
+            auth_session.revoked_at = now
+            await db.commit()
+        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+
+    return is_current_token and not grace_is_active
+
+
 @router.post("/refresh", response_model=Token)
 async def refresh_session(
     payload: SessionActivity,
     db: DbSession,
     response: Response,
     request: Request,
-    refresh_token: Annotated[str | None, Cookie()] = None,
+    refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
 ) -> Token:
     """Issue a short-lived access token for an active server-side session."""
     origin = request.headers.get("origin")
@@ -304,9 +346,7 @@ async def refresh_session(
         ) from exc
 
     auth_session = await db.scalar(
-        select(AuthSession)
-        .where(AuthSession.id == session_id)
-        .with_for_update()
+        select(AuthSession).where(AuthSession.id == session_id).with_for_update()
     )
     if auth_session is None:
         raise _invalid_refresh(response, "Your session ended. Please sign in again.")
@@ -323,54 +363,22 @@ async def refresh_session(
             "Please sign in again.",
         )
 
-    presented_hash = _refresh_token_hash(refresh_secret)
-    secret_is_valid = secrets.compare_digest(
-        _refresh_secret(auth_session.id, presented_generation), refresh_secret
+    should_rotate = await _validate_refresh_rotation(
+        auth_session, presented_generation, refresh_secret, now, db, response
     )
-    is_current_token = (
-        presented_generation == auth_session.refresh_generation
-        and secrets.compare_digest(auth_session.refresh_token_hash, presented_hash)
-        and secret_is_valid
-    )
-    grace_started_at = auth_session.refresh_grace_started_at
-    if grace_started_at is not None and grace_started_at.tzinfo is None:
-        grace_started_at = grace_started_at.replace(tzinfo=UTC)
-    is_recent_previous_token = (
-        auth_session.refresh_grace_generation is not None
-        and auth_session.refresh_grace_generation
-        <= presented_generation
-        < auth_session.refresh_generation
-        and secret_is_valid
-        and grace_started_at is not None
-        and now - grace_started_at <= timedelta(seconds=30)
-    )
-    if not is_current_token and not is_recent_previous_token:
-        if secret_is_valid and presented_generation < auth_session.refresh_generation:
-            auth_session.revoked_at = now
-            await db.commit()
-        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
-
-    if is_current_token:
-        if (
-            grace_started_at is None
-            or now - grace_started_at > timedelta(seconds=30)
-        ):
-            auth_session.refresh_grace_started_at = now
-            auth_session.refresh_grace_generation = auth_session.refresh_generation
+    if should_rotate:
+        auth_session.refresh_grace_started_at = now
+        auth_session.refresh_grace_generation = auth_session.refresh_generation
         auth_session.refresh_generation += 1
-        new_secret = _refresh_secret(
-            auth_session.id, auth_session.refresh_generation
-        )
+        new_secret = _refresh_secret(auth_session.id, auth_session.refresh_generation)
         auth_session.refresh_token_hash = _refresh_token_hash(new_secret)
 
     if payload.activity:
         auth_session.last_activity_at = now
-    if is_current_token or payload.activity:
+    if should_rotate or payload.activity:
         await db.commit()
 
-    current_secret = _refresh_secret(
-        auth_session.id, auth_session.refresh_generation
-    )
+    current_secret = _refresh_secret(auth_session.id, auth_session.refresh_generation)
     remaining_seconds = max(
         0,
         SESSION_ABSOLUTE_SECONDS
@@ -403,7 +411,7 @@ async def logout_session(
     db: DbSession,
     response: Response,
     request: Request,
-    refresh_token: Annotated[str | None, Cookie()] = None,
+    refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
 ) -> Response:
     """Revoke this browser session and clear its refresh credential."""
     origin = request.headers.get("origin")

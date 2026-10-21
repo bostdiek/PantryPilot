@@ -40,4 +40,18 @@ describe('session input recovery', () => {
     expect(changes).toEqual(['title', 'message']);
     expect(sessionStorage.length).toBe(0);
   });
+
+  it('does not restore another account’s saved inputs', () => {
+    document.body.innerHTML = '<form><input value="Account A recipe"></form>';
+    const input = document.querySelector('input')!;
+    captureSessionRecovery('account-a');
+    input.value = '';
+    const path = window.location.pathname + window.location.search;
+
+    restoreSessionRecovery(path, 'account-b');
+    expect(input.value).toBe('');
+
+    restoreSessionRecovery(path, 'account-a');
+    expect(input.value).toBe('Account A recipe');
+  });
 });

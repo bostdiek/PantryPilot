@@ -9,10 +9,7 @@ import {
 } from '../stores/useAuthStore';
 import { CalendarIcon, ChefHatIcon } from './ui';
 import { Button } from './ui/Button';
-import {
-  addToastIfNotExists,
-  generateToastId,
-} from './ui/toast-utils';
+import { addToastIfNotExists, generateToastId } from './ui/toast-utils';
 
 const Navigation: React.FC = () => {
   const { hasHydrated, logout } = useAuthStore();

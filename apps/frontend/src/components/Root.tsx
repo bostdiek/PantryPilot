@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { markSessionActivity } from '../api/session';
-import { useAuthStore } from '../stores/useAuthStore';
+import { listenForSessionChanges, useAuthStore } from '../stores/useAuthStore';
 import { restoreSessionRecovery } from '../utils/sessionRecovery';
 import Navigation from './Navigation';
 import { ToastContainer } from './ui/ToastContainer';
@@ -13,10 +13,15 @@ import { ToastContainer } from './ui/ToastContainer';
 const Root: React.FC = () => {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.token !== null);
+  const userId = useAuthStore((state) => state.user?.id);
+
+  useEffect(() => listenForSessionChanges(), []);
 
   useEffect(() => {
-    restoreSessionRecovery(location.pathname + location.search);
-  }, [location.pathname, location.search]);
+    if (isAuthenticated) {
+      restoreSessionRecovery(location.pathname + location.search, userId);
+    }
+  }, [location.pathname, location.search, isAuthenticated, userId]);
 
   useEffect(() => {
     if (!isAuthenticated) return;

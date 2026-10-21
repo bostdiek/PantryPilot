@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 import jwt
 import pytest
-from fastapi import status
+from fastapi import Response, status
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +49,8 @@ def frozen_session_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(session_module, "datetime", FrozenDateTime)
     monkeypatch.setattr(security_module, "datetime", FrozenDateTime)
     monkeypatch.setattr(dependency_auth_module, "datetime", FrozenDateTime)
-    FrozenDateTime.current = datetime(2026, 10, 21, 12, tzinfo=UTC)
+    monkeypatch.setattr(jwt.api_jwt, "datetime", FrozenDateTime)
+    FrozenDateTime.current = FrozenDateTime(2026, 10, 21, 12, tzinfo=UTC)
 
 
 async def login(client: AsyncClient, user: User) -> str:
@@ -63,6 +64,24 @@ async def login(client: AsyncClient, user: User) -> str:
     assert "httponly" in cookie
     assert "samesite=lax" in cookie
     return response.json()["access_token"]
+
+
+@pytest.mark.parametrize(
+    ("environment", "secure"), [("production", True), ("development", False)]
+)
+def test_refresh_cookie_security_flags(
+    monkeypatch: pytest.MonkeyPatch, environment: str, secure: bool
+) -> None:
+    monkeypatch.setattr(get_settings(), "ENVIRONMENT", environment)
+    response = Response()
+
+    auth_module._set_refresh_cookie(response, "browser-only-credential", 60)
+
+    cookie = response.headers["set-cookie"].lower()
+    assert ("; secure" in cookie) is secure
+    assert "; httponly" in cookie
+    assert "; samesite=lax" in cookie
+    assert "; path=/api/v1/auth" in cookie
 
 
 @pytest.mark.asyncio
@@ -88,9 +107,7 @@ async def test_active_session_renews_across_multiple_access_token_lifetimes(
         FrozenDateTime.current += timedelta(minutes=20) + (
             timedelta(seconds=1) if interval == 2 else timedelta()
         )
-        response = await client.post(
-            "/api/v1/auth/refresh", json={"activity": True}
-        )
+        response = await client.post("/api/v1/auth/refresh", json={"activity": True})
         assert response.status_code == status.HTTP_200_OK
         access_token = response.json()["access_token"]
         decoded = jwt.decode(
@@ -109,9 +126,7 @@ async def test_active_session_renews_across_multiple_access_token_lifetimes(
             assert concurrent_refresh.status_code == status.HTTP_200_OK
             assert concurrent_refresh.headers["set-cookie"].split("=", 1)[1].split(
                 ";", 1
-            )[0] == (
-                client.cookies.get("pantrypilot_session")
-            )
+            )[0] == (client.cookies.get("pantrypilot_session"))
 
     session_age = FrozenDateTime.current - auth_session.created_at.replace(tzinfo=UTC)
     assert session_age > timedelta(hours=1)
@@ -139,9 +154,7 @@ async def test_refresh_does_not_count_as_activity_and_expires_at_idle_boundary(
         FrozenDateTime.current - SESSION_IDLE_TIMEOUT + timedelta(seconds=1)
     )
     await db.commit()
-    silent_refresh = await client.post(
-        "/api/v1/auth/refresh", json={"activity": False}
-    )
+    silent_refresh = await client.post("/api/v1/auth/refresh", json={"activity": False})
     assert silent_refresh.status_code == status.HTTP_200_OK
     await db.refresh(auth_session)
     assert auth_session.last_activity_at.replace(tzinfo=UTC) == (
@@ -149,9 +162,7 @@ async def test_refresh_does_not_count_as_activity_and_expires_at_idle_boundary(
     )
 
     FrozenDateTime.current += timedelta(seconds=1)
-    expired_refresh = await client.post(
-        "/api/v1/auth/refresh", json={"activity": True}
-    )
+    expired_refresh = await client.post("/api/v1/auth/refresh", json={"activity": True})
     assert expired_refresh.status_code == status.HTTP_401_UNAUTHORIZED
     await db.refresh(auth_session)
     assert auth_session.revoked_at is not None
@@ -227,9 +238,7 @@ async def test_logout_during_refresh_revokes_even_a_pending_old_cookie(
     )
     old_cookie = client.cookies.get("pantrypilot_session")
 
-    rotated = await client.post(
-        "/api/v1/auth/refresh", json={"activity": True}
-    )
+    rotated = await client.post("/api/v1/auth/refresh", json={"activity": True})
     assert rotated.status_code == status.HTTP_200_OK
     logout = await client.post(
         "/api/v1/auth/logout",
@@ -261,9 +270,7 @@ async def test_reuse_of_rotated_credential_after_grace_revokes_session(
     previous_cookie = client.cookies.get("pantrypilot_session")
     assert previous_cookie is not None
 
-    rotated = await client.post(
-        "/api/v1/auth/refresh", json={"activity": True}
-    )
+    rotated = await client.post("/api/v1/auth/refresh", json={"activity": True})
     assert rotated.status_code == status.HTTP_200_OK
     FrozenDateTime.current += timedelta(seconds=31)
     replay = await client.post(
@@ -276,6 +283,62 @@ async def test_reuse_of_rotated_credential_after_grace_revokes_session(
     auth_session = await db.get(AuthSession, UUID(claims["sid"]))
     assert auth_session is not None
     assert auth_session.revoked_at is not None
+
+
+@pytest.mark.asyncio
+async def test_refresh_during_overlap_does_not_rotate_again(
+    auth_client: tuple[AsyncClient, AsyncSession],
+    frozen_session_clock: None,
+):
+    client, db = auth_client
+    user = await create_user(db)
+    await login(client, user)
+    original_cookie = client.cookies.get("pantrypilot_session")
+
+    await client.post("/api/v1/auth/refresh", json={"activity": True})
+    rotated_cookie = client.cookies.get("pantrypilot_session")
+    assert rotated_cookie != original_cookie
+
+    FrozenDateTime.current += timedelta(seconds=29)
+    response = await client.post("/api/v1/auth/refresh", json={"activity": True})
+    assert response.status_code == status.HTTP_200_OK
+    assert client.cookies.get("pantrypilot_session") == rotated_cookie
+
+    FrozenDateTime.current += timedelta(seconds=2)
+    response = await client.post(
+        "/api/v1/auth/refresh",
+        json={"activity": True},
+        headers={"Cookie": f"pantrypilot_session={rotated_cookie}"},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert client.cookies.get("pantrypilot_session") != rotated_cookie
+
+    # The older generation does not gain time from a later rotation.
+    replay = await client.post(
+        "/api/v1/auth/refresh",
+        json={"activity": False},
+        headers={"Cookie": f"pantrypilot_session={original_cookie}"},
+    )
+    assert replay.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.asyncio
+async def test_frozen_clock_preserves_jwt_expiry_validation(
+    auth_client: tuple[AsyncClient, AsyncSession],
+    frozen_session_clock: None,
+):
+    client, db = auth_client
+    user = await create_user(db)
+    token = await login(client, user)
+    claims = jwt.decode(
+        token, get_settings().SECRET_KEY, algorithms=[get_settings().ALGORITHM]
+    )
+
+    FrozenDateTime.current = FrozenDateTime.fromtimestamp(claims["exp"], UTC)
+    with pytest.raises(jwt.ExpiredSignatureError):
+        jwt.decode(
+            token, get_settings().SECRET_KEY, algorithms=[get_settings().ALGORITHM]
+        )
 
 
 @pytest.mark.asyncio
@@ -296,14 +359,12 @@ async def test_protected_action_requires_sign_in_at_idle_boundary(
     )
     auth_session = await db.get(AuthSession, UUID(claims["sid"]))
     assert auth_session is not None
-    auth_session.last_activity_at = (
-        FrozenDateTime.current - SESSION_IDLE_TIMEOUT
-    )
+    auth_session.last_activity_at = FrozenDateTime.current - SESSION_IDLE_TIMEOUT
     await db.commit()
 
     response = await client.get(
         "/api/v1/mealplans/weekly?start=2026-10-18",
-        headers={"Authorization": f"******"},
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED

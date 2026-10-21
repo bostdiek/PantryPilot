@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+
 SESSION_IDLE_TIMEOUT = timedelta(minutes=30)
 SESSION_ABSOLUTE_TIMEOUT = timedelta(hours=12)
 

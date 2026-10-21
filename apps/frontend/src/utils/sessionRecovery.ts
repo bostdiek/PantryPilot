@@ -12,18 +12,72 @@ interface RecoverySnapshot {
   path: string;
   capturedAt: number;
   fields: RecoverableField[];
+  userId?: string;
+  recipeDraft?: RecipeCreate;
+}
+
+let captureRecipeDraft: (() => RecipeCreate) | undefined;
+
+/** Register the mounted recipe form's complete React state for expiry recovery. */
+export function registerRecipeDraft(capture: () => RecipeCreate): () => void {
+  captureRecipeDraft = capture;
+  return () => {
+    if (captureRecipeDraft === capture) captureRecipeDraft = undefined;
+  };
+}
+
+function readSnapshot(path: string, userId?: string): RecoverySnapshot | null {
+  try {
+    const serialized = sessionStorage.getItem(RECOVERY_KEY);
+    if (!serialized) return null;
+    const snapshot = JSON.parse(serialized) as RecoverySnapshot;
+    if (Date.now() - snapshot.capturedAt > RECOVERY_MAX_AGE_MS) {
+      sessionStorage.removeItem(RECOVERY_KEY);
+      return null;
+    }
+    return snapshot.path === path && snapshot.userId === userId
+      ? snapshot
+      : null;
+  } catch (error) {
+    logger.warn('Could not read saved session inputs', error);
+    return null;
+  }
+}
+
+function saveSnapshot(snapshot: RecoverySnapshot): void {
+  try {
+    if (snapshot.fields.length || snapshot.recipeDraft) {
+      sessionStorage.setItem(RECOVERY_KEY, JSON.stringify(snapshot));
+    } else {
+      sessionStorage.removeItem(RECOVERY_KEY);
+    }
+  } catch (error) {
+    logger.warn('Could not save session inputs', error);
+  }
+}
+
+/** Consume the recipe draft only on its original route and for its original user. */
+export function takeRecoveredRecipeDraft(
+  path: string,
+  userId?: string
+): RecipeCreate | undefined {
+  const snapshot = readSnapshot(path, userId);
+  if (!snapshot?.recipeDraft) return undefined;
+  const draft = snapshot.recipeDraft;
+  delete snapshot.recipeDraft;
+  saveSnapshot(snapshot);
+  return draft;
 }
 
 type RecoverableControl =
-  | HTMLInputElement
-  | HTMLTextAreaElement
-  | HTMLSelectElement;
+  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 
 function editableFields(form: HTMLFormElement): RecoverableControl[] {
+  if (form.dataset.sessionRecovery === 'structured') return [];
   return Array.from(
-    form.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-      'input, textarea, select'
-    )
+    form.querySelectorAll<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >('input, textarea, select')
   ).filter((field) => {
     if (field instanceof HTMLInputElement) {
       return !['password', 'file', 'hidden', 'submit', 'button'].includes(
@@ -34,7 +88,8 @@ function editableFields(form: HTMLFormElement): RecoverableControl[] {
   });
 }
 
-export function captureSessionRecovery(): void {
+/** Save recoverable inputs in this tab, bound to the expiring account. */
+export function captureSessionRecovery(userId?: string): void {
   if (
     typeof document === 'undefined' ||
     typeof window === 'undefined' ||
@@ -48,7 +103,8 @@ export function captureSessionRecovery(): void {
       formIndex,
       fieldIndex,
       value:
-        field instanceof HTMLInputElement && ['checkbox', 'radio'].includes(field.type)
+        field instanceof HTMLInputElement &&
+        ['checkbox', 'radio'].includes(field.type)
           ? ''
           : field.value,
       ...(field instanceof HTMLInputElement &&
@@ -58,20 +114,20 @@ export function captureSessionRecovery(): void {
     }))
   );
 
-  if (fields.length === 0) return;
+  const recipeDraft = captureRecipeDraft?.();
+  if (fields.length === 0 && !recipeDraft) return;
   const snapshot: RecoverySnapshot = {
     path: window.location.pathname + window.location.search,
     capturedAt: Date.now(),
     fields,
+    userId,
+    recipeDraft,
   };
-  try {
-    sessionStorage.setItem(RECOVERY_KEY, JSON.stringify(snapshot));
-  } catch {
-    return;
-  }
+  saveSnapshot(snapshot);
 }
 
-export function restoreSessionRecovery(path: string): void {
+/** Restore native controls only after the original account signs in again. */
+export function restoreSessionRecovery(path: string, userId?: string): void {
   if (
     typeof document === 'undefined' ||
     typeof window === 'undefined' ||
@@ -80,24 +136,16 @@ export function restoreSessionRecovery(path: string): void {
     return;
   }
 
-  const serialized = sessionStorage.getItem(RECOVERY_KEY);
-  if (!serialized) return;
-
-  let snapshot: RecoverySnapshot;
-  try {
-    snapshot = JSON.parse(serialized) as RecoverySnapshot;
-  } catch {
-    sessionStorage.removeItem(RECOVERY_KEY);
-    return;
-  }
-  if (
-    snapshot.path !== path ||
-    Date.now() - snapshot.capturedAt > RECOVERY_MAX_AGE_MS
-  ) {
-    return;
-  }
+  const snapshot = readSnapshot(path, userId);
+  if (!snapshot || snapshot.fields.length === 0) return;
 
   const restoredFields = new Set<string>();
+  const clearRestoredFields = () => {
+    const current = readSnapshot(path, userId);
+    if (current?.capturedAt !== snapshot.capturedAt) return;
+    current.fields = [];
+    saveSnapshot(current);
+  };
   const restore = () => {
     const forms = Array.from(document.forms);
     for (const field of snapshot.fields) {
@@ -129,7 +177,7 @@ export function restoreSessionRecovery(path: string): void {
       restoredFields.add(fieldKey);
     }
     if (restoredFields.size === snapshot.fields.length) {
-      sessionStorage.removeItem(RECOVERY_KEY);
+      clearRestoredFields();
       observer.disconnect();
       window.clearTimeout(timeout);
     }
@@ -138,8 +186,10 @@ export function restoreSessionRecovery(path: string): void {
   const observer = new MutationObserver(restore);
   const timeout = window.setTimeout(() => {
     observer.disconnect();
-    sessionStorage.removeItem(RECOVERY_KEY);
+    clearRestoredFields();
   }, 30_000);
   observer.observe(document.body, { childList: true, subtree: true });
   restore();
 }
+import type { RecipeCreate } from '../types/Recipe';
+import { logger } from '../lib/logger';
