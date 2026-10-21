@@ -22,9 +22,7 @@ class AuthSession(Base):
     refresh_generation: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )
-    refresh_grace_generation: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    refresh_grace_generation: Mapped[int | None] = mapped_column(Integer, nullable=True)
     refresh_grace_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

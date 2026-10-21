@@ -50,9 +50,7 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column("revoked_at", sa.DateTime(timezone=True), nullable=True),
-        sa.ForeignKeyConstraint(
-            ["user_id"], ["users.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id", name="pk_auth_sessions"),
         sa.UniqueConstraint(
             "refresh_token_hash", name="uq_auth_sessions_refresh_token_hash"
