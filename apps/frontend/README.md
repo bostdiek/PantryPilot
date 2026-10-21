@@ -67,3 +67,17 @@ export default tseslint.config([
   },
 ]);
 ```
+
+## Container builds and CI
+
+The production Docker build compiles frontend assets on Docker's native
+`BUILDPLATFORM`, then copies them into the target-platform nginx image.
+The static assets are architecture-independent, so building ARM64 images
+does not require running TypeScript or Vite under QEMU.
+
+The [CI Build & Test workflow](../../.github/workflows/ci-build.yml) uses one
+image job to build both `linux/amd64` and `linux/arm64`. Pull requests validate
+the images without logging into GHCR or publishing tags. Main-branch pushes
+and manual workflow runs publish the version and `latest` tags.
+The image job has a 35-minute limit, with 15 minutes for the frontend build
+and 20 minutes for the backend build.
