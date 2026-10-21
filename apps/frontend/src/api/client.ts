@@ -6,37 +6,16 @@ import {
 import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
+import { getApiBaseUrl } from './apiConfig';
+import { refreshAccessToken, waitForSessionActivity } from './session';
+import { isSameSession } from '../utils/authSession';
 import {
   getUserFriendlyErrorMessage,
   shouldLogoutOnError,
 } from '../utils/errorMessages';
 // API configuration
 const API_BASE_URL = getApiBaseUrl();
-
-export function getApiBaseUrl(): string {
-  // 1. Explicit build-time override wins (useful for staging/CDN or dev containers)
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-
-  // 2. Local development + test runner: talk to backend dev server directly
-  if (
-    import.meta.env.MODE === 'development' ||
-    import.meta.env.MODE === 'test'
-  ) {
-    return 'http://localhost:8000';
-  }
-
-  // 3. Production fallback: rely on SAME-ORIGIN reverse proxy routing.
-  // We intentionally return an empty string so that requests become
-  //   fetch('/api/v1/...')
-  // which the browser resolves against the current origin (scheme + host + port).
-  // This removes the need to embed hostnames/IPs at build time, avoids CORS & CSP
-  // complications, and makes the image environment-agnostic (works under any domain
-  // or internal IP as long as the reverse proxy forwards /api/ to the backend).
-  // NOTE: If you ever deploy frontend & backend on DIFFERENT origins, set VITE_API_URL.
-  return '';
-}
+export { getApiBaseUrl } from './apiConfig';
 
 // API client with proper error handling
 export interface ApiRequestOptions extends RequestInit {
@@ -56,6 +35,20 @@ class ApiClient {
   }
 
   async request<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
+    return this.execute<T>(
+      endpoint,
+      options,
+      false,
+      useAuthStore.getState().token
+    );
+  }
+
+  private async execute<T>(
+    endpoint: string,
+    options: ApiRequestOptions | undefined,
+    hasRetried: boolean,
+    initiatingToken: string | null
+  ): Promise<T> {
     // Ensure endpoint starts with /
     const normalizedEndpoint = endpoint.startsWith('/')
       ? endpoint
@@ -90,6 +83,12 @@ class ApiClient {
     );
 
     try {
+      await waitForSessionActivity();
+      if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
+        throw new ApiErrorImpl(
+          'Session changed before the request could be sent'
+        );
+      }
       const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
       const headers = {
         'Content-Type': 'application/json',
@@ -99,6 +98,7 @@ class ApiClient {
       };
       const resp = await fetch(url, {
         ...requestOptions,
+        credentials: 'include',
         headers,
       });
 
@@ -118,9 +118,41 @@ class ApiClient {
       // Check if user was logged in before processing any errors
       // This is used to determine if a 401 should trigger "session expired" message
       // (only if the user actually had a session)
-      const wasLoggedIn = useAuthStore.getState().token !== null;
+      const wasLoggedIn =
+        initiatingToken !== null &&
+        isSameSession(initiatingToken, useAuthStore.getState().token);
 
       if (!resp.ok) {
+        const errorDetail =
+          body && typeof body === 'object'
+            ? (body as any).detail || (body as any).message
+            : undefined;
+        const isAuthenticationFailure =
+          errorDetail === 'Could not validate credentials' ||
+          (typeof errorDetail === 'string' &&
+            (errorDetail.startsWith('Session expired') ||
+              errorDetail.startsWith('Your session ended'))) ||
+          (body &&
+            typeof body === 'object' &&
+            ['unauthorized', 'token_expired'].includes(
+              (body as any).error?.type
+            ));
+        if (
+          resp.status === 401 &&
+          wasLoggedIn &&
+          !shouldSkipLogoutOn401 &&
+          isAuthenticationFailure &&
+          !hasRetried
+        ) {
+          const accessToken = await refreshAccessToken(false);
+          if (
+            accessToken &&
+            isSameSession(initiatingToken, useAuthStore.getState().token)
+          ) {
+            return this.execute<T>(endpoint, options, true, initiatingToken);
+          }
+        }
+
         // Always throw ApiErrorImpl for HTTP/API-level errors to ensure consistent error handling
         let rawMessage: string = '';
         if (body && typeof body === 'object') {
@@ -148,7 +180,9 @@ class ApiClient {
         // is expected behavior, not a session expiration
         if (
           wasLoggedIn &&
+          isSameSession(initiatingToken, useAuthStore.getState().token) &&
           !shouldSkipLogoutOn401 &&
+          isAuthenticationFailure &&
           shouldLogoutOnError(body, resp.status)
         ) {
           // Log logout event with correlation ID for debugging
@@ -191,12 +225,22 @@ class ApiClient {
               ? rawMessageStr
               : `Request failed (${resp.status})`;
 
+          const isAuthenticationFailure =
+            (typeof apiResponse.message === 'string' &&
+              (apiResponse.message.startsWith('Session expired') ||
+                apiResponse.message.startsWith('Your session ended') ||
+                apiResponse.message === 'Could not validate credentials')) ||
+            apiResponse.error?.type === 'unauthorized' ||
+            apiResponse.error?.type === 'token_expired';
+
           // Skip logout for endpoints where 401 means something other than session expiry
           // Also skip if the user wasn't logged in - a 401 for an unauthenticated request
           // is expected behavior, not a session expiration
           if (
             wasLoggedIn &&
+            isSameSession(initiatingToken, useAuthStore.getState().token) &&
             !shouldSkipLogoutOn401 &&
+            isAuthenticationFailure &&
             shouldLogoutOnError(apiResponse, resp.status)
           ) {
             // Log logout event with correlation ID for debugging

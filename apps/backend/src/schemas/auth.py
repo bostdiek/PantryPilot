@@ -15,6 +15,14 @@ class TokenData(BaseModel):
         default_factory=list,
         description="Scopes/permissions associated with the token",
     )
+    sid: str | None = Field(default=None, description="Authenticated session ID")
+
+
+class SessionActivity(BaseModel):
+    activity: bool = Field(
+        default=False,
+        description="Whether this renewal was triggered by intentional user input",
+    )
 
 
 class LoginResponse(Token):

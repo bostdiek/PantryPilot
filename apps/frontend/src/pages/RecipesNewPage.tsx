@@ -24,6 +24,7 @@ import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { logger } from '../lib/logger';
 import { useChatStore } from '../stores/useChatStore';
 import { useRecipeStore } from '../stores/useRecipeStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import type { Ingredient } from '../types/Ingredients';
 import type { Recipe } from '../types/Recipe';
 import {
@@ -40,6 +41,10 @@ import {
 } from '../utils/mealProposalStatus';
 import { saveRecipeOffline } from '../utils/offlineSync';
 import { useApiHealth } from '../utils/useApiHealth';
+import {
+  registerRecipeDraft,
+  takeRecoveredRecipeDraft,
+} from '../utils/sessionRecovery';
 
 // Sanitize errors before showing to users to avoid leaking internal details.
 function sanitizeErrorMessage(
@@ -273,6 +278,68 @@ const RecipesNewPage: FC = () => {
       }
     }
   }, [formSuggestion]);
+
+  useEffect(() => {
+    const draft = takeRecoveredRecipeDraft(
+      window.location.pathname + window.location.search,
+      useAuthStore.getState().user?.id
+    );
+    if (!draft) return;
+    setTitle(draft.title);
+    setDescription(draft.description ?? '');
+    setCategory(
+      categoryOptions.find((option) => option.id === draft.category)!
+    );
+    setDifficulty(
+      difficultyOptions.find((option) => option.id === draft.difficulty)!
+    );
+    setPrepTime(draft.prep_time_minutes);
+    setCookTime(draft.cook_time_minutes);
+    setServingMin(draft.serving_min);
+    setServingMax(draft.serving_max);
+    setEthnicity(draft.ethnicity ?? '');
+    setOvenTemperatureF(draft.oven_temperature_f);
+    setUserNotes(draft.user_notes ?? '');
+    setLinkSource(draft.link_source);
+    setIngredients(draft.ingredients);
+    setInstructions(draft.instructions);
+  }, []);
+
+  useEffect(
+    () =>
+      registerRecipeDraft(() => ({
+        title,
+        description,
+        category: category.id as RecipeCategory,
+        difficulty: difficulty.id as RecipeDifficulty,
+        prep_time_minutes: prepTime,
+        cook_time_minutes: cookTime,
+        serving_min: servingMin,
+        serving_max: servingMax,
+        ethnicity,
+        oven_temperature_f: ovenTemperatureF,
+        user_notes: userNotes,
+        link_source: linkSource,
+        ingredients,
+        instructions,
+      })),
+    [
+      title,
+      description,
+      category,
+      difficulty,
+      prepTime,
+      cookTime,
+      servingMin,
+      servingMax,
+      ethnicity,
+      ovenTemperatureF,
+      userNotes,
+      linkSource,
+      ingredients,
+      instructions,
+    ]
+  );
 
   // Clean up suggestion when component unmounts
   useEffect(() => {
@@ -711,7 +778,11 @@ const RecipesNewPage: FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6"
+          data-session-recovery="structured"
+        >
           {/* Name & Description */}
           <Input
             label="Recipe Name"

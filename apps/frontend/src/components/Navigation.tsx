@@ -1,6 +1,7 @@
 import { Home, ListChecks, Menu, MessageSquare, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
+import { revokeSession } from '../api/session';
 import {
   useAuthStore,
   useDisplayName,
@@ -8,6 +9,7 @@ import {
 } from '../stores/useAuthStore';
 import { CalendarIcon, ChefHatIcon } from './ui';
 import { Button } from './ui/Button';
+import { addToastIfNotExists, generateToastId } from './ui/toast-utils';
 
 const Navigation: React.FC = () => {
   const { hasHydrated, logout } = useAuthStore();
@@ -42,7 +44,15 @@ const Navigation: React.FC = () => {
     };
   }, []);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (!(await revokeSession())) {
+      addToastIfNotExists({
+        id: generateToastId(),
+        message: 'Unable to sign out. Check your connection and try again.',
+        type: 'error',
+      });
+      return;
+    }
     logout('manual');
     setUserMenuOpen(false);
     navigate('/login');

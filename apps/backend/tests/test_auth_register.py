@@ -524,7 +524,7 @@ async def test_login_invalid_credentials_unit(
     """
     from types import SimpleNamespace
 
-    from fastapi import HTTPException, status  # type: ignore
+    from fastapi import HTTPException, Response, status  # type: ignore
 
     import api.v1.auth as auth_mod  # type: ignore
 
@@ -538,7 +538,7 @@ async def test_login_invalid_credentials_unit(
     form = SimpleNamespace(username="nouser", password="badpass")
 
     with pytest.raises(HTTPException) as excinfo:
-        await auth_mod.login(form, db)
+        await auth_mod.login(form, db, Response())
 
     assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
     assert excinfo.value.detail == "Incorrect username or password"
@@ -580,6 +580,8 @@ async def test_login_success_unit(
     _, db = auth_client
     form = SimpleNamespace(username="dummy", password="goodpass")
 
-    token = await auth_mod.login(form, db)
+    from fastapi import Response
+
+    token = await auth_mod.login(form, db, Response())
     assert token.access_token == "unit-login-token"
     assert token.token_type == "bearer"

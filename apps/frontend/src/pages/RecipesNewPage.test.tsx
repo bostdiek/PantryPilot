@@ -3,6 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useRecipeStore } from '../stores/useRecipeStore';
 import RecipesNewPage from './RecipesNewPage';
+import { captureSessionRecovery } from '../utils/sessionRecovery';
+import { useAuthStore } from '../stores/useAuthStore';
+import { mockResizeObserver } from 'jsdom-testing-mocks';
+
+mockResizeObserver();
 
 // Mock SVG imports for Select icons
 vi.mock('../components/ui/icons/chevron-up-down.svg?react', () => ({
@@ -29,6 +34,55 @@ vi.mock('../hooks/useUnsavedChanges', () => ({
 describe('RecipesNewPage', () => {
   beforeEach(() => {
     navigateMock.mockClear();
+    sessionStorage.clear();
+  });
+
+  test('restores repeated rows and custom selects without mixing recipe fields', async () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText(/recipe name/i), {
+      target: { value: 'Draft soup' },
+    });
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\., Onion/i), {
+      target: { value: 'Onion' },
+    });
+    fireEvent.click(screen.getByText(/add ingredient/i));
+    fireEvent.change(screen.getAllByPlaceholderText(/e\.g\., Onion/i)[1], {
+      target: { value: 'Garlic' },
+    });
+    fireEvent.change(screen.getByLabelText('Step 1'), {
+      target: { value: 'Chop' },
+    });
+    fireEvent.click(screen.getByText(/add step/i));
+    fireEvent.change(screen.getByLabelText('Step 2'), {
+      target: { value: 'Simmer' },
+    });
+    fireEvent.click(screen.getByLabelText(/category/i));
+    fireEvent.click(await screen.findByRole('option', { name: 'Lunch' }));
+    fireEvent.click(screen.getByLabelText(/difficulty/i));
+    fireEvent.click(await screen.findByRole('option', { name: 'Hard' }));
+    captureSessionRecovery(useAuthStore.getState().user?.id);
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+
+    expect(screen.getByLabelText(/recipe name/i)).toHaveValue('Draft soup');
+    expect(
+      screen
+        .getAllByPlaceholderText(/e\.g\., Onion/i)
+        .map((element) => (element as HTMLInputElement).value)
+    ).toEqual(['Onion', 'Garlic']);
+    expect(screen.getByLabelText('Step 1')).toHaveValue('Chop');
+    expect(screen.getByLabelText('Step 2')).toHaveValue('Simmer');
+    expect(screen.getByLabelText(/category/i)).toHaveTextContent('Lunch');
+    expect(screen.getByLabelText(/difficulty/i)).toHaveTextContent('Hard');
   });
 
   test('renders form fields and buttons', () => {
