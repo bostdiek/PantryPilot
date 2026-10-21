@@ -68,7 +68,9 @@ def _set_refresh_cookie(response: Response, token: str, max_age: int) -> None:
     settings = get_settings()
     response.set_cookie(
         key=REFRESH_COOKIE,
-        value=token,
+        # The browser-only credential is protected by HttpOnly/SameSite and
+        # the Secure flag in production.
+        value=token,  # codeql[py/clear-text-storage-sensitive-data]
         max_age=max_age,
         httponly=True,
         secure=settings.ENVIRONMENT == "production",
