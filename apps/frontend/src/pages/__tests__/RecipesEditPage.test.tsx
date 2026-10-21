@@ -1,8 +1,10 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Recipe } from '../../types/Recipe';
 import RecipesEditPage from '../RecipesEditPage';
+import { captureSessionRecovery } from '../../utils/sessionRecovery';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 const mockNavigate = vi.fn();
 
@@ -88,6 +90,50 @@ vi.mock('../../components/ui/Select', () => ({
 describe('RecipesEditPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
+    window.history.replaceState(null, '', '/recipes/r1/edit');
+    useAuthStore.setState({
+      user: { id: 'account-a', username: 'cook', email: 'cook@example.test' },
+    });
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, '', '/');
+    useAuthStore.setState({ user: null });
+  });
+
+  it('restores unsaved ingredient/step rows and selected category/difficulty together', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<RecipesEditPage />);
+    fireEvent.change(screen.getByLabelText(/recipe name/i), {
+      target: { value: 'Unsaved soup' },
+    });
+    await user.click(screen.getByRole('button', { name: /add ingredient/i }));
+    const ingredientNames = screen.getAllByPlaceholderText(/e\.g\., Onion/i);
+    fireEvent.change(ingredientNames[2], { target: { value: 'Garlic' } });
+    await user.click(screen.getByRole('button', { name: /add step/i }));
+    fireEvent.change(screen.getAllByPlaceholderText(/Step \d+/i)[2], {
+      target: { value: 'Simmer with garlic' },
+    });
+    await user.selectOptions(screen.getByLabelText(/category/i), 'lunch');
+    await user.selectOptions(screen.getByLabelText(/difficulty/i), 'hard');
+    captureSessionRecovery(useAuthStore.getState().user?.id);
+    unmount();
+
+    render(<RecipesEditPage />);
+
+    expect(screen.getByLabelText(/recipe name/i)).toHaveValue('Unsaved soup');
+    expect(screen.getAllByPlaceholderText(/e\.g\., Onion/i)[2]).toHaveValue(
+      'Garlic'
+    );
+    expect(
+      screen
+        .getAllByPlaceholderText(/Step \d+/i)
+        .map((element) => (element as HTMLTextAreaElement).value)
+    ).toEqual(['Boil water', 'Cook pasta', 'Simmer with garlic']);
+    expect(screen.getByLabelText(/category/i)).toHaveValue('lunch');
+    expect(screen.getByLabelText(/difficulty/i)).toHaveValue('hard');
+    expect(sessionStorage.getItem('pantrypilot-session-recovery')).toBeNull();
   });
 
   it('pre-populates form with recipe data and updates on submit', async () => {

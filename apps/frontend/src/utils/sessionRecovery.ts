@@ -126,19 +126,34 @@ export function captureSessionRecovery(userId?: string): void {
   saveSnapshot(snapshot);
 }
 
-/** Restore native controls only after the original account signs in again. */
-export function restoreSessionRecovery(path: string, userId?: string): void {
+/** Restore native controls for the current route/account; dispose on navigation or logout. */
+export function restoreSessionRecovery(
+  path: string,
+  userId?: string,
+  isCurrentSession: () => boolean = () => true
+): () => void {
   if (
     typeof document === 'undefined' ||
     typeof window === 'undefined' ||
     typeof sessionStorage === 'undefined'
   ) {
-    return;
+    return () => {};
   }
 
   const snapshot = readSnapshot(path, userId);
-  if (!snapshot || snapshot.fields.length === 0) return;
+  if (!snapshot || snapshot.fields.length === 0) return () => {};
 
+  let disposed = false;
+  const dispose = () => {
+    disposed = true;
+    observer.disconnect();
+    window.clearTimeout(timeout);
+  };
+  const canRestore = () =>
+    !disposed &&
+    window.location.pathname + window.location.search === path &&
+    isCurrentSession() &&
+    readSnapshot(path, userId)?.capturedAt === snapshot.capturedAt;
   const restoredFields = new Set<string>();
   const clearRestoredFields = () => {
     const current = readSnapshot(path, userId);
@@ -147,8 +162,16 @@ export function restoreSessionRecovery(path: string, userId?: string): void {
     saveSnapshot(current);
   };
   const restore = () => {
+    if (!canRestore()) {
+      dispose();
+      return;
+    }
     const forms = Array.from(document.forms);
     for (const field of snapshot.fields) {
+      if (!canRestore()) {
+        dispose();
+        return;
+      }
       const fieldKey = `${field.formIndex}:${field.fieldIndex}`;
       if (restoredFields.has(fieldKey)) continue;
       const form = forms[field.formIndex];
@@ -178,18 +201,18 @@ export function restoreSessionRecovery(path: string, userId?: string): void {
     }
     if (restoredFields.size === snapshot.fields.length) {
       clearRestoredFields();
-      observer.disconnect();
-      window.clearTimeout(timeout);
+      dispose();
     }
   };
 
   const observer = new MutationObserver(restore);
   const timeout = window.setTimeout(() => {
-    observer.disconnect();
-    clearRestoredFields();
+    if (canRestore()) clearRestoredFields();
+    dispose();
   }, 30_000);
   observer.observe(document.body, { childList: true, subtree: true });
   restore();
+  return dispose;
 }
 import type { RecipeCreate } from '../types/Recipe';
 import { logger } from '../lib/logger';

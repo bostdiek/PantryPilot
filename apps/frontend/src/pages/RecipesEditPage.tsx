@@ -1,4 +1,10 @@
-import { useReducer, useState, type FC, type FormEvent } from 'react';
+import {
+  useEffect,
+  useReducer,
+  useState,
+  type FC,
+  type FormEvent,
+} from 'react';
 import { useLoaderData, useNavigate, useParams } from 'react-router-dom';
 import { PasteSplitModal } from '../components/recipes/PasteSplitModal';
 import { Button } from '../components/ui/Button';
@@ -15,6 +21,7 @@ import { usePasteSplit } from '../hooks/usePasteSplit';
 import { useUnsavedChanges } from '../hooks/useUnsavedChanges';
 import { logger } from '../lib/logger';
 import { useRecipeStore } from '../stores/useRecipeStore';
+import { useAuthStore } from '../stores/useAuthStore';
 import type { Ingredient } from '../types/Ingredients';
 import type { Recipe } from '../types/Recipe';
 import {
@@ -27,6 +34,10 @@ import {
   mapIngredientsForApi,
   normalizeIngredientsForForm,
 } from '../utils/ingredients';
+import {
+  registerRecipeDraft,
+  takeRecoveredRecipeDraft,
+} from '../utils/sessionRecovery';
 
 // Create options for the Select component
 const categoryOptions: SelectOption[] = RECIPE_CATEGORIES.map((cat) => ({
@@ -64,6 +75,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   };
 
   type Action =
+    | { type: 'RESTORE'; value: FormState }
     | { type: 'SET_FIELD'; field: keyof FormState; value: any }
     | { type: 'SET_INGREDIENT'; index: number; value: Partial<Ingredient> }
     | { type: 'ADD_INGREDIENT' }
@@ -82,6 +94,8 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
 
   function reducer(state: FormState, action: Action): FormState {
     switch (action.type) {
+      case 'RESTORE':
+        return action.value;
       case 'SET_FIELD':
         return { ...state, [action.field]: action.value } as FormState;
       case 'SET_INGREDIENT': {
@@ -203,6 +217,56 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const draft = takeRecoveredRecipeDraft(
+      window.location.pathname + window.location.search,
+      useAuthStore.getState().user?.id
+    );
+    if (!draft) return;
+    dispatch({
+      type: 'RESTORE',
+      value: {
+        title: draft.title,
+        description: draft.description ?? '',
+        category: categoryOptions.find(
+          (option) => option.id === draft.category
+        )!,
+        difficulty: difficultyOptions.find(
+          (option) => option.id === draft.difficulty
+        )!,
+        prepTime: draft.prep_time_minutes,
+        cookTime: draft.cook_time_minutes,
+        servingMin: draft.serving_min,
+        servingMax: draft.serving_max,
+        ethnicity: draft.ethnicity ?? '',
+        ovenTemperatureF: draft.oven_temperature_f,
+        userNotes: draft.user_notes ?? '',
+        ingredients: draft.ingredients,
+        instructions: draft.instructions,
+      },
+    });
+  }, [recipe.id]);
+
+  useEffect(
+    () =>
+      registerRecipeDraft(() => ({
+        title: form.title,
+        description: form.description,
+        category: form.category.id as RecipeCategory,
+        difficulty: form.difficulty.id as RecipeDifficulty,
+        prep_time_minutes: form.prepTime,
+        cook_time_minutes: form.cookTime,
+        serving_min: form.servingMin,
+        serving_max: form.servingMax,
+        ethnicity: form.ethnicity,
+        oven_temperature_f: form.ovenTemperatureF,
+        user_notes: form.userNotes,
+        ingredients: form.ingredients,
+        instructions: form.instructions,
+      })),
+    [form]
+  );
 
   // Shared paste handling hook
   const {
@@ -351,7 +415,11 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
       <Card variant="default" className="mt-6 p-6">
         <h1 className="mb-4 text-2xl font-bold">Edit Recipe</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6"
+          data-session-recovery="structured"
+        >
           {/* Name & Description */}
           <Input
             label="Recipe Name"

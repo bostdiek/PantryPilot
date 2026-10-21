@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { markSessionActivity } from '../api/session';
+import { cancelSessionActivity, markSessionActivity } from '../api/session';
+import { getSessionIdentity } from '../utils/authSession';
 import { listenForSessionChanges, useAuthStore } from '../stores/useAuthStore';
 import { restoreSessionRecovery } from '../utils/sessionRecovery';
 import Navigation from './Navigation';
@@ -14,14 +15,33 @@ const Root: React.FC = () => {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.token !== null);
   const userId = useAuthStore((state) => state.user?.id);
+  const sessionIdentity = useAuthStore(
+    (state) => getSessionIdentity(state.token) ?? state.token
+  );
 
   useEffect(() => listenForSessionChanges(), []);
 
   useEffect(() => {
     if (isAuthenticated) {
-      restoreSessionRecovery(location.pathname + location.search, userId);
+      return restoreSessionRecovery(
+        location.pathname + location.search,
+        userId,
+        () => {
+          const state = useAuthStore.getState();
+          return (
+            (getSessionIdentity(state.token) ?? state.token) ===
+              sessionIdentity && state.user?.id === userId
+          );
+        }
+      );
     }
-  }, [location.pathname, location.search, isAuthenticated, userId]);
+  }, [
+    location.pathname,
+    location.search,
+    isAuthenticated,
+    userId,
+    sessionIdentity,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -48,13 +68,14 @@ const Root: React.FC = () => {
     window.addEventListener('focus', markActivity);
 
     return () => {
+      cancelSessionActivity();
       for (const event of events) {
         document.removeEventListener(event, markActivity, true);
       }
       window.removeEventListener('popstate', markActivity);
       window.removeEventListener('focus', markActivity);
     };
-  }, [isAuthenticated]);
+  }, [isAuthenticated, sessionIdentity]);
 
   return (
     <>

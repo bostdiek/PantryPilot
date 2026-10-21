@@ -6,8 +6,18 @@ import { logger } from '../lib/logger';
 let refreshInFlight:
   | { activity: boolean; token: string; promise: Promise<string | null> }
   | undefined;
-let lastActivityRefreshAt = 0;
+let lastActivityRefreshAt: number | undefined;
+let activitySessionToken: string | null = null;
+let trailingActivityTimer: ReturnType<typeof setTimeout> | undefined;
 const ACTIVITY_REFRESH_INTERVAL_MS = 60_000;
+
+/** Cancel unsent activity when the owning session or mounted listener changes. */
+export function cancelSessionActivity(): void {
+  clearTimeout(trailingActivityTimer);
+  trailingActivityTimer = undefined;
+  lastActivityRefreshAt = undefined;
+  activitySessionToken = null;
+}
 
 async function requestAccessToken(activity: boolean): Promise<string | null> {
   const expectedToken = useAuthStore.getState().token;
@@ -70,15 +80,45 @@ export function refreshAccessToken(activity: boolean): Promise<string | null> {
   return promise;
 }
 
+/** Report leading and trailing user input, never renew an untouched page on a timer. */
 export function markSessionActivity(): Promise<string | null> {
+  const sessionToken = useAuthStore.getState().token;
+  if (!isSameSession(activitySessionToken, sessionToken)) {
+    cancelSessionActivity();
+    activitySessionToken = sessionToken;
+  }
+  if (!sessionToken) return Promise.resolve(null);
+
   const now = Date.now();
-  if (now - lastActivityRefreshAt < ACTIVITY_REFRESH_INTERVAL_MS) {
+  if (
+    lastActivityRefreshAt !== undefined &&
+    now - lastActivityRefreshAt < ACTIVITY_REFRESH_INTERVAL_MS
+  ) {
+    if (trailingActivityTimer === undefined) {
+      trailingActivityTimer = setTimeout(
+        () => {
+          trailingActivityTimer = undefined;
+          if (isSameSession(sessionToken, useAuthStore.getState().token)) {
+            void markSessionActivity();
+          } else {
+            cancelSessionActivity();
+          }
+        },
+        ACTIVITY_REFRESH_INTERVAL_MS - (now - lastActivityRefreshAt)
+      );
+    }
     return waitForSessionActivity();
   }
+  clearTimeout(trailingActivityTimer);
+  trailingActivityTimer = undefined;
   lastActivityRefreshAt = now;
   return refreshAccessToken(true).then((token) => {
-    if (!token && lastActivityRefreshAt === now) {
-      lastActivityRefreshAt = 0;
+    if (
+      !token &&
+      lastActivityRefreshAt === now &&
+      isSameSession(sessionToken, activitySessionToken)
+    ) {
+      lastActivityRefreshAt = undefined;
     }
     return token;
   });

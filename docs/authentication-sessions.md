@@ -19,6 +19,9 @@ requests and tabs converge on the same current credential; reuse after that
 window revokes the session. The session row is locked while renewal and logout
 are processed. Logout revokes the session and clears the cookie; a request
 racing with logout cannot use its access token after revocation.
+Protected requests that appear expired re-read the row under the same lock
+before revoking it, so a concurrent successful renewal is not overwritten.
+The expiry check releases its lock before the protected endpoint runs.
 
 Renewal must return the same session ID and subject as the initiating access
 token. Protected requests retain that identity through renewal and a single
@@ -29,14 +32,19 @@ account into their open forms.
 Only explicit user input signals activity: pointer or keyboard interaction,
 form input/change/submission, wheel or touch scrolling, browser history
 navigation, and returning focus to the visible tab. The frontend coalesces
-these signals. Background requests, assistant output, and renewals without an
-activity signal do not advance `last_activity_at`. An untouched page therefore
-expires normally.
+these signals with a leading report and a single trailing report for input
+received within its one-minute throttle window. Pending activity belongs to
+the initiating session and is canceled on session changes. No recurring
+activity is scheduled on an untouched page. Background requests, assistant
+output, and renewals without an activity signal do not advance
+`last_activity_at`. An untouched page therefore expires normally.
 
 When a session ends, the frontend explains that inactivity or the maximum
 duration requires sign-in. Before clearing the expired session, it saves
 non-password, non-file form controls for at most two hours in that tab's
 `sessionStorage`; matching controls are restored after the original account
-signs in again. Recipe creation saves the structured React draft, including
-all ingredient and instruction rows, category, and difficulty, instead of
-matching controls by position. Manual logout does not save form data.
+signs in again. Recipe creation and editing save the structured React draft,
+including all ingredient and instruction rows, category, and difficulty,
+instead of matching controls by position. Deferred native-control restoration
+is canceled on route or session changes and checks the current route and
+account before writing values. Manual logout does not save form data.

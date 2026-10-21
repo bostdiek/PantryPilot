@@ -37,6 +37,29 @@ def unauthorized(detail: str = "Could not validate credentials") -> HTTPExceptio
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
+async def _recheck_expired_session(db: DbSession, session_id: UUID) -> None:
+    """Serialize an expiry decision with renewal, releasing the lock before routing."""
+    auth_session = await db.scalar(
+        select(AuthSession)
+        .where(AuthSession.id == session_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    now = datetime.now(UTC)
+    expired = auth_session is not None and session_has_expired(
+        auth_session.created_at, auth_session.last_activity_at, now
+    )
+    if expired and auth_session is not None:
+        auth_session.revoked_at = auth_session.revoked_at or now
+    invalid = auth_session is None or auth_session.revoked_at is not None
+    await db.commit()
+    if invalid:
+        raise unauthorized(
+            "Your session ended due to inactivity or its maximum duration. "
+            "Please sign in again."
+        )
+
+
 # --------------------------------------------------------------------------- #
 # The dependency
 # --------------------------------------------------------------------------- #
@@ -74,12 +97,7 @@ async def get_current_user(
         if session_has_expired(
             auth_session.created_at, auth_session.last_activity_at, now
         ):
-            auth_session.revoked_at = now
-            await db.commit()
-            raise unauthorized(
-                "Your session ended due to inactivity or its maximum duration. "
-                "Please sign in again."
-            )
+            await _recheck_expired_session(db, session_uuid)
 
     # Validate the subject claim
     sub = getattr(token_data, "sub", None)

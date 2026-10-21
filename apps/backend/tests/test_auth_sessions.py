@@ -5,9 +5,9 @@ from uuid import UUID, uuid4
 
 import jwt
 import pytest
-from fastapi import Response, status
+from fastapi import HTTPException, Response, status
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import api.v1.auth as auth_module
@@ -371,3 +371,75 @@ async def test_protected_action_requires_sign_in_at_idle_boundary(
     assert "inactivity" in response.json()["detail"]
     await db.refresh(auth_session)
     assert auth_session.revoked_at is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "concurrent_result", ["renewed", "revoked", "deleted", "expired"]
+)
+async def test_suspected_expiry_reloads_locked_state_before_revoking(
+    auth_client: tuple[AsyncClient, AsyncSession],
+    frozen_session_clock: None,
+    monkeypatch: pytest.MonkeyPatch,
+    concurrent_result: str,
+):
+    client, db = auth_client
+    user = await create_user(db)
+    token = await login(client, user)
+    claims = jwt.decode(
+        token, get_settings().SECRET_KEY, algorithms=[get_settings().ALGORITHM]
+    )
+    session_id = UUID(claims["sid"])
+    auth_session = await db.get(AuthSession, session_id)
+    assert auth_session is not None
+    auth_session.last_activity_at = FrozenDateTime.current - SESSION_IDLE_TIMEOUT
+    await db.commit()
+    original_scalar = db.scalar
+    reads = 0
+
+    async def racing_scalar(statement):
+        nonlocal reads
+        reads += 1
+        if reads == 2:
+            assert statement._for_update_arg is not None
+            assert statement.get_execution_options()["populate_existing"] is True
+        result = await original_scalar(statement)
+        if reads == 1:
+            if concurrent_result == "deleted":
+                change = delete(AuthSession).where(AuthSession.id == session_id)
+            else:
+                values = {"last_activity_at": FrozenDateTime.current}
+                if concurrent_result == "revoked":
+                    values["revoked_at"] = FrozenDateTime.current
+                if concurrent_result == "expired":
+                    values["last_activity_at"] -= SESSION_IDLE_TIMEOUT
+                change = (
+                    update(AuthSession)
+                    .where(AuthSession.id == session_id)
+                    .values(**values)
+                )
+            # Simulate a newly committed row without updating the cached ORM object.
+            await db.execute(change.execution_options(synchronize_session=False))
+        return result
+
+    async def get_user_after_unlock(_db, user_id):
+        assert not db.in_transaction()
+        assert user_id == user.id
+        return user
+
+    monkeypatch.setattr(db, "scalar", racing_scalar)
+    monkeypatch.setattr(dependency_auth_module, "get_user_by_id", get_user_after_unlock)
+
+    if concurrent_result == "renewed":
+        result = await dependency_auth_module.get_current_user(db, token)
+        assert result is user
+        assert auth_session.revoked_at is None
+        assert (
+            auth_session.last_activity_at.replace(tzinfo=UTC) == FrozenDateTime.current
+        )
+    else:
+        with pytest.raises(HTTPException) as exc:
+            await dependency_auth_module.get_current_user(db, token)
+        assert exc.value.status_code == status.HTTP_401_UNAUTHORIZED
+        assert not db.in_transaction()
+    assert reads == 2

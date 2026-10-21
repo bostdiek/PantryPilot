@@ -1,7 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { apiClient } from '../client';
-import { authenticatedFetch, refreshAccessToken } from '../session';
+import {
+  authenticatedFetch,
+  cancelSessionActivity,
+  markSessionActivity,
+  refreshAccessToken,
+} from '../session';
 import type { AuthState } from '../../types/auth';
 
 function accessToken(
@@ -28,6 +33,7 @@ describe('active session renewal', () => {
   let state: AuthState;
 
   beforeEach(() => {
+    cancelSessionActivity();
     vi.clearAllMocks();
     vi.stubGlobal('fetch', fetchMock);
     state = {
@@ -47,6 +53,72 @@ describe('active session renewal', () => {
       state.token = null;
     });
     vi.mocked(useAuthStore.getState).mockImplementation(() => state);
+  });
+
+  afterEach(() => {
+    cancelSessionActivity();
+    vi.useRealTimers();
+  });
+
+  it('reports trailing activity before the actual idle boundary', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-21T12:00:00Z'));
+    let serverActivityAt = Date.now();
+    fetchMock.mockImplementation(async () => {
+      if (Date.now() - serverActivityAt >= 30 * 60_000) {
+        return new Response(null, { status: 401 });
+      }
+      serverActivityAt = Date.now();
+      return new Response(JSON.stringify({ access_token: renewedToken }));
+    });
+
+    await markSessionActivity();
+    await vi.advanceTimersByTimeAsync(59_000);
+    await markSessionActivity();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(29 * 60_000 + 30_000);
+    await expect(markSessionActivity()).resolves.toBe(renewedToken);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not schedule recurring activity on an untouched page', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ access_token: renewedToken }))
+    );
+
+    await markSessionActivity();
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('drops pending activity for a changed session and resets its throttle', async () => {
+    vi.useFakeTimers();
+    fetchMock.mockImplementation(
+      async () => new Response(JSON.stringify({ access_token: state.token }))
+    );
+    await markSessionActivity();
+    await vi.advanceTimersByTimeAsync(59_000);
+    await markSessionActivity();
+    state.token = accessToken('cook-b', 'session-b');
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await markSessionActivity();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await markSessionActivity();
+    cancelSessionActivity();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('renews once and retries an unauthorized write once', async () => {
