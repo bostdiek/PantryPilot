@@ -1,14 +1,22 @@
 """apps/backend/src/api/v1/auth.py: Auth (login) API routes."""
 
+import hashlib
+import hmac
 import logging
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select
 
+from core.config import get_settings
 from core.email import send_password_reset_email, send_verification_email
 from core.exceptions import DuplicateUserError
 from core.ratelimit import check_rate_limit
+from core.session import SESSION_ABSOLUTE_TIMEOUT, session_has_expired
 from core.security import (
     create_access_token,
     generate_password_reset_token,
@@ -20,6 +28,7 @@ from core.security import (
 )
 from crud.user import create_user, get_user_by_email, get_user_by_username, user_crud
 from dependencies.db import DbSession
+from models.auth_sessions import AuthSession
 from schemas.auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
@@ -28,6 +37,7 @@ from schemas.auth import (
     ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    SessionActivity,
     Token,
     UserRegister,
     VerifyEmailRequest,
@@ -40,10 +50,75 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 PasswordForm = Annotated[OAuth2PasswordRequestForm, Depends()]
 
 _logger = logging.getLogger(__name__)
+REFRESH_COOKIE = "pantrypilot_session"
+SESSION_ABSOLUTE_SECONDS = int(SESSION_ABSOLUTE_TIMEOUT.total_seconds())
+
+
+def _refresh_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _refresh_secret(session_id: UUID, generation: int) -> str:
+    key = get_settings().SECRET_KEY.encode("utf-8")
+    message = f"pantrypilot-refresh:{session_id}:{generation}".encode("utf-8")
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def _set_refresh_cookie(response: Response, token: str, max_age: int) -> None:
+    settings = get_settings()
+    response.set_cookie(
+        key=REFRESH_COOKIE,
+        value=token,
+        max_age=max_age,
+        httponly=True,
+        secure=settings.ENVIRONMENT == "production",
+        samesite="lax",
+        path="/api/v1/auth",
+    )
+
+
+async def _create_session(user_id: UUID, db: DbSession, response: Response) -> str:
+    session_id = UUID(bytes=secrets.token_bytes(16), version=4)
+    refresh_secret = _refresh_secret(session_id, 0)
+    refresh_token = f"{session_id}.0.{refresh_secret}"
+    now = datetime.now(UTC)
+    db.add(
+        AuthSession(
+            id=session_id,
+            user_id=user_id,
+            refresh_token_hash=_refresh_token_hash(refresh_secret),
+            refresh_generation=0,
+            created_at=now,
+            last_activity_at=now,
+        )
+    )
+    await db.commit()
+    _set_refresh_cookie(response, refresh_token, SESSION_ABSOLUTE_SECONDS)
+    response.headers["Cache-Control"] = "no-store"
+    return create_access_token({"sub": str(user_id), "sid": str(session_id)})
+
+
+def _delete_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=REFRESH_COOKIE,
+        httponly=True,
+        secure=get_settings().ENVIRONMENT == "production",
+        samesite="lax",
+        path="/api/v1/auth",
+    )
+
+
+def _invalid_refresh(response: Response, detail: str) -> HTTPException:
+    _delete_refresh_cookie(response)
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=detail,
+        headers={"Set-Cookie": response.headers["set-cookie"]},
+    )
 
 
 @router.post("/login", response_model=Token, dependencies=[Depends(check_rate_limit)])
-async def login(form_data: PasswordForm, db: DbSession) -> Token:
+async def login(form_data: PasswordForm, db: DbSession, response: Response) -> Token:
     """
     OAuth2-compatible token login, get an access token for future requests.
 
@@ -73,7 +148,7 @@ async def login(form_data: PasswordForm, db: DbSession) -> Token:
             "verification link.",
         )
 
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = await _create_session(user.id, db, response)
     return Token(access_token=access_token, token_type="bearer")
 
 
@@ -150,7 +225,7 @@ async def register(payload: UserRegister, db: DbSession) -> RegisterResponse:
     dependencies=[Depends(check_rate_limit)],
 )
 async def verify_email(
-    payload: VerifyEmailRequest, db: DbSession
+    payload: VerifyEmailRequest, db: DbSession, response: Response
 ) -> VerifyEmailResponse:
     """
     Verify a user's email address using the token from the verification link.
@@ -178,7 +253,7 @@ async def verify_email(
     # Check if already verified
     if user.is_verified:
         # Still return a token for convenience
-        access_token = create_access_token(data={"sub": str(user.id)})
+        access_token = await _create_session(user.id, db, response)
         return VerifyEmailResponse(
             message="Email already verified",
             access_token=access_token,
@@ -189,13 +264,191 @@ async def verify_email(
     await user_crud.set_verified(db=db, user=user)
 
     # Create access token for immediate login
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = await _create_session(user.id, db, response)
 
     return VerifyEmailResponse(
         message="Email verified successfully",
         access_token=access_token,
         token_type="bearer",
     )
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_session(
+    payload: SessionActivity,
+    db: DbSession,
+    response: Response,
+    request: Request,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> Token:
+    """Issue a short-lived access token for an active server-side session."""
+    origin = request.headers.get("origin")
+    if origin and origin not in get_settings().CORS_ORIGINS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid origin"
+        )
+    if not refresh_token:
+        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+
+    try:
+        session_id_text, generation_text, refresh_secret = refresh_token.split(
+            ".", maxsplit=2
+        )
+        session_id = UUID(session_id_text)
+        presented_generation = int(generation_text)
+    except ValueError as exc:
+        raise _invalid_refresh(
+            response, "Your session ended. Please sign in again."
+        ) from exc
+
+    auth_session = await db.scalar(
+        select(AuthSession)
+        .where(AuthSession.id == session_id)
+        .with_for_update()
+    )
+    if auth_session is None:
+        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+
+    now = datetime.now(UTC)
+    if auth_session.revoked_at is not None or session_has_expired(
+        auth_session.created_at, auth_session.last_activity_at, now
+    ):
+        auth_session.revoked_at = auth_session.revoked_at or now
+        await db.commit()
+        raise _invalid_refresh(
+            response,
+            "Your session ended due to inactivity or its maximum duration. "
+            "Please sign in again.",
+        )
+
+    presented_hash = _refresh_token_hash(refresh_secret)
+    secret_is_valid = secrets.compare_digest(
+        _refresh_secret(auth_session.id, presented_generation), refresh_secret
+    )
+    is_current_token = (
+        presented_generation == auth_session.refresh_generation
+        and secrets.compare_digest(auth_session.refresh_token_hash, presented_hash)
+        and secret_is_valid
+    )
+    grace_started_at = auth_session.refresh_grace_started_at
+    if grace_started_at is not None and grace_started_at.tzinfo is None:
+        grace_started_at = grace_started_at.replace(tzinfo=UTC)
+    is_recent_previous_token = (
+        auth_session.refresh_grace_generation is not None
+        and auth_session.refresh_grace_generation
+        <= presented_generation
+        < auth_session.refresh_generation
+        and secret_is_valid
+        and grace_started_at is not None
+        and now - grace_started_at <= timedelta(seconds=30)
+    )
+    if not is_current_token and not is_recent_previous_token:
+        if secret_is_valid and presented_generation < auth_session.refresh_generation:
+            auth_session.revoked_at = now
+            await db.commit()
+        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+
+    if is_current_token:
+        if (
+            grace_started_at is None
+            or now - grace_started_at > timedelta(seconds=30)
+        ):
+            auth_session.refresh_grace_started_at = now
+            auth_session.refresh_grace_generation = auth_session.refresh_generation
+        auth_session.refresh_generation += 1
+        new_secret = _refresh_secret(
+            auth_session.id, auth_session.refresh_generation
+        )
+        auth_session.refresh_token_hash = _refresh_token_hash(new_secret)
+
+    if payload.activity:
+        auth_session.last_activity_at = now
+    if is_current_token or payload.activity:
+        await db.commit()
+
+    current_secret = _refresh_secret(
+        auth_session.id, auth_session.refresh_generation
+    )
+    remaining_seconds = max(
+        0,
+        SESSION_ABSOLUTE_SECONDS
+        - int(
+            (
+                now
+                - (
+                    auth_session.created_at.replace(tzinfo=UTC)
+                    if auth_session.created_at.tzinfo is None
+                    else auth_session.created_at
+                )
+            ).total_seconds()
+        ),
+    )
+    _set_refresh_cookie(
+        response,
+        f"{auth_session.id}.{auth_session.refresh_generation}.{current_secret}",
+        remaining_seconds,
+    )
+
+    response.headers["Cache-Control"] = "no-store"
+    access_token = create_access_token(
+        {"sub": str(auth_session.user_id), "sid": str(auth_session.id)}
+    )
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout_session(
+    db: DbSession,
+    response: Response,
+    request: Request,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> Response:
+    """Revoke this browser session and clear its refresh credential."""
+    origin = request.headers.get("origin")
+    if origin and origin not in get_settings().CORS_ORIGINS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid origin"
+        )
+
+    if refresh_token:
+        try:
+            session_id_text, generation_text, refresh_secret = refresh_token.split(
+                ".", maxsplit=2
+            )
+            session_id = UUID(session_id_text)
+            presented_generation = int(generation_text)
+        except ValueError:
+            session_id = None
+            refresh_secret = ""
+            presented_generation = -1
+
+        if session_id:
+            auth_session = await db.scalar(
+                select(AuthSession)
+                .where(AuthSession.id == session_id)
+                .with_for_update()
+            )
+            if auth_session:
+                presented_hash = _refresh_token_hash(refresh_secret)
+                if (
+                    0 <= presented_generation <= auth_session.refresh_generation
+                    and secrets.compare_digest(
+                        _refresh_secret(auth_session.id, presented_generation),
+                        refresh_secret,
+                    )
+                    and (
+                        presented_generation != auth_session.refresh_generation
+                        or secrets.compare_digest(
+                            auth_session.refresh_token_hash, presented_hash
+                        )
+                    )
+                ):
+                    auth_session.revoked_at = datetime.now(UTC)
+                    await db.commit()
+
+    _delete_refresh_cookie(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 @router.post(

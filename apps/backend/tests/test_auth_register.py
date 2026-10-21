@@ -580,6 +580,8 @@ async def test_login_success_unit(
     _, db = auth_client
     form = SimpleNamespace(username="dummy", password="goodpass")
 
-    token = await auth_mod.login(form, db)
+    from fastapi import Response
+
+    token = await auth_mod.login(form, db, Response())
     assert token.access_token == "unit-login-token"
     assert token.token_type == "bearer"

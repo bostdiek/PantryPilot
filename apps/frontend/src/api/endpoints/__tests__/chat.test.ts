@@ -1099,11 +1099,19 @@ describe('chat API endpoints', () => {
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
+        clone: () => ({
+          json: async () => ({
+            detail: 'Could not validate credentials',
+          }),
+        }),
         text: vi.fn().mockResolvedValue(
           JSON.stringify({
             detail: 'Could not validate credentials',
           })
         ),
+      }).mockResolvedValueOnce({
+        ok: false,
+        status: 401,
       });
 
       await expect(resumeRecipeConversation('recipe-1')).rejects.toMatchObject({

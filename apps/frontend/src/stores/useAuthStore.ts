@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthState } from '../types/auth';
+import { captureSessionRecovery } from '../utils/sessionRecovery';
 import {
   addToastIfNotExists,
   generateToastId,
@@ -14,13 +15,20 @@ export const useAuthStore = create<AuthState>()(
       hasHydrated: false, // hydration guard flag
       login: (token, user) => set({ token, user }),
       logout: (reason?: 'expired' | 'manual') => {
+        if (reason === 'expired') {
+          captureSessionRecovery();
+        }
         set({ token: null, user: null });
 
         // Show user-friendly message for token expiration (avoid duplicates)
         if (reason === 'expired') {
           addToastIfNotExists({
             id: generateToastId(),
-            message: 'Your session has expired. Please log in again.',
+            message: [
+              'Your session could not continue. It may have expired from inactivity',
+              'or reached its maximum duration. Sign in again; recoverable form',
+              'and chat text are saved in this tab.',
+            ].join(' '),
             type: 'info',
           });
         }

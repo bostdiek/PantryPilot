@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Annotated, Protocol, TypeVar, cast
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from core.session import session_has_expired
 from core.security import decode_token
 from crud.user import get_user_by_id
 from dependencies.db import DbSession
+from models.auth_sessions import AuthSession
 from models.users import User
 
 
@@ -52,6 +56,30 @@ async def get_current_user(
     # Decode the JWT – `decode_token` raises HTTPException(401) on failure,
     # so allow that to surface instead of catching a broad Exception here.
     token_data = decode_token(token)
+
+    session_id = token_data.sid
+    if session_id:
+        try:
+            session_uuid = UUID(session_id)
+        except ValueError as exc:
+            raise unauthorized() from exc
+
+        auth_session = await db.scalar(
+            select(AuthSession).where(AuthSession.id == session_uuid)
+        )
+        now = datetime.now(UTC)
+        if auth_session is None or auth_session.revoked_at is not None:
+            raise unauthorized("Session expired. Please sign in again.")
+
+        if session_has_expired(
+            auth_session.created_at, auth_session.last_activity_at, now
+        ):
+            auth_session.revoked_at = now
+            await db.commit()
+            raise unauthorized(
+                "Your session ended due to inactivity or its maximum duration. "
+                "Please sign in again."
+            )
 
     # Validate the subject claim
     sub = getattr(token_data, "sub", None)

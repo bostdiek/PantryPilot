@@ -131,7 +131,7 @@ describe('ApiClient Authentication Handling', () => {
     expect(mockLogout).toHaveBeenCalledWith('expired');
   });
 
-  it('prioritizes 401 HTTP status over non-auth canonical error types', async () => {
+  it('does not log out on a resource 401 with a non-auth canonical error type', async () => {
     // Setup response with 401 status but non-auth error type
     const mockResponse = {
       ok: false,
@@ -152,8 +152,8 @@ describe('ApiClient Authentication Handling', () => {
     // Make the request and expect it to throw
     await expect(apiClient.request('/test')).rejects.toThrow();
 
-    // Verify logout was still called because HTTP status is 401
-    expect(mockLogout).toHaveBeenCalledWith('expired');
+    // A resource error is not evidence that the authentication session expired.
+    expect(mockLogout).not.toHaveBeenCalled();
   });
 
   it('handles successful requests without calling logout', async () => {
