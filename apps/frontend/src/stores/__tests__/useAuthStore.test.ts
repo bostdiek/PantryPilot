@@ -140,6 +140,41 @@ describe('useAuthStore', () => {
     stop();
   });
 
+  it.each(['manual', 'expired'] as const)(
+    'propagates %s logout without changing recovery intent in another tab',
+    (reason) => {
+      sessionStorage.clear();
+      const form = document.createElement('form');
+      const input = document.createElement('input');
+      input.value = 'Unsaved private input';
+      form.append(input);
+      document.body.append(form);
+      const user = { id: 'a', username: 'a', email: 'a@example.test' };
+      useAuthStore.getState().login('token-a', user);
+      useAuthStore.getState().logout(reason);
+      const remote = localStorage.getItem('auth')!;
+      expect(JSON.parse(remote).state.logoutReason).toBe(reason);
+      sessionStorage.clear();
+      useAuthStore.getState().login('token-a', user);
+      localStorage.setItem('auth', remote);
+      const stop = listenForSessionChanges();
+      act(() =>
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'auth', newValue: remote })
+        )
+      );
+      expect(useAuthStore.getState().token).toBeNull();
+      expect(useAuthStore.getState().logoutReason).toBe(reason);
+      expect(
+        Boolean(sessionStorage.getItem('pantrypilot-session-recovery'))
+      ).toBe(reason === 'expired');
+      expect(localStorage.getItem('auth')).toBe(remote);
+      stop();
+      form.remove();
+      sessionStorage.clear();
+    }
+  );
+
   it('adopts a newer same-session consent deadline but never rolls it back', () => {
     const token = (deadline: number) =>
       `header.${btoa(JSON.stringify({ sub: 'a', sid: 'same-session', session_exp: deadline }))}.signature`;

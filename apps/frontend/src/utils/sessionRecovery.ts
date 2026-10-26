@@ -1,6 +1,28 @@
 const RECOVERY_KEY = 'pantrypilot-session-recovery';
 const RECOVERY_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
+/** Unsaved profile and memory state, including which editors must reopen. */
+export interface ProfileRecoveryDraft {
+  isEditing: boolean;
+  formData: { firstName: string; lastName: string; username: string };
+  preferencesData: UserPreferences;
+  memoryEditing: boolean;
+  memoryContent: string;
+}
+
+/** Pending instruction import, preserving edited steps and their insertion target. */
+export interface PasteSplitRecoveryDraft {
+  isOpen: boolean;
+  targetIndex: number;
+  candidateSteps: string[];
+  originalContent: string;
+}
+
+interface EditorDrafts {
+  profile: ProfileRecoveryDraft;
+  pasteSplit: PasteSplitRecoveryDraft;
+}
+
 interface RecoverableField {
   formIndex: number;
   fieldIndex: number;
@@ -14,9 +36,41 @@ interface RecoverySnapshot {
   fields: RecoverableField[];
   userId?: string;
   recipeDraft?: RecipeCreate;
+  editors?: Partial<EditorDrafts>;
 }
 
 let captureRecipeDraft: (() => RecipeCreate) | undefined;
+const editorCaptures = new Map<
+  keyof EditorDrafts,
+  () => Partial<EditorDrafts>
+>();
+
+/** Register mounted non-form state; return undefined when no editor is pending. */
+export function registerEditorDraft<K extends keyof EditorDrafts>(
+  editor: K,
+  capture: () => EditorDrafts[K] | undefined
+): () => void {
+  const captureSnapshot = () => ({ [editor]: capture() });
+  editorCaptures.set(editor, captureSnapshot);
+  return () => {
+    if (editorCaptures.get(editor) === captureSnapshot)
+      editorCaptures.delete(editor);
+  };
+}
+
+/** Consume editor state only for its original route and known account. */
+export function takeRecoveredEditorDraft<K extends keyof EditorDrafts>(
+  editor: K,
+  path: string,
+  userId: string
+): EditorDrafts[K] | undefined {
+  const snapshot = readSnapshot(path, userId);
+  const draft = snapshot?.editors?.[editor];
+  if (!draft || !snapshot) return undefined;
+  delete snapshot.editors?.[editor];
+  saveSnapshot(snapshot);
+  return draft;
+}
 
 /** Register the mounted recipe form's complete React state for expiry recovery. */
 export function registerRecipeDraft(capture: () => RecipeCreate): () => void {
@@ -46,7 +100,11 @@ function readSnapshot(path: string, userId?: string): RecoverySnapshot | null {
 
 function saveSnapshot(snapshot: RecoverySnapshot): void {
   try {
-    if (snapshot.fields.length || snapshot.recipeDraft) {
+    if (
+      snapshot.fields.length ||
+      snapshot.recipeDraft ||
+      Object.values(snapshot.editors ?? {}).some(Boolean)
+    ) {
       sessionStorage.setItem(RECOVERY_KEY, JSON.stringify(snapshot));
     } else {
       sessionStorage.removeItem(RECOVERY_KEY);
@@ -115,13 +173,22 @@ export function captureSessionRecovery(userId?: string): void {
   );
 
   const recipeDraft = captureRecipeDraft?.();
-  if (fields.length === 0 && !recipeDraft) return;
+  const editors: Partial<EditorDrafts> = {};
+  for (const capture of editorCaptures.values())
+    Object.assign(editors, capture());
+  if (
+    fields.length === 0 &&
+    !recipeDraft &&
+    !Object.values(editors).some(Boolean)
+  )
+    return;
   const snapshot: RecoverySnapshot = {
     path: window.location.pathname + window.location.search,
     capturedAt: Date.now(),
     fields,
     userId,
     recipeDraft,
+    editors,
   };
   saveSnapshot(snapshot);
 }
@@ -215,4 +282,5 @@ export function restoreSessionRecovery(
   return dispose;
 }
 import type { RecipeCreate } from '../types/Recipe';
+import type { UserPreferences } from '../types/UserPreferences';
 import { logger } from '../lib/logger';

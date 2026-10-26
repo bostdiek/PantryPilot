@@ -278,6 +278,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
     handlePasteAsSingle,
     handlePasteSplitCancel,
     closePasteSplitModal,
+    updatePasteSplitSteps,
   } = usePasteSplit({
     onInsertSteps: (
       targetIndex: number,
@@ -804,6 +805,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
           onPasteAsSingle={handlePasteAsSingle}
           candidateSteps={pasteSplitModal.candidateSteps}
           originalContent={pasteSplitModal.originalContent}
+          onStepsChange={updatePasteSplitSteps}
         />
       </Card>
     </Container>

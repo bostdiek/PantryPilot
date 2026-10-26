@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   captureSessionRecovery,
   restoreSessionRecovery,
+  registerEditorDraft,
+  takeRecoveredEditorDraft,
 } from '../sessionRecovery';
 
 describe('session input recovery', () => {
@@ -55,6 +57,39 @@ describe('session input recovery', () => {
 
     restoreSessionRecovery(path, 'account-a');
     expect(input.value).toBe('Account A recipe');
+  });
+
+  it('bounds non-form recovery by account, route and lifetime, without consuming on mismatch', () => {
+    const pending = {
+      isOpen: true,
+      targetIndex: 2,
+      candidateSteps: ['Edited instruction'],
+      originalContent: 'Original pasted instructions',
+    };
+    const stop = registerEditorDraft('pasteSplit', () => pending);
+    captureSessionRecovery('account-a');
+    stop();
+    expect(
+      takeRecoveredEditorDraft('pasteSplit', '/', 'account-b')
+    ).toBeUndefined();
+    expect(
+      takeRecoveredEditorDraft('pasteSplit', '/other', 'account-a')
+    ).toBeUndefined();
+    expect(takeRecoveredEditorDraft('pasteSplit', '/', 'account-a')).toEqual(
+      pending
+    );
+    expect(
+      takeRecoveredEditorDraft('pasteSplit', '/', 'account-a')
+    ).toBeUndefined();
+    const stopAgain = registerEditorDraft('pasteSplit', () => pending);
+    captureSessionRecovery('account-a');
+    stopAgain();
+    vi.useFakeTimers();
+    vi.advanceTimersByTime(2 * 60 * 60_000 + 1);
+    expect(
+      takeRecoveredEditorDraft('pasteSplit', '/', 'account-a')
+    ).toBeUndefined();
+    expect(sessionStorage.length).toBe(0);
   });
 
   it.each(['route', 'account', 'disposed'])(

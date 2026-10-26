@@ -16,13 +16,14 @@ export const useAuthStore = create<AuthState>()(
     (set, get) => ({
       token: null,
       user: null,
+      logoutReason: null,
       hasHydrated: false, // hydration guard flag
-      login: (token, user) => set({ token, user }),
+      login: (token, user) => set({ token, user, logoutReason: null }),
       logout: (reason?: 'expired' | 'manual') => {
         if (reason === 'expired') {
           captureSessionRecovery(get().user?.id);
         }
-        set({ token: null, user: null });
+        set({ token: null, user: null, logoutReason: reason ?? 'manual' });
 
         // Show user-friendly message for token expiration (avoid duplicates)
         if (reason === 'expired') {
@@ -37,7 +38,7 @@ export const useAuthStore = create<AuthState>()(
           });
         }
       },
-      setToken: (token) => set({ token }),
+      setToken: (token) => set({ token, logoutReason: null }),
       setUser: (user) => set({ user }),
       getDisplayName: () => {
         const state = get();
@@ -63,7 +64,11 @@ export const useAuthStore = create<AuthState>()(
         },
         removeItem: (name) => localStorage.removeItem(name),
       })),
-      partialize: (state) => ({ token: state.token, user: state.user }), // only persist token and user
+      partialize: (state) => ({
+        token: state.token,
+        user: state.user,
+        logoutReason: state.logoutReason,
+      }),
       onRehydrateStorage: () => (state) => {
         // Set hasHydrated=true after rehydration finishes
         if (state) {
@@ -82,6 +87,7 @@ export function listenForSessionChanges(): () => void {
     if (!currentToken) return;
 
     let remoteToken: string | null = null;
+    let logoutReason: 'manual' | 'expired' = 'expired';
     try {
       const persisted: unknown = event.newValue
         ? JSON.parse(event.newValue)
@@ -96,6 +102,19 @@ export function listenForSessionChanges(): () => void {
         typeof persisted.state.token === 'string'
       ) {
         remoteToken = persisted.state.token;
+      }
+      if (
+        persisted &&
+        typeof persisted === 'object' &&
+        'state' in persisted &&
+        persisted.state &&
+        typeof persisted.state === 'object' &&
+        'token' in persisted.state &&
+        persisted.state.token === null &&
+        'logoutReason' in persisted.state &&
+        persisted.state.logoutReason === 'manual'
+      ) {
+        logoutReason = 'manual';
       }
     } catch (error) {
       logger.warn(
@@ -122,7 +141,7 @@ export function listenForSessionChanges(): () => void {
 
     applyingExternalSessionChange = true;
     try {
-      useAuthStore.getState().logout('expired');
+      useAuthStore.getState().logout(logoutReason);
     } finally {
       applyingExternalSessionChange = false;
     }

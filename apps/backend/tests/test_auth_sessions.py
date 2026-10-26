@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import jwt
 import pytest
 from fastapi import HTTPException, Response, status
+from fastapi.security import OAuth2PasswordRequestForm
 from httpx import AsyncClient
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import SQLAlchemyError
@@ -44,6 +46,64 @@ async def create_user(db: AsyncSession) -> User:
     db.add(user)
     await db.commit()
     return user
+
+
+@pytest.mark.asyncio
+async def test_login_reloads_credentials_locked_after_concurrent_password_reset(
+    auth_client: tuple[AsyncClient, AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = auth_client
+    user = await create_user(db)
+    original_lookup = auth_module.get_user_by_username
+
+    async def reset_after_lookup(db: AsyncSession, username: str) -> User | None:
+        found = await original_lookup(db, username)
+        await db.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(hashed_password=get_password_hash("replacement-password"))
+            .execution_options(synchronize_session=False)
+        )
+        await db.commit()
+        return found
+
+    monkeypatch.setattr(auth_module, "get_user_by_username", reset_after_lookup)
+    response = await client.post(
+        "/api/v1/auth/login",
+        data={"username": user.username, "password": "long-secure-password"},
+    )
+    assert response.status_code == 401
+    assert (await db.execute(select(AuthSession))).scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_login_and_reset_acquire_account_lock_before_committing(
+    auth_client: tuple[AsyncClient, AsyncSession],
+    frozen_session_clock: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, db = auth_client
+    user = await create_user(db)
+    refresh = AsyncMock(wraps=db.refresh)
+    monkeypatch.setattr(db, "refresh", refresh)
+    await auth_module.login(
+        OAuth2PasswordRequestForm(
+            username=user.username, password="long-secure-password"
+        ),
+        db,
+        Response(),
+    )
+    refresh.assert_any_await(user, with_for_update=True)
+    refresh.reset_mock()
+    await auth_module.reset_password(
+        ResetPasswordRequest(
+            token=generate_password_reset_token(user.email),
+            new_password="replacement-password",
+        ),
+        db,
+    )
+    refresh.assert_any_await(user, with_for_update=True)
 
 
 @pytest.fixture

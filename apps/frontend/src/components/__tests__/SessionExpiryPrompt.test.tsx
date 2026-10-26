@@ -125,6 +125,31 @@ describe('explicit session confirmation', () => {
     expect(refreshAccessToken).not.toHaveBeenCalled();
   });
 
+  it('surfaces transient confirmation errors and re-enables the button without logging out', async () => {
+    vi.setSystemTime(start + 55 * 60_000);
+    vi.mocked(refreshAccessToken).mockRejectedValue(
+      new Error('Temporary renewal outage')
+    );
+    render(<SessionExpiryPrompt />);
+    await act(async () => fireEvent.click(screen.getByText('Stay signed in')));
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Temporary renewal outage'
+    );
+    expect(
+      screen.getByRole('button', { name: 'Stay signed in' })
+    ).toBeEnabled();
+    expect(useAuthStore.getState().token).toBe(token());
+  });
+
+  it('still expires at a known signed deadline during a renewal outage', async () => {
+    vi.mocked(refreshAccessToken).mockRejectedValue(
+      new Error('Temporary renewal outage')
+    );
+    render(<SessionExpiryPrompt />);
+    await act(() => vi.advanceTimersByTimeAsync(60 * 60_000));
+    expect(useAuthStore.getState().token).toBeNull();
+  });
+
   it('signs out only after server revocation succeeds', async () => {
     vi.setSystemTime(start + 55 * 60_000);
     vi.mocked(revokeSession)

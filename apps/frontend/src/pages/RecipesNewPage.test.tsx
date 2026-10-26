@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
@@ -84,6 +85,60 @@ describe('RecipesNewPage', () => {
       );
     }
   );
+
+  test('reopens pending instruction edits and imports them at their original target', async () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+    fireEvent.change(screen.getByLabelText('Step 1'), {
+      target: { value: 'Base step' },
+    });
+    fireEvent.click(screen.getByText(/add step/i));
+    fireEvent.paste(screen.getByLabelText('Step 2'), {
+      clipboardData: {
+        getData: () => '1. Chop onions.\n2. Simmer soup.\n3. Serve hot.',
+      },
+    });
+    const dialog = screen.getByRole('dialog', {
+      name: 'Import Multiple Steps',
+    });
+    fireEvent.change(within(dialog).getByLabelText('Step 1'), {
+      target: { value: 'Chop onions finely' },
+    });
+    fireEvent.click(within(dialog).getByLabelText('Remove step 2'));
+    captureSessionRecovery('cook-a');
+    unmount();
+    useAuthStore.setState({ user: null });
+    render(
+      <MemoryRouter>
+        <RecipesNewPage />
+      </MemoryRouter>
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await act(async () => {
+      useAuthStore.getState().setUser({
+        id: 'cook-a',
+        username: 'cook',
+        email: 'cook@example.test',
+      });
+    });
+    const recovered = screen.getByRole('dialog', {
+      name: 'Import Multiple Steps',
+    });
+    expect(within(recovered).getByLabelText('Step 1')).toHaveValue(
+      'Chop onions finely'
+    );
+    expect(within(recovered).getAllByLabelText(/^Step \d+$/)).toHaveLength(2);
+    fireEvent.click(within(recovered).getByText('Import 2 Steps'));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    );
+    expect(screen.getByLabelText('Step 1')).toHaveValue('Base step');
+    expect(screen.getByLabelText('Step 2')).toHaveValue('Chop onions finely');
+    expect(screen.getByLabelText('Step 3')).toHaveValue('Serve hot.');
+  });
 
   test('restores repeated rows and custom selects without mixing recipe fields', async () => {
     const { unmount } = render(

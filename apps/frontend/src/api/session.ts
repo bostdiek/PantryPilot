@@ -13,6 +13,16 @@ let refreshInFlight:
 let pendingExtension:
   { token: string; promise: Promise<string | null> } | undefined;
 
+/** A retryable renewal outage, not evidence that the user's session was revoked. */
+export class SessionRenewalError extends Error {
+  constructor() {
+    super(
+      'Unable to renew your session right now. Check your connection and try again.'
+    );
+    this.name = 'SessionRenewalError';
+  }
+}
+
 async function requestAccessToken(
   extendSession: boolean
 ): Promise<string | null> {
@@ -37,7 +47,13 @@ async function requestAccessToken(
       logger.warn('Session renewal was rejected', {
         'http.response.status_code': response.status,
       });
-      return null;
+      if (response.status === 401 || response.status === 403) {
+        if (isSameSession(expectedToken, useAuthStore.getState().token)) {
+          useAuthStore.getState().logout('expired');
+        }
+        return null;
+      }
+      throw new SessionRenewalError();
     }
 
     const body = (await response.json()) as { access_token?: string };
@@ -69,7 +85,9 @@ async function requestAccessToken(
     return accessToken;
   } catch (error) {
     logger.warn('Session renewal failed', error);
-    return null;
+    throw error instanceof SessionRenewalError
+      ? error
+      : new SessionRenewalError();
   }
 }
 
@@ -98,7 +116,10 @@ function rotateAccessToken(extendSession: boolean): Promise<string | null> {
   return promise;
 }
 
-/** Rotate credentials; true explicitly authorizes an extension and gates requests, even while queued. */
+/**
+ * Rotate credentials; true explicitly authorizes an extension and gates queued requests.
+ * Resolves null for rejected credentials; rejects with SessionRenewalError for outages.
+ */
 export function refreshAccessToken(
   extendSession: boolean
 ): Promise<string | null> {
@@ -115,7 +136,7 @@ export function refreshAccessToken(
   return promise;
 }
 
-/** Wait through queued explicit confirmation for the current session; failure resolves to null. */
+/** Wait through current-session confirmation; outages reject, rejected credentials resolve null. */
 export function waitForSessionExtension(): Promise<string | null> {
   return pendingExtension &&
     isSameSession(useAuthStore.getState().token, pendingExtension.token)
@@ -198,16 +219,19 @@ export async function authenticatedFetch(
   }
 
   const renewedToken = await refreshAccessToken(false);
+  const confirmedToken = await waitForSessionExtension();
   if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
     return response;
   }
-  if (!renewedToken) {
+  if (!renewedToken && !confirmedToken) {
     if (useAuthStore.getState().token) {
       useAuthStore.getState().logout('expired');
     }
     return response;
   }
-  headers[authorizationHeader] = `Bearer ${renewedToken}`;
+  const latestToken = useAuthStore.getState().token;
+  if (!latestToken) return response;
+  headers[authorizationHeader] = `Bearer ${latestToken}`;
   const retryResponse = await fetch(input, requestOptions);
   if (
     retryResponse.status === 401 &&

@@ -41,31 +41,61 @@ export function SessionExpiryPrompt() {
   useEffect(() => {
     if (!token || (deadline !== undefined && !expired)) return;
     // A missing deadline can be an older token; a stale deadline can be a missed tab update.
-    void refreshAccessToken(false).then((renewed) => {
-      if (!isSameSession(token, useAuthStore.getState().token)) return;
-      const currentDeadline = getSessionClaims(
-        useAuthStore.getState().token
-      )?.session_exp;
-      if (currentDeadline && currentDeadline > Date.now() / 1000) return;
-      if (!renewed || expired) {
-        const serverDeadline = getSessionClaims(renewed)?.session_exp;
-        if (!serverDeadline || serverDeadline <= Date.now() / 1000) {
-          useAuthStore.getState().logout('expired');
+    void refreshAccessToken(false)
+      .then((renewed) => {
+        if (!isSameSession(token, useAuthStore.getState().token)) return;
+        const currentDeadline = getSessionClaims(
+          useAuthStore.getState().token
+        )?.session_exp;
+        if (currentDeadline && currentDeadline > Date.now() / 1000) return;
+        if (!renewed || expired) {
+          const serverDeadline = getSessionClaims(renewed)?.session_exp;
+          if (!serverDeadline || serverDeadline <= Date.now() / 1000) {
+            useAuthStore.getState().logout('expired');
+          }
         }
-      }
-    });
+      })
+      .catch((failure: unknown) => {
+        if (!isSameSession(token, useAuthStore.getState().token)) return;
+        const currentDeadline = getSessionClaims(
+          useAuthStore.getState().token
+        )?.session_exp;
+        if (
+          currentDeadline !== undefined &&
+          currentDeadline <= Date.now() / 1000
+        ) {
+          useAuthStore.getState().logout('expired');
+        } else {
+          setError(
+            failure instanceof Error
+              ? failure.message
+              : 'Unable to check your session. Try again.'
+          );
+        }
+      });
   }, [token, deadline, expired]);
 
   async function extendSession() {
     setPending(true);
     setError(null);
-    const renewed = await refreshAccessToken(true);
-    if (isSameSession(token, useAuthStore.getState().token) && !renewed) {
-      setError(
-        'Unable to extend your session. Check your connection and try again before it expires.'
-      );
+    try {
+      const renewed = await refreshAccessToken(true);
+      if (isSameSession(token, useAuthStore.getState().token) && !renewed) {
+        setError(
+          'Unable to extend your session. Check your connection and try again before it expires.'
+        );
+      }
+    } catch (failure) {
+      if (isSameSession(token, useAuthStore.getState().token)) {
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : 'Unable to extend your session. Try again.'
+        );
+      }
+    } finally {
+      setPending(false);
     }
-    setPending(false);
   }
 
   async function signOut() {

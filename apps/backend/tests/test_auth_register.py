@@ -565,19 +565,17 @@ async def test_login_success_unit(
         lambda data: "unit-login-token",
     )
 
-    # Build a dummy user with a valid hashed password and is_verified=True
-    class _DummyUser:
-        def __init__(self):
-            self.id = uuid.uuid4()
-            self.hashed_password = auth_mod.get_password_hash("goodpass")
-            self.is_verified = True
-
-    async def _user_ok(db, username: str):
-        return _DummyUser()
-
-    monkeypatch.setattr(auth_mod, "get_user_by_username", _user_ok)
-
     _, db = auth_client
+    db.add(
+        User(
+            id=uuid.uuid4(),
+            username="dummy",
+            email="dummy@example.test",
+            hashed_password=auth_mod.get_password_hash("goodpass"),
+            is_verified=True,
+        )
+    )
+    await db.commit()
     form = SimpleNamespace(username="dummy", password="goodpass")
 
     from fastapi import Response

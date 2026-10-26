@@ -57,6 +57,12 @@ queued behind silent renewal. Both HTTP transports wait for the entire
 confirmation chain; repeated confirmations share it. A different session does
 not wait for or install the old session's response.
 
+Network failures and non-authentication refresh errors (such as HTTP 503)
+surface a retryable request error without clearing the session. Rejected
+credentials (HTTP 401/403) and a known expired consent deadline remain terminal.
+A raw-fetch authentication retry waits for queued confirmation again and uses
+the latest installed token, just like the API client.
+
 Other tabs accept a later consent deadline for the same session without
 importing a different account into open forms. An older deadline cannot undo a
 newer confirmation. Cross-account changes invalidate stale tabs.
@@ -70,7 +76,11 @@ Successful password reset revokes every active session for that account in the
 same transaction as the password change. Pre-reset refresh cookies and
 session-bound access tokens are rejected afterward; other accounts are
 unaffected. Rejected resets or rolled-back password updates do not revoke
-sessions. Legacy access tokens without a session identifier remain subject to
+sessions. Login and password reset lock and reload the same account row, holding
+that lock through credential verification/session creation or password
+change/revocation. A concurrent login cannot use a stale pre-reset password to
+create a session after the reset commits.
+Legacy access tokens without a session identifier remain subject to
 their original short expiration.
 
 ## Same-tab recovery
@@ -84,7 +94,16 @@ and instruction rows, category, and difficulty. Creation and edit recovery wait 
 profile's account ID before considering the draft. Another account cannot
 restore it. Deferred native-control restoration is canceled on route or
 session changes and checks current route and account before writing values.
-Manual logout does not save form data.
+Unsaved profile/preferences and Nibble-memory editors are captured as structured
+state and reopen in edit mode. Pending instruction-import dialogs preserve edited
+rows, removals, original pasted text and their insertion target; the parent recipe
+draft is recovered alongside them. Delayed profile and memory loads cannot
+overwrite recovered edits.
+
+Manual logout does not save form data, including in other tabs: the persisted
+logout reason distinguishes explicit sign-out from expiry. Actual expiry still
+captures each tab's recoverable input without writing stale authentication state
+back over the originating tab.
 
 ## Production same-site setup on the Free plan
 

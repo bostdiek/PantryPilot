@@ -178,6 +178,7 @@ const RecipesNewPage: FC = () => {
     handlePasteAsSingle,
     handlePasteSplitCancel,
     closePasteSplitModal,
+    updatePasteSplitSteps,
   } = usePasteSplit({
     onInsertSteps: (
       targetIndex: number,
@@ -1134,6 +1135,7 @@ const RecipesNewPage: FC = () => {
           onPasteAsSingle={handlePasteAsSingle}
           candidateSteps={pasteSplitModal.candidateSteps}
           originalContent={pasteSplitModal.originalContent}
+          onStepsChange={updatePasteSplitSteps}
         />
 
         {/* Add by URL Modal */}

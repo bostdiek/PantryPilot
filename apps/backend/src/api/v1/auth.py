@@ -164,6 +164,9 @@ async def login(form_data: PasswordForm, db: DbSession, response: Response) -> T
         # If not found by username, try email (case-insensitive)
         user = await get_user_by_email(db=db, email=form_data.username.lower())
 
+    if user:
+        # Serialize credential verification and session creation with password reset.
+        await db.refresh(user, with_for_update=True)
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -585,6 +588,8 @@ async def reset_password(
             detail="Password must be at least 12 characters",
         )
 
+    # Match login's account lock before taking any session locks.
+    await db.refresh(user, with_for_update=True)
     # Hash and update the password
     hashed_password = get_password_hash(payload.new_password)
     # The update locks session rows against refresh until the password commit.
