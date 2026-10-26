@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import type { AuthState } from '../types/auth';
 import { captureSessionRecovery } from '../utils/sessionRecovery';
-import { isSameSession } from '../utils/authSession';
+import { getSessionClaims, isSameSession } from '../utils/authSession';
 import { logger } from '../lib/logger';
 import {
   addToastIfNotExists,
@@ -29,8 +29,8 @@ export const useAuthStore = create<AuthState>()(
           addToastIfNotExists({
             id: generateToastId(),
             message: [
-              'Your session could not continue. It may have expired from inactivity',
-              'or reached its maximum duration. Sign in again; recoverable form',
+              'Your session could not continue. It may need confirmation',
+              'or have reached its maximum duration. Sign in again; recoverable form',
               'and chat text are saved in this tab.',
             ].join(' '),
             type: 'info',
@@ -103,7 +103,22 @@ export function listenForSessionChanges(): () => void {
         error
       );
     }
-    if (isSameSession(currentToken, remoteToken)) return;
+    if (isSameSession(currentToken, remoteToken)) {
+      const currentDeadline = getSessionClaims(currentToken)?.session_exp;
+      const remoteDeadline = getSessionClaims(remoteToken)?.session_exp;
+      if (
+        remoteDeadline &&
+        (!currentDeadline || remoteDeadline > currentDeadline)
+      ) {
+        applyingExternalSessionChange = true;
+        try {
+          useAuthStore.getState().setToken(remoteToken);
+        } finally {
+          applyingExternalSessionChange = false;
+        }
+      }
+      return;
+    }
 
     applyingExternalSessionChange = true;
     try {

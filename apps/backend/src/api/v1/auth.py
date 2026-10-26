@@ -8,9 +8,9 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from core.config import get_settings
 from core.email import send_password_reset_email, send_verification_email
@@ -25,7 +25,11 @@ from core.security import (
     verify_password,
     verify_password_reset_token,
 )
-from core.session import SESSION_ABSOLUTE_TIMEOUT, session_has_expired
+from core.session import (
+    SESSION_ABSOLUTE_TIMEOUT,
+    session_expires_at,
+    session_has_expired,
+)
 from crud.user import create_user, get_user_by_email, get_user_by_username, user_crud
 from dependencies.db import DbSession
 from models.auth_sessions import AuthSession
@@ -37,7 +41,7 @@ from schemas.auth import (
     ResendVerificationResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
-    SessionActivity,
+    SessionRefresh,
     Token,
     UserRegister,
     VerifyEmailRequest,
@@ -50,7 +54,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 PasswordForm = Annotated[OAuth2PasswordRequestForm, Depends()]
 
 _logger = logging.getLogger(__name__)
-REFRESH_COOKIE = "pantrypilot_session"
+REFRESH_COOKIE_PREFIX = "pantrypilot_session_"
 SESSION_ABSOLUTE_SECONDS = int(SESSION_ABSOLUTE_TIMEOUT.total_seconds())
 
 
@@ -64,10 +68,33 @@ def _refresh_secret(session_id: UUID, generation: int) -> str:
     return hmac.new(key, message, hashlib.sha256).hexdigest()
 
 
-def _set_refresh_cookie(response: Response, token: str, max_age: int) -> None:
+def _cookie_name(session_id: UUID) -> str:
+    return f"{REFRESH_COOKIE_PREFIX}{session_id}"
+
+
+def _session_access_token(
+    user_id: UUID, session_id: UUID, created_at: datetime, confirmed_at: datetime
+) -> str:
+    return create_access_token(
+        {
+            "sub": str(user_id),
+            "sid": str(session_id),
+            "session_exp": int(
+                session_expires_at(created_at, confirmed_at).timestamp()
+            ),
+            "absolute_exp": int(
+                (created_at.replace(tzinfo=UTC) + SESSION_ABSOLUTE_TIMEOUT).timestamp()
+            ),
+        }
+    )
+
+
+def _set_refresh_cookie(
+    response: Response, session_id: UUID, token: str, max_age: int
+) -> None:
     settings = get_settings()
     response.set_cookie(
-        key=REFRESH_COOKIE,
+        key=_cookie_name(session_id),
         # The browser-only credential is protected by HttpOnly/SameSite and
         # the Secure flag in production.
         value=token,
@@ -95,14 +122,14 @@ async def _create_session(user_id: UUID, db: DbSession, response: Response) -> s
         )
     )
     await db.commit()
-    _set_refresh_cookie(response, refresh_token, SESSION_ABSOLUTE_SECONDS)
+    _set_refresh_cookie(response, session_id, refresh_token, SESSION_ABSOLUTE_SECONDS)
     response.headers["Cache-Control"] = "no-store"
-    return create_access_token({"sub": str(user_id), "sid": str(session_id)})
+    return _session_access_token(user_id, session_id, now, now)
 
 
-def _delete_refresh_cookie(response: Response) -> None:
+def _delete_refresh_cookie(response: Response, session_id: UUID) -> None:
     response.delete_cookie(
-        key=REFRESH_COOKIE,
+        key=_cookie_name(session_id),
         httponly=True,
         secure=get_settings().ENVIRONMENT == "production",
         samesite="lax",
@@ -110,8 +137,10 @@ def _delete_refresh_cookie(response: Response) -> None:
     )
 
 
-def _invalid_refresh(response: Response, detail: str) -> HTTPException:
-    _delete_refresh_cookie(response)
+def _invalid_refresh(
+    response: Response, session_id: UUID, detail: str
+) -> HTTPException:
+    _delete_refresh_cookie(response, session_id)
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail=detail,
@@ -312,18 +341,20 @@ async def _validate_refresh_rotation(
         if secret_is_valid and presented_generation < auth_session.refresh_generation:
             auth_session.revoked_at = now
             await db.commit()
-        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+        raise _invalid_refresh(
+            response, auth_session.id, "Your session ended. Please sign in again."
+        )
 
     return is_current_token and not grace_is_active
 
 
 @router.post("/refresh", response_model=Token)
 async def refresh_session(
-    payload: SessionActivity,
+    payload: SessionRefresh,
     db: DbSession,
     response: Response,
     request: Request,
-    refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
+    session_id: Annotated[UUID, Header(alias="X-Session-ID")],
 ) -> Token:
     """Issue a short-lived access token for an active server-side session."""
     origin = request.headers.get("origin")
@@ -331,25 +362,31 @@ async def refresh_session(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid origin"
         )
+    refresh_token = request.cookies.get(_cookie_name(session_id))
     if not refresh_token:
-        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+        raise _invalid_refresh(
+            response, session_id, "Your session ended. Please sign in again."
+        )
 
     try:
         session_id_text, generation_text, refresh_secret = refresh_token.split(
             ".", maxsplit=2
         )
-        session_id = UUID(session_id_text)
+        if UUID(session_id_text) != session_id:
+            raise ValueError("Refresh credential does not match its session")
         presented_generation = int(generation_text)
     except ValueError as exc:
         raise _invalid_refresh(
-            response, "Your session ended. Please sign in again."
+            response, session_id, "Your session ended. Please sign in again."
         ) from exc
 
     auth_session = await db.scalar(
         select(AuthSession).where(AuthSession.id == session_id).with_for_update()
     )
     if auth_session is None:
-        raise _invalid_refresh(response, "Your session ended. Please sign in again.")
+        raise _invalid_refresh(
+            response, session_id, "Your session ended. Please sign in again."
+        )
 
     now = datetime.now(UTC)
     if auth_session.revoked_at is not None or session_has_expired(
@@ -359,7 +396,8 @@ async def refresh_session(
         await db.commit()
         raise _invalid_refresh(
             response,
-            "Your session ended due to inactivity or its maximum duration. "
+            session_id,
+            "Your session ended because confirmation or a new sign-in is required. "
             "Please sign in again.",
         )
 
@@ -373,9 +411,9 @@ async def refresh_session(
         new_secret = _refresh_secret(auth_session.id, auth_session.refresh_generation)
         auth_session.refresh_token_hash = _refresh_token_hash(new_secret)
 
-    if payload.activity:
+    if payload.extend_session:
         auth_session.last_activity_at = now
-    if should_rotate or payload.activity:
+    if should_rotate or payload.extend_session:
         await db.commit()
 
     current_secret = _refresh_secret(auth_session.id, auth_session.refresh_generation)
@@ -395,13 +433,17 @@ async def refresh_session(
     )
     _set_refresh_cookie(
         response,
+        auth_session.id,
         f"{auth_session.id}.{auth_session.refresh_generation}.{current_secret}",
         remaining_seconds,
     )
 
     response.headers["Cache-Control"] = "no-store"
-    access_token = create_access_token(
-        {"sub": str(auth_session.user_id), "sid": str(auth_session.id)}
+    access_token = _session_access_token(
+        auth_session.user_id,
+        auth_session.id,
+        auth_session.created_at,
+        auth_session.last_activity_at,
     )
     return Token(access_token=access_token, token_type="bearer")
 
@@ -411,7 +453,7 @@ async def logout_session(
     db: DbSession,
     response: Response,
     request: Request,
-    refresh_token: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
+    session_id: Annotated[UUID, Header(alias="X-Session-ID")],
 ) -> Response:
     """Revoke this browser session and clear its refresh credential."""
     origin = request.headers.get("origin")
@@ -420,19 +462,20 @@ async def logout_session(
             status_code=status.HTTP_403_FORBIDDEN, detail="Invalid origin"
         )
 
+    refresh_token = request.cookies.get(_cookie_name(session_id))
     if refresh_token:
         try:
             session_id_text, generation_text, refresh_secret = refresh_token.split(
                 ".", maxsplit=2
             )
-            session_id = UUID(session_id_text)
+            if UUID(session_id_text) != session_id:
+                raise ValueError("Refresh credential does not match its session")
             presented_generation = int(generation_text)
         except ValueError:
-            session_id = None
             refresh_secret = ""
             presented_generation = -1
 
-        if session_id:
+        if presented_generation >= 0:
             auth_session = await db.scalar(
                 select(AuthSession)
                 .where(AuthSession.id == session_id)
@@ -456,7 +499,7 @@ async def logout_session(
                     auth_session.revoked_at = datetime.now(UTC)
                     await db.commit()
 
-    _delete_refresh_cookie(response)
+    _delete_refresh_cookie(response, session_id)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
@@ -544,6 +587,12 @@ async def reset_password(
 
     # Hash and update the password
     hashed_password = get_password_hash(payload.new_password)
+    # The update locks session rows against refresh until the password commit.
+    await db.execute(
+        update(AuthSession)
+        .where(AuthSession.user_id == user.id, AuthSession.revoked_at.is_(None))
+        .values(revoked_at=datetime.now(UTC))
+    )
     await user_crud.update_password(db=db, user=user, hashed_password=hashed_password)
 
     return ResetPasswordResponse(message="Password reset successfully")

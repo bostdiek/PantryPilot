@@ -96,6 +96,7 @@ const RecipesNewPage: FC = () => {
     forceCreateRecipe,
     clearDuplicateState,
   } = useRecipeStore();
+  const recoveryUserId = useAuthStore((state) => state.user?.id);
   const [showAISuggestion, setShowAISuggestion] = useState(true);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -280,9 +281,10 @@ const RecipesNewPage: FC = () => {
   }, [formSuggestion]);
 
   useEffect(() => {
+    if (!recoveryUserId) return;
     const draft = takeRecoveredRecipeDraft(
       window.location.pathname + window.location.search,
-      useAuthStore.getState().user?.id
+      recoveryUserId
     );
     if (!draft) return;
     setTitle(draft.title);
@@ -303,7 +305,7 @@ const RecipesNewPage: FC = () => {
     setLinkSource(draft.link_source);
     setIngredients(draft.ingredients);
     setInstructions(draft.instructions);
-  }, []);
+  }, [recoveryUserId]);
 
   useEffect(
     () =>

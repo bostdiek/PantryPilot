@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class Token(BaseModel):
@@ -18,10 +18,12 @@ class TokenData(BaseModel):
     sid: str | None = Field(default=None, description="Authenticated session ID")
 
 
-class SessionActivity(BaseModel):
-    activity: bool = Field(
+class SessionRefresh(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    extend_session: bool = Field(
         default=False,
-        description="Whether this renewal was triggered by intentional user input",
+        description="True only when the user confirms Stay signed in",
     )
 
 

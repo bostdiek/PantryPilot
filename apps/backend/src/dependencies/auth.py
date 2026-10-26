@@ -55,7 +55,7 @@ async def _recheck_expired_session(db: DbSession, session_id: UUID) -> None:
     await db.commit()
     if invalid:
         raise unauthorized(
-            "Your session ended due to inactivity or its maximum duration. "
+            "Your session ended because confirmation or a new sign-in is required. "
             "Please sign in again."
         )
 

@@ -2,6 +2,7 @@ using '../main.bicep'
 
 param environmentName = 'prod'
 param location = readEnvironmentVariable('AZURE_LOCATION', 'Central US')
+param backendCustomDomains = json(readEnvironmentVariable('BACKEND_CUSTOM_DOMAINS', '[]'))
 param uniqueSuffix = readEnvironmentVariable('AZURE_UNIQUE_SUFFIX', 'prod001')
 param dbNameSuffix = 'v2-'
 param dbAdminUsername = 'pantrypilot_admin'

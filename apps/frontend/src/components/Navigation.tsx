@@ -2,6 +2,7 @@ import { Home, ListChecks, Menu, MessageSquare, X } from 'lucide-react';
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { revokeSession } from '../api/session';
+import { isSameSession } from '../utils/authSession';
 import {
   useAuthStore,
   useDisplayName,
@@ -45,7 +46,10 @@ const Navigation: React.FC = () => {
   }, []);
 
   const handleLogout = async () => {
-    if (!(await revokeSession())) {
+    const initiatingToken = useAuthStore.getState().token;
+    const revoked = await revokeSession();
+    if (!isSameSession(initiatingToken, useAuthStore.getState().token)) return;
+    if (!revoked) {
       addToastIfNotExists({
         id: generateToastId(),
         message: 'Unable to sign out. Check your connection and try again.',

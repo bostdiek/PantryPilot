@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Recipe } from '../../types/Recipe';
@@ -173,6 +173,40 @@ describe('RecipesEditPage', () => {
     // Navigates back to detail
     expect(mockNavigate).toHaveBeenCalledWith('/recipes/r1');
   });
+
+  it.each(['account-a', 'account-b'])(
+    'waits for the profile before considering the account-bound draft (%s)',
+    (returningAccount) => {
+      const original = render(<RecipesEditPage />);
+      fireEvent.change(screen.getByLabelText(/recipe name/i), {
+        target: { value: 'Recovered after profile loads' },
+      });
+      captureSessionRecovery('account-a');
+      original.unmount();
+      useAuthStore.setState({ user: null });
+
+      render(<RecipesEditPage />);
+      expect(screen.getByLabelText(/recipe name/i)).toHaveValue('Spaghetti');
+      expect(
+        sessionStorage.getItem('pantrypilot-session-recovery')
+      ).not.toBeNull();
+      act(() => {
+        useAuthStore.setState({
+          user: {
+            id: returningAccount,
+            username: 'cook',
+            email: 'cook@example.test',
+          },
+        });
+      });
+
+      expect(screen.getByLabelText(/recipe name/i)).toHaveValue(
+        returningAccount === 'account-a'
+          ? 'Recovered after profile loads'
+          : 'Spaghetti'
+      );
+    }
+  );
 
   it('handles instruction reordering in edit form', async () => {
     const user = userEvent.setup();

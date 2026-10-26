@@ -3,9 +3,8 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { apiClient } from '../client';
 import {
   authenticatedFetch,
-  cancelSessionActivity,
-  markSessionActivity,
   refreshAccessToken,
+  revokeSession,
 } from '../session';
 import type { AuthState } from '../../types/auth';
 
@@ -33,7 +32,6 @@ describe('active session renewal', () => {
   let state: AuthState;
 
   beforeEach(() => {
-    cancelSessionActivity();
     vi.clearAllMocks();
     vi.stubGlobal('fetch', fetchMock);
     state = {
@@ -56,69 +54,40 @@ describe('active session renewal', () => {
   });
 
   afterEach(() => {
-    cancelSessionActivity();
     vi.useRealTimers();
   });
 
-  it('reports trailing activity before the actual idle boundary', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-10-21T12:00:00Z'));
-    let serverActivityAt = Date.now();
-    fetchMock.mockImplementation(async () => {
-      if (Date.now() - serverActivityAt >= 30 * 60_000) {
-        return new Response(null, { status: 401 });
-      }
-      serverActivityAt = Date.now();
-      return new Response(JSON.stringify({ access_token: renewedToken }));
-    });
-
-    await markSessionActivity();
-    await vi.advanceTimersByTimeAsync(59_000);
-    await markSessionActivity();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(vi.getTimerCount()).toBe(0);
-
-    await vi.advanceTimersByTimeAsync(29 * 60_000 + 30_000);
-    await expect(markSessionActivity()).resolves.toBe(renewedToken);
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-  });
-
-  it('does not schedule recurring activity on an untouched page', async () => {
+  it('silent renewal does not extend consent or schedule network activity', async () => {
     vi.useFakeTimers();
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ access_token: renewedToken }))
     );
 
-    await markSessionActivity();
+    await refreshAccessToken(false);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: expect.objectContaining({ 'X-Session-ID': 'session-a' }),
+      body: JSON.stringify({ extend_session: false }),
+    });
     await vi.advanceTimersByTimeAsync(2 * 60 * 60_000);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('drops pending activity for a changed session and resets its throttle', async () => {
-    vi.useFakeTimers();
-    fetchMock.mockImplementation(
-      async () => new Response(JSON.stringify({ access_token: state.token }))
+  it('explicit renewal and logout select the initiating session cookie', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ access_token: renewedToken }))
     );
-    await markSessionActivity();
-    await vi.advanceTimersByTimeAsync(59_000);
-    await markSessionActivity();
-    state.token = accessToken('cook-b', 'session-b');
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    await markSessionActivity();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-
-    await vi.advanceTimersByTimeAsync(1_000);
-    await markSessionActivity();
-    cancelSessionActivity();
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await refreshAccessToken(true);
+    expect(fetchMock.mock.calls[0][1]).toMatchObject({
+      headers: expect.objectContaining({ 'X-Session-ID': 'session-a' }),
+      body: JSON.stringify({ extend_session: true }),
+    });
+    await revokeSession();
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({
+      headers: { 'X-Session-ID': 'session-a' },
+      credentials: 'include',
+    });
   });
 
   it('renews once and retries an unauthorized write once', async () => {
@@ -151,7 +120,7 @@ describe('active session renewal', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/auth/refresh');
     expect(fetchMock.mock.calls[1][1]).toMatchObject({
       credentials: 'include',
-      body: JSON.stringify({ activity: false }),
+      body: JSON.stringify({ extend_session: false }),
     });
     expect(setToken).toHaveBeenCalledWith(renewedToken);
   });
@@ -331,4 +300,144 @@ describe('active session renewal', () => {
     expect(setToken).not.toHaveBeenCalled();
     expect(logout).not.toHaveBeenCalled();
   });
+
+  it('does not overwrite a newer same-session deadline received from another tab', async () => {
+    const withDeadline = (deadline: number) =>
+      `header.${btoa(JSON.stringify({ sub: 'cook-a', sid: 'session-a', session_exp: deadline }))}.signature`;
+    state.token = withDeadline(100);
+    let finish!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        })
+    );
+    const pending = refreshAccessToken(false);
+    state.token = withDeadline(300);
+    finish(new Response(JSON.stringify({ access_token: withDeadline(100) })));
+
+    await expect(pending).resolves.toBe(withDeadline(300));
+    expect(setToken).not.toHaveBeenCalled();
+  });
+
+  it('serializes explicit confirmation after an in-flight silent refresh', async () => {
+    let finish!: (response: Response) => void;
+    fetchMock
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: renewedToken }))
+      );
+    const silent = refreshAccessToken(false);
+    const explicit = refreshAccessToken(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    finish(new Response(JSON.stringify({ access_token: renewedToken })));
+
+    await Promise.all([silent, explicit]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(
+      fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body))
+    ).toEqual([{ extend_session: false }, { extend_session: true }]);
+  });
+
+  it.each(['client', 'fetch'])(
+    'gates %s writes immediately through queued confirmation and coalesces clicks',
+    async (transport) => {
+      const completions: Array<(response: Response) => void> = [];
+      fetchMock.mockImplementation((input) => {
+        if (String(input).includes('/api/v1/auth/refresh')) {
+          return new Promise<Response>((resolve) => completions.push(resolve));
+        }
+        return Promise.resolve(new Response('{"saved":true}'));
+      });
+      const silent = refreshAccessToken(false);
+      const explicit = refreshAccessToken(true);
+      expect(refreshAccessToken(true)).toBe(explicit);
+      const write =
+        transport === 'client'
+          ? apiClient.request('/api/v1/recipes', { method: 'POST' })
+          : authenticatedFetch('/api/v1/recipes', { method: 'POST' });
+      await Promise.resolve();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      completions[0](
+        new Response(JSON.stringify({ access_token: renewedToken }))
+      );
+      await silent;
+      await vi.waitFor(() => expect(completions).toHaveLength(2));
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(refreshAccessToken(true)).toBe(explicit);
+      completions[1](
+        new Response(JSON.stringify({ access_token: renewedToken }))
+      );
+      await explicit;
+      await write;
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/recipes');
+      expect(fetchMock.mock.calls[2][1].headers).toMatchObject({
+        Authorization: `Bearer ${renewedToken}`,
+      });
+    }
+  );
+
+  it.each(['client', 'fetch'])(
+    'does not hold the new session %s request behind another session confirmation',
+    async (transport) => {
+      let finish!: (response: Response) => void;
+      fetchMock
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve;
+            })
+        )
+        .mockResolvedValue(new Response('{"saved":true}'));
+      const silent = refreshAccessToken(false);
+      const explicit = refreshAccessToken(true);
+      state.token = accessToken('cook-b', 'session-b');
+      const write =
+        transport === 'client'
+          ? apiClient.request('/api/v1/recipes', { method: 'POST' })
+          : authenticatedFetch('/api/v1/recipes', { method: 'POST' });
+      await write;
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      finish(new Response(JSON.stringify({ access_token: renewedToken })));
+      await Promise.all([silent, explicit]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(setToken).not.toHaveBeenCalled();
+      expect(logout).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['client', 'fetch'])(
+    'releases the %s barrier on failed confirmation and allows a fresh attempt',
+    async (transport) => {
+      let finish!: (response: Response) => void;
+      fetchMock
+        .mockImplementationOnce(
+          () =>
+            new Promise<Response>((resolve) => {
+              finish = resolve;
+            })
+        )
+        .mockResolvedValue(new Response('{"saved":true}'));
+      const explicit = refreshAccessToken(true);
+      const write =
+        transport === 'client'
+          ? apiClient.request('/api/v1/recipes', { method: 'POST' })
+          : authenticatedFetch('/api/v1/recipes', { method: 'POST' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      finish(new Response('{}', { status: 503 }));
+      await expect(explicit).resolves.toBeNull();
+      await write;
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ access_token: renewedToken }))
+      );
+      await expect(refreshAccessToken(true)).resolves.toBe(renewedToken);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    }
+  );
 });

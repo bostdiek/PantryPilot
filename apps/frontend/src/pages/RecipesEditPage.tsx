@@ -217,11 +217,13 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const recoveryUserId = useAuthStore((state) => state.user?.id);
 
   useEffect(() => {
+    if (!recoveryUserId) return;
     const draft = takeRecoveredRecipeDraft(
       window.location.pathname + window.location.search,
-      useAuthStore.getState().user?.id
+      recoveryUserId
     );
     if (!draft) return;
     dispatch({
@@ -246,7 +248,7 @@ function RecipeEditForm({ recipe }: RecipeEditFormProps) {
         instructions: draft.instructions,
       },
     });
-  }, [recipe.id]);
+  }, [recipe.id, recoveryUserId]);
 
   useEffect(
     () =>

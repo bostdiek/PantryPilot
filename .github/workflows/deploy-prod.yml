@@ -23,6 +23,8 @@ concurrency:
 env:
   AZURE_RESOURCE_GROUP: rg-pantrypilot-prod
   DEPLOY_ENV: prod
+  AZURE_UNIQUE_SUFFIX: prod001
+  PRODUCTION_API_URL: https://api.smartmealplanner.app
 
 jobs:
   determine-deploy-trigger:
@@ -58,11 +60,7 @@ jobs:
   deploy-infrastructure:
     name: Deploy Infrastructure
     runs-on: ubuntu-latest
-    needs: determine-deploy-trigger
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'push' && needs.determine-deploy-trigger.outputs.should-deploy-on-push == 'true')
+    needs: run-migrations
     environment: prod # Requires approval in GitHub environment settings
     permissions:
       contents: read
@@ -93,6 +91,20 @@ jobs:
             --location "Central US" \
             --tags environment=prod project=pantrypilot
 
+      - name: Preserve required same-site API domain binding
+        id: api-domain
+        run: |
+          set -euo pipefail
+          DOMAINS=$(az containerapp show \
+            --name pantrypilot-backend-prod \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query "properties.configuration.ingress.customDomains" -o json)
+          if ! jq -e 'any(.[]; .name == "api.smartmealplanner.app" and .bindingType == "SniEnabled" and (.certificateId | type == "string" and length > 0))' <<< "$DOMAINS" >/dev/null; then
+            echo "::error::Configure api.smartmealplanner.app with DNS and a bound TLS certificate before deploying. See docs/authentication-sessions.md."
+            exit 1
+          fi
+          echo "domains=$(jq -c . <<< "$DOMAINS")" >> "$GITHUB_OUTPUT"
+
       - name: Deploy Bicep infrastructure
         id: deploy
         uses: azure/bicep-deploy@v2
@@ -107,7 +119,7 @@ jobs:
           parameters-file: ./infra/parameters/main.prod.bicepparam
         env:
           AZURE_LOCATION: "Central US"
-          AZURE_UNIQUE_SUFFIX: prod001
+          BACKEND_CUSTOM_DOMAINS: ${{ steps.api-domain.outputs.domains }}
           DB_ADMIN_PASSWORD: ${{ secrets.DB_ADMIN_PASSWORD }}
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
@@ -127,7 +139,11 @@ jobs:
   run-migrations:
     name: Run Database Migrations
     runs-on: ubuntu-latest
-    needs: deploy-infrastructure
+    needs: determine-deploy-trigger
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      (github.event_name == 'push' && needs.determine-deploy-trigger.outputs.should-deploy-on-push == 'true')
     environment: prod
     permissions:
       contents: read
@@ -156,10 +172,15 @@ jobs:
       - name: Get database connection string from Key Vault
         id: secrets
         run: |
+          set -euo pipefail
           DB_CONNECTION=$(az keyvault secret show \
-            --vault-name "${{ needs.deploy-infrastructure.outputs.key-vault-name }}" \
+            --vault-name "ppkv${DEPLOY_ENV}${AZURE_UNIQUE_SUFFIX}" \
             --name dbConnectionString \
             --query value -o tsv)
+          if [[ -z "$DB_CONNECTION" ]]; then
+            echo "::error::The existing production database connection is required before deployment."
+            exit 1
+          fi
           echo "::add-mask::$DB_CONNECTION"
           echo "DATABASE_URL=$DB_CONNECTION" >> $GITHUB_ENV
 
@@ -248,7 +269,8 @@ jobs:
         working-directory: apps/frontend
         run: npm run build
         env:
-          VITE_API_URL: ${{ needs.deploy-infrastructure.outputs.backend-url }}
+          VITE_API_URL: ${{ env.PRODUCTION_API_URL }}
+          VITE_CANONICAL_ORIGIN: https://smartmealplanner.app
 
       - name: Log in to Azure
         uses: azure/login@v3
@@ -256,6 +278,12 @@ jobs:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify same-site API before publishing frontend
+        run: |
+          curl --fail --silent --show-error --retry 3 \
+            --connect-timeout 10 --max-time 30 \
+            "${PRODUCTION_API_URL}/api/v1/health" > /dev/null
 
       - name: Get SWA deployment token
         id: swa-token

@@ -140,6 +140,32 @@ describe('useAuthStore', () => {
     stop();
   });
 
+  it('adopts a newer same-session consent deadline but never rolls it back', () => {
+    const token = (deadline: number) =>
+      `header.${btoa(JSON.stringify({ sub: 'a', sid: 'same-session', session_exp: deadline }))}.signature`;
+    const user = { id: 'a', username: 'a', email: 'a@example.test' };
+    useAuthStore.getState().login(token(100), user);
+    const stop = listenForSessionChanges();
+    for (const deadline of [200, 150]) {
+      const remote = JSON.stringify({
+        state: {
+          token: token(deadline),
+          user: { ...user, username: 'ignored' },
+        },
+      });
+      localStorage.setItem('auth', remote);
+      act(() =>
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'auth', newValue: remote })
+        )
+      );
+      expect(useAuthStore.getState().token).toBe(token(200));
+      expect(useAuthStore.getState().user).toEqual(user);
+      expect(localStorage.getItem('auth')).toBe(remote);
+    }
+    stop();
+  });
+
   describe('getDisplayName', () => {
     it('should return "Guest" when no user is set', () => {
       const { result } = renderHook(() => useAuthStore());

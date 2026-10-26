@@ -1,36 +1,44 @@
 import { getApiBaseUrl } from './apiConfig';
 import { useAuthStore } from '../stores/useAuthStore';
-import { getSessionIdentity, isSameSession } from '../utils/authSession';
+import {
+  getSessionClaims,
+  getSessionIdentity,
+  isSameSession,
+} from '../utils/authSession';
 import { logger } from '../lib/logger';
 
 let refreshInFlight:
-  | { activity: boolean; token: string; promise: Promise<string | null> }
+  | { extendSession: boolean; token: string; promise: Promise<string | null> }
   | undefined;
-let lastActivityRefreshAt: number | undefined;
-let activitySessionToken: string | null = null;
-let trailingActivityTimer: ReturnType<typeof setTimeout> | undefined;
-const ACTIVITY_REFRESH_INTERVAL_MS = 60_000;
+let pendingExtension:
+  { token: string; promise: Promise<string | null> } | undefined;
 
-/** Cancel unsent activity when the owning session or mounted listener changes. */
-export function cancelSessionActivity(): void {
-  clearTimeout(trailingActivityTimer);
-  trailingActivityTimer = undefined;
-  lastActivityRefreshAt = undefined;
-  activitySessionToken = null;
-}
-
-async function requestAccessToken(activity: boolean): Promise<string | null> {
+async function requestAccessToken(
+  extendSession: boolean
+): Promise<string | null> {
   const expectedToken = useAuthStore.getState().token;
-  if (!expectedToken) return null;
+  const claims = getSessionClaims(expectedToken);
+  if (!expectedToken || !claims) {
+    logger.warn('Session renewal requires a session-bound access token');
+    return null;
+  }
 
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ activity }),
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Session-ID': claims.sid,
+      },
+      body: JSON.stringify({ extend_session: extendSession }),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logger.warn('Session renewal was rejected', {
+        'http.response.status_code': response.status,
+      });
+      return null;
+    }
 
     const body = (await response.json()) as { access_token?: string };
     const accessToken = body.access_token;
@@ -47,6 +55,16 @@ async function requestAccessToken(activity: boolean): Promise<string | null> {
       return null;
     }
 
+    const currentToken = useAuthStore.getState().token;
+    const currentDeadline = getSessionClaims(currentToken)?.session_exp;
+    const returnedDeadline = getSessionClaims(accessToken)?.session_exp;
+    if (
+      currentDeadline &&
+      returnedDeadline &&
+      currentDeadline > returnedDeadline
+    ) {
+      return currentToken;
+    }
     useAuthStore.getState().setToken(accessToken);
     return accessToken;
   } catch (error) {
@@ -55,78 +73,53 @@ async function requestAccessToken(activity: boolean): Promise<string | null> {
   }
 }
 
-export function refreshAccessToken(activity: boolean): Promise<string | null> {
+function rotateAccessToken(extendSession: boolean): Promise<string | null> {
   const token = useAuthStore.getState().token;
   if (!token) return Promise.resolve(null);
   if (refreshInFlight && isSameSession(token, refreshInFlight.token)) {
-    if (!activity || refreshInFlight.activity) {
+    if (!extendSession || refreshInFlight.extendSession) {
       return refreshInFlight.promise;
     }
 
     const pendingRefresh = refreshInFlight.promise;
     return pendingRefresh.then(() =>
       isSameSession(token, useAuthStore.getState().token)
-        ? refreshAccessToken(true)
+        ? rotateAccessToken(true)
         : null
     );
   }
 
-  const promise = requestAccessToken(activity).finally(() => {
+  const promise = requestAccessToken(extendSession).finally(() => {
     if (refreshInFlight?.promise === promise) {
       refreshInFlight = undefined;
     }
   });
-  refreshInFlight = { activity, token, promise };
+  refreshInFlight = { extendSession, token, promise };
   return promise;
 }
 
-/** Report leading and trailing user input, never renew an untouched page on a timer. */
-export function markSessionActivity(): Promise<string | null> {
-  const sessionToken = useAuthStore.getState().token;
-  if (!isSameSession(activitySessionToken, sessionToken)) {
-    cancelSessionActivity();
-    activitySessionToken = sessionToken;
+/** Rotate credentials; true explicitly authorizes an extension and gates requests, even while queued. */
+export function refreshAccessToken(
+  extendSession: boolean
+): Promise<string | null> {
+  if (!extendSession) return rotateAccessToken(false);
+  const token = useAuthStore.getState().token;
+  if (!token) return Promise.resolve(null);
+  if (pendingExtension && isSameSession(token, pendingExtension.token)) {
+    return pendingExtension.promise;
   }
-  if (!sessionToken) return Promise.resolve(null);
-
-  const now = Date.now();
-  if (
-    lastActivityRefreshAt !== undefined &&
-    now - lastActivityRefreshAt < ACTIVITY_REFRESH_INTERVAL_MS
-  ) {
-    if (trailingActivityTimer === undefined) {
-      trailingActivityTimer = setTimeout(
-        () => {
-          trailingActivityTimer = undefined;
-          if (isSameSession(sessionToken, useAuthStore.getState().token)) {
-            void markSessionActivity();
-          } else {
-            cancelSessionActivity();
-          }
-        },
-        ACTIVITY_REFRESH_INTERVAL_MS - (now - lastActivityRefreshAt)
-      );
-    }
-    return waitForSessionActivity();
-  }
-  clearTimeout(trailingActivityTimer);
-  trailingActivityTimer = undefined;
-  lastActivityRefreshAt = now;
-  return refreshAccessToken(true).then((token) => {
-    if (
-      !token &&
-      lastActivityRefreshAt === now &&
-      isSameSession(sessionToken, activitySessionToken)
-    ) {
-      lastActivityRefreshAt = undefined;
-    }
-    return token;
+  const promise = rotateAccessToken(true).finally(() => {
+    if (pendingExtension?.promise === promise) pendingExtension = undefined;
   });
+  pendingExtension = { token, promise };
+  return promise;
 }
 
-export function waitForSessionActivity(): Promise<string | null> {
-  return refreshInFlight?.activity
-    ? refreshInFlight.promise
+/** Wait through queued explicit confirmation for the current session; failure resolves to null. */
+export function waitForSessionExtension(): Promise<string | null> {
+  return pendingExtension &&
+    isSameSession(useAuthStore.getState().token, pendingExtension.token)
+    ? pendingExtension.promise
     : Promise.resolve(null);
 }
 
@@ -157,7 +150,7 @@ export async function authenticatedFetch(
   init: RequestInit = {}
 ): Promise<Response> {
   const initiatingToken = useAuthStore.getState().token;
-  await waitForSessionActivity();
+  await waitForSessionExtension();
   if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
     throw new Error('Session changed before the request could be sent');
   }
@@ -228,13 +221,25 @@ export async function authenticatedFetch(
 }
 
 export async function revokeSession(): Promise<boolean> {
+  const claims = getSessionClaims(useAuthStore.getState().token);
+  if (!claims) {
+    logger.warn('Session revocation requires a session-bound access token');
+    return false;
+  }
   try {
     const response = await fetch(`${getApiBaseUrl()}/api/v1/auth/logout`, {
       method: 'POST',
       credentials: 'include',
+      headers: { 'X-Session-ID': claims.sid },
     });
+    if (!response.ok) {
+      logger.warn('Session revocation was rejected', {
+        'http.response.status_code': response.status,
+      });
+    }
     return response.ok;
-  } catch {
+  } catch (error) {
+    logger.warn('Session revocation failed', error);
     return false;
   }
 }

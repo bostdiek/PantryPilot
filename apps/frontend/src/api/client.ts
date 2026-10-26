@@ -7,7 +7,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import type { ApiResponse, HealthCheckResponse } from '../types/api';
 import { ApiErrorImpl } from '../types/api';
 import { getApiBaseUrl } from './apiConfig';
-import { refreshAccessToken, waitForSessionActivity } from './session';
+import { refreshAccessToken, waitForSessionExtension } from './session';
 import { isSameSession } from '../utils/authSession';
 import {
   getUserFriendlyErrorMessage,
@@ -83,7 +83,7 @@ class ApiClient {
     );
 
     try {
-      await waitForSessionActivity();
+      await waitForSessionExtension();
       if (!isSameSession(initiatingToken, useAuthStore.getState().token)) {
         throw new ApiErrorImpl(
           'Session changed before the request could be sent'

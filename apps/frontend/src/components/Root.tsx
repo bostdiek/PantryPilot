@@ -1,10 +1,10 @@
 import React, { useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { cancelSessionActivity, markSessionActivity } from '../api/session';
 import { getSessionIdentity } from '../utils/authSession';
 import { listenForSessionChanges, useAuthStore } from '../stores/useAuthStore';
 import { restoreSessionRecovery } from '../utils/sessionRecovery';
 import Navigation from './Navigation';
+import { SessionExpiryPrompt } from './SessionExpiryPrompt';
 import { ToastContainer } from './ui/ToastContainer';
 
 /**
@@ -43,44 +43,11 @@ const Root: React.FC = () => {
     sessionIdentity,
   ]);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const markActivity = (event: Event) => {
-      if (event.isTrusted && document.visibilityState === 'visible') {
-        void markSessionActivity();
-      }
-    };
-    const events: Array<keyof DocumentEventMap> = [
-      'pointerdown',
-      'click',
-      'keydown',
-      'input',
-      'change',
-      'submit',
-      'wheel',
-      'touchstart',
-    ];
-    for (const event of events) {
-      document.addEventListener(event, markActivity, true);
-    }
-    window.addEventListener('popstate', markActivity);
-    window.addEventListener('focus', markActivity);
-
-    return () => {
-      cancelSessionActivity();
-      for (const event of events) {
-        document.removeEventListener(event, markActivity, true);
-      }
-      window.removeEventListener('popstate', markActivity);
-      window.removeEventListener('focus', markActivity);
-    };
-  }, [isAuthenticated, sessionIdentity]);
-
   return (
     <>
       <Navigation />
       <Outlet />
+      <SessionExpiryPrompt key={sessionIdentity ?? 'signed-out'} />
       <ToastContainer />
     </>
   );

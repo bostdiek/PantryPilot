@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { useRecipeStore } from '../stores/useRecipeStore';
@@ -35,7 +41,49 @@ describe('RecipesNewPage', () => {
   beforeEach(() => {
     navigateMock.mockClear();
     sessionStorage.clear();
+    useAuthStore.setState({
+      user: { id: 'cook-a', username: 'cook', email: 'cook@example.test' },
+    });
   });
+
+  test.each(['cook-a', 'cook-b'])(
+    'waits for profile %s before considering an account-qualified draft',
+    async (accountId) => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <RecipesNewPage />
+        </MemoryRouter>
+      );
+      fireEvent.change(screen.getByLabelText(/recipe name/i), {
+        target: { value: 'Private draft' },
+      });
+      fireEvent.change(screen.getByLabelText('Step 1'), {
+        target: { value: 'Chop carefully' },
+      });
+      captureSessionRecovery('cook-a');
+      unmount();
+      useAuthStore.setState({ user: null });
+      render(
+        <MemoryRouter>
+          <RecipesNewPage />
+        </MemoryRouter>
+      );
+      expect(screen.getByLabelText(/recipe name/i)).toHaveValue('');
+      await act(async () => {
+        useAuthStore.getState().setUser({
+          id: accountId,
+          username: 'cook',
+          email: 'cook@example.test',
+        });
+      });
+      expect(screen.getByLabelText(/recipe name/i)).toHaveValue(
+        accountId === 'cook-a' ? 'Private draft' : ''
+      );
+      expect(screen.getByLabelText('Step 1')).toHaveValue(
+        accountId === 'cook-a' ? 'Chop carefully' : ''
+      );
+    }
+  );
 
   test('restores repeated rows and custom selects without mixing recipe fields', async () => {
     const { unmount } = render(
