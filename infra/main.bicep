@@ -7,6 +7,9 @@ param environmentName string
 @description('Location for all resources')
 param location string = resourceGroup().location
 
+@description('Existing backend custom-domain TLS bindings to preserve across deployments.')
+param backendCustomDomains array = []
+
 @description('Unique suffix for resource naming')
 param uniqueSuffix string = substring(uniqueString(resourceGroup().id), 0, 6)
 
@@ -307,6 +310,7 @@ module containerApps 'modules/containerapps.bicep' = {
   params: {
     environmentName: resourceNames.containerAppsEnv
     backendAppName: resourceNames.containerAppBackend
+    customDomains: backendCustomDomains
     location: location
     containerImage: containerImage
     minReplicas: currentSettings.containerMinReplicas

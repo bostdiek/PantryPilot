@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { memoryApi } from '../api/endpoints/memory';
 import { userProfileApi } from '../api/endpoints/userProfile';
 import {
@@ -14,6 +14,11 @@ import { logger } from '../lib/logger';
 import { useAuthStore, useDisplayName } from '../stores/useAuthStore';
 import { useUserPreferencesStore } from '../stores/useUserPreferencesStore';
 import type { MemoryDocument } from '../types/Memory';
+import {
+  registerEditorDraft,
+  takeRecoveredEditorDraft,
+  type ProfileRecoveryDraft,
+} from '../utils/sessionRecovery';
 import {
   commonAllergies,
   commonCuisines,
@@ -50,15 +55,54 @@ function UserProfilePage() {
   const [memoryEditing, setMemoryEditing] = useState(false);
   const [memoryContent, setMemoryContent] = useState('');
   const [memorySaving, setMemorySaving] = useState(false);
+  const recoveredDraft = useRef<ProfileRecoveryDraft | undefined>(undefined);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const draft = takeRecoveredEditorDraft(
+      'profile',
+      window.location.pathname + window.location.search,
+      user.id
+    );
+    recoveredDraft.current = draft;
+    if (!draft) return;
+    if (draft.isEditing) {
+      setIsEditing(true);
+      setFormData(draft.formData);
+      setPreferencesData(draft.preferencesData);
+    }
+    if (draft.memoryEditing) {
+      setMemoryEditing(true);
+      setMemoryContent(draft.memoryContent);
+    }
+  }, [user?.id]);
+
+  useEffect(
+    () =>
+      registerEditorDraft('profile', () =>
+        isEditing || memoryEditing
+          ? {
+              isEditing,
+              formData,
+              preferencesData,
+              memoryEditing,
+              memoryContent,
+            }
+          : undefined
+      ),
+    [isEditing, formData, preferencesData, memoryEditing, memoryContent]
+  );
 
   // Load user profile and preferences from backend on mount
   useEffect(() => {
+    let disposed = false;
     const loadProfile = async () => {
       if (!user) return;
 
       setLoading(true);
       try {
         const profile = await userProfileApi.getProfile();
+        if (disposed || useAuthStore.getState().user?.id !== user.id) return;
 
         // Update user info if needed
         if (
@@ -78,44 +122,57 @@ function UserProfilePage() {
         }
 
         // Update form data
-        setFormData({
-          firstName: profile.first_name || '',
-          lastName: profile.last_name || '',
-          username: profile.username,
-        });
+        if (!recoveredDraft.current?.isEditing) {
+          setFormData({
+            firstName: profile.first_name || '',
+            lastName: profile.last_name || '',
+            username: profile.username,
+          });
+        }
       } catch (error) {
         logger.error('Failed to load profile:', error);
         // Don't show error to user, just use local data
       } finally {
-        setLoading(false);
+        if (!disposed) setLoading(false);
       }
     };
 
     loadProfile();
+    return () => {
+      disposed = true;
+    };
   }, [user, setUser, syncWithBackend]);
 
   // Sync local preferences data with store
   useEffect(() => {
-    setPreferencesData(preferences);
+    if (!recoveredDraft.current?.isEditing) setPreferencesData(preferences);
   }, [preferences]);
 
   // Load memory document on mount
   useEffect(() => {
+    if (!user?.id) return;
+    let disposed = false;
+    const userId = user.id;
     const loadMemory = async () => {
       try {
         setMemoryLoading(true);
         const doc = await memoryApi.getMemory();
+        if (disposed || useAuthStore.getState().user?.id !== userId) return;
         setMemory(doc);
-        setMemoryContent(doc.content);
+        if (!recoveredDraft.current?.memoryEditing)
+          setMemoryContent(doc.content);
       } catch (error) {
         logger.error('Failed to load memory:', error);
         // Don't show error - memory is optional
       } finally {
-        setMemoryLoading(false);
+        if (!disposed) setMemoryLoading(false);
       }
     };
     loadMemory();
-  }, []);
+    return () => {
+      disposed = true;
+    };
+  }, [user?.id]);
 
   // Form validation
   const validateForm = useCallback(() => {
@@ -213,6 +270,7 @@ function UserProfilePage() {
       updatePreferences(preferencesData);
       syncWithBackend(updatedPrefs);
 
+      if (recoveredDraft.current) recoveredDraft.current.isEditing = false;
       setIsEditing(false);
     } catch (error) {
       logger.error('Failed to save profile:', error);
@@ -239,6 +297,7 @@ function UserProfilePage() {
     });
     setPreferencesData(preferences);
     setErrors({});
+    if (recoveredDraft.current) recoveredDraft.current.isEditing = false;
     setIsEditing(false);
   }, [user, preferences]);
 
@@ -248,6 +307,7 @@ function UserProfilePage() {
       setMemorySaving(true);
       const updated = await memoryApi.updateMemory({ content: memoryContent });
       setMemory(updated);
+      if (recoveredDraft.current) recoveredDraft.current.memoryEditing = false;
       setMemoryEditing(false);
     } catch (error) {
       logger.error('Failed to save memory:', error);
@@ -679,6 +739,8 @@ function UserProfilePage() {
                   <Button
                     variant="secondary"
                     onClick={() => {
+                      if (recoveredDraft.current)
+                        recoveredDraft.current.memoryEditing = false;
                       setMemoryEditing(false);
                       setMemoryContent(memory?.content || '');
                     }}

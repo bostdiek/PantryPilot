@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     # Security
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # in minutes
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # in minutes
 
     # CORS
     # Accept list or CSV/JSON string from env; normalized to list[str] by validators

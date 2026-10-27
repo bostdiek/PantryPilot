@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class Token(BaseModel):
@@ -14,6 +14,16 @@ class TokenData(BaseModel):
     scopes: list[str] = Field(
         default_factory=list,
         description="Scopes/permissions associated with the token",
+    )
+    sid: str | None = Field(default=None, description="Authenticated session ID")
+
+
+class SessionRefresh(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    extend_session: bool = Field(
+        default=False,
+        description="True only when the user confirms Stay signed in",
     )
 
 

@@ -1,6 +1,10 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useAuthStore, useDisplayName } from '../useAuthStore';
+import {
+  listenForSessionChanges,
+  useAuthStore,
+  useDisplayName,
+} from '../useAuthStore';
 
 describe('useAuthStore', () => {
   beforeEach(() => {
@@ -83,13 +87,118 @@ describe('useAuthStore', () => {
     expect(result.current.token).toBe('test-token');
     expect(result.current.user).toEqual(testUser);
 
-    // Then logout
     act(() => {
       result.current.logout();
     });
 
     expect(result.current.token).toBeNull();
     expect(result.current.user).toBeNull();
+  });
+
+  it('invalidates a stale tab without overwriting the other account in storage', () => {
+    const user = { id: 'a', username: 'a', email: 'a@example.test' };
+    useAuthStore.getState().login('token-a', user);
+    const stop = listenForSessionChanges();
+    const remote = JSON.stringify({
+      state: { token: 'token-b', user: { ...user, id: 'b' } },
+    });
+    localStorage.setItem('auth', remote);
+
+    act(() =>
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'auth',
+          newValue: remote,
+        })
+      )
+    );
+
+    expect(useAuthStore.getState().token).toBeNull();
+    expect(useAuthStore.getState().user).toBeNull();
+    expect(localStorage.getItem('auth')).toBe(remote);
+    stop();
+  });
+
+  it('keeps the local session when another tab only rotates its token', () => {
+    const token = (generation: number) =>
+      `header.${btoa(JSON.stringify({ sub: 'a', sid: 'same-session', generation }))}.signature`;
+    useAuthStore
+      .getState()
+      .login(token(0), { id: 'a', username: 'a', email: 'a@example.test' });
+    const stop = listenForSessionChanges();
+
+    act(() =>
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: 'auth',
+          newValue: JSON.stringify({ state: { token: token(1) } }),
+        })
+      )
+    );
+
+    expect(useAuthStore.getState().token).toBe(token(0));
+    stop();
+  });
+
+  it.each(['manual', 'expired'] as const)(
+    'propagates %s logout without changing recovery intent in another tab',
+    (reason) => {
+      sessionStorage.clear();
+      const form = document.createElement('form');
+      const input = document.createElement('input');
+      input.value = 'Unsaved private input';
+      form.append(input);
+      document.body.append(form);
+      const user = { id: 'a', username: 'a', email: 'a@example.test' };
+      useAuthStore.getState().login('token-a', user);
+      useAuthStore.getState().logout(reason);
+      const remote = localStorage.getItem('auth')!;
+      expect(JSON.parse(remote).state.logoutReason).toBe(reason);
+      sessionStorage.clear();
+      useAuthStore.getState().login('token-a', user);
+      localStorage.setItem('auth', remote);
+      const stop = listenForSessionChanges();
+      act(() =>
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'auth', newValue: remote })
+        )
+      );
+      expect(useAuthStore.getState().token).toBeNull();
+      expect(useAuthStore.getState().logoutReason).toBe(reason);
+      expect(
+        Boolean(sessionStorage.getItem('pantrypilot-session-recovery'))
+      ).toBe(reason === 'expired');
+      expect(localStorage.getItem('auth')).toBe(remote);
+      stop();
+      form.remove();
+      sessionStorage.clear();
+    }
+  );
+
+  it('adopts a newer same-session consent deadline but never rolls it back', () => {
+    const token = (deadline: number) =>
+      `header.${btoa(JSON.stringify({ sub: 'a', sid: 'same-session', session_exp: deadline }))}.signature`;
+    const user = { id: 'a', username: 'a', email: 'a@example.test' };
+    useAuthStore.getState().login(token(100), user);
+    const stop = listenForSessionChanges();
+    for (const deadline of [200, 150]) {
+      const remote = JSON.stringify({
+        state: {
+          token: token(deadline),
+          user: { ...user, username: 'ignored' },
+        },
+      });
+      localStorage.setItem('auth', remote);
+      act(() =>
+        window.dispatchEvent(
+          new StorageEvent('storage', { key: 'auth', newValue: remote })
+        )
+      );
+      expect(useAuthStore.getState().token).toBe(token(200));
+      expect(useAuthStore.getState().user).toEqual(user);
+      expect(localStorage.getItem('auth')).toBe(remote);
+    }
+    stop();
   });
 
   describe('getDisplayName', () => {

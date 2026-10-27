@@ -21,6 +21,7 @@ import type {
   MessageHistoryResponse,
 } from '../../types/Chat';
 import { getApiBaseUrl } from '../client';
+import { authenticatedFetch } from '../session';
 
 /**
  * Gets auth headers for API requests.
@@ -30,22 +31,10 @@ function getAuthHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/**
- * Handle 401 responses from raw fetch() calls by triggering logout.
- * Mirrors the session-expiry logic in ApiClient.request().
- */
-function handleAuthError(status: number): void {
-  if (status === 401 && useAuthStore.getState().token !== null) {
-    logger.info('Session expired (chat endpoint 401) — logging out');
-    useAuthStore.getState().logout('expired');
-  }
-}
-
 async function parseConversationSummaryResponse(
   response: Response
 ): Promise<ConversationSummary> {
   if (!response.ok) {
-    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -103,7 +92,7 @@ export async function streamChatMessage(
   const telemetryHeaders = buildTelemetryRequestHeaders(telemetryMetadata);
 
   try {
-    const response = await fetch(url, {
+    const response = await authenticatedFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -122,7 +111,6 @@ export async function streamChatMessage(
     });
 
     if (!response.ok) {
-      handleAuthError(response.status);
       const errorText = await response.text();
       let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -323,13 +311,12 @@ export async function fetchConversations(
 
   const url = `${API_BASE_URL}/api/v1/chat/conversations?${params.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
-    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -358,7 +345,7 @@ export async function resumeRecipeConversation(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/chat/recipes/${recipeId}/conversations/resume`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
@@ -378,7 +365,7 @@ export async function createRecipeConversation(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/chat/recipes/${recipeId}/conversations`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
@@ -398,7 +385,7 @@ export async function selectRecipeConversation(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/select`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
@@ -430,7 +417,7 @@ export async function fetchMessages(
 
   const url = `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}/messages?${params.toString()}`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
@@ -464,13 +451,12 @@ export async function deleteConversation(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/chat/conversations/${conversationId}`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'DELETE',
     headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
-    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -505,7 +491,7 @@ export async function acceptAction(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/chat/actions/${proposalId}/accept`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -515,7 +501,6 @@ export async function acceptAction(
   });
 
   if (!response.ok) {
-    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 
@@ -544,13 +529,12 @@ export async function cancelAction(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/chat/actions/${proposalId}/cancel`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'POST',
     headers: getAuthHeaders(),
   });
 
   if (!response.ok) {
-    handleAuthError(response.status);
     const errorText = await response.text();
     let errorDetail = `HTTP ${response.status}: ${response.statusText}`;
 

@@ -41,6 +41,9 @@ param tags object = {}
 @description('Allowed CORS origins for the backend API')
 param corsOrigins array = []
 
+@description('Existing ingress custom-domain bindings, including their managed certificate resource IDs.')
+param customDomains array = []
+
 @description('Upstash Redis REST URL for rate limiting (optional)')
 param upstashRedisRestUrl string = ''
 
@@ -158,6 +161,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
         targetPort: 8000
         transport: 'auto'
         allowInsecure: false
+        customDomains: customDomains
         corsPolicy: {
           allowCredentials: true
           allowedOrigins: empty(corsOrigins) ? ['*'] : corsOrigins
@@ -305,7 +309,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               }
               {
                 name: 'ACCESS_TOKEN_EXPIRE_MINUTES'
-                value: '30'
+                value: '15'
               }
               {
                 name: 'PORT'
