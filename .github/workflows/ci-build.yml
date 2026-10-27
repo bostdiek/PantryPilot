@@ -78,6 +78,9 @@ jobs:
         working-directory: apps/frontend
         run: npm test -- --run
 
+      - name: Dev hosting deployment contracts
+        run: node --test scripts/dev-hosting.test.mjs
+
   build-images:
     name: Build & (optional) Push Images
     runs-on: ubuntu-latest
