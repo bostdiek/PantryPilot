@@ -2,6 +2,11 @@
 
 This project uses Docker Compose with environment-specific overrides and a Makefile for common workflows.
 
+For dev-only Azure same-site hosting and the session-candidate rollout, use the
+[dev custom-domain runbook](dev-custom-domains.md). DNS/TLS bootstrap is separate
+from routine deployment; do not use a main deployment to overwrite the session
+candidate without scheduling its redeployment.
+
 ## Prerequisites
 
 - Docker Desktop: <https://www.docker.com/products/docker-desktop/>
