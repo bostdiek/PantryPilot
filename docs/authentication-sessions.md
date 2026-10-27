@@ -162,6 +162,24 @@ See Microsoft's [custom domain and free managed certificate guide](https://learn
 The alternative [linked Static Web Apps backend](https://learn.microsoft.com/azure/static-web-apps/apis-container-apps)
 requires the paid Standard plan and is not enabled here.
 
+## Development deployment
+
+The development workflow also applies migrations before any infrastructure or
+backend update. It reads the existing `dbConnectionString` from
+`ppkvdevdev001`; missing credentials or failed migrations block publication.
+Bootstrap new environments before using this workflow.
+
+To deploy a PR branch without merging, manually run **Build Container Images**
+on that branch with environment `dev`. After it succeeds, manually run
+**Deploy to Dev** on the same branch. This replaces the shared dev deployment,
+not production. Check that no other build overwrites the mutable `dev` image
+tag between those runs. A failed backend health check blocks frontend
+publication.
+
+The default dev frontend and API hostnames are cross-site. This deployment
+does not certify SameSite=Lax refresh-cookie behavior; that acceptance requires
+the same-site domains described above.
+
 ## Coordinated rollback
 
 Keep the additive `auth_sessions` table when rolling back application code.
