@@ -1,4 +1,9 @@
-# React + TypeScript + Vite
+---
+title: Frontend development
+description: React, TypeScript, Vite, and dependency maintenance for PantryPilot.
+---
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
@@ -81,3 +86,29 @@ the images without logging into GHCR or publishing tags. Main-branch pushes
 and manual workflow runs publish the version and `latest` tags.
 The image job has a 35-minute limit, with 15 minutes for the frontend build
 and 20 minutes for the backend build.
+
+## Dependency maintenance
+
+Use the configured npm registry proxy; do not bypass its release quarantine.
+From the repository root, check locked package availability before installing:
+
+```bash
+node scripts/check_npm_lock_availability.mjs
+cd apps/frontend
+npm ci
+npm run lint
+npm run build
+npm test -- --run
+```
+
+Keep TypeScript on the supported 6.0 release line until
+[`typescript-eslint` supports TypeScript 7](https://typescript-eslint.io/users/dependency-versions/).
+Do not use `--force` or `--legacy-peer-deps` to hide compiler peer conflicts.
+Upgrade `vitest`, `@vitest/ui`, and `@vitest/coverage-v8` together.
+
+After updating the lockfile, preserve the optional `@emnapi/core`,
+`@emnapi/runtime`, and `@emnapi/wasi-threads` entries and their dependencies.
+npm can prune these entries during updates on another platform, causing
+`npm ci` to fail in Linux container builds. Restore pruned entries from the
+previous lockfile, retain public `registry.npmjs.org` resolved URLs, and
+verify a clean `npm ci` before submitting dependency updates.
