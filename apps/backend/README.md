@@ -237,6 +237,13 @@ The chat agent has access to these internal tools:
 
 The backend supports Azure Monitor Application Insights via OpenTelemetry for production observability.
 
+Keep the OpenTelemetry API and SDK on the same supported release line.
+The tested security baseline is API/SDK 1.45.1 with Azure Monitor 1.8.11 and
+its compatible exporter; older Azure exporters cannot import against the newer
+SDK. Restore the coordinated versions with `uv sync --locked`.
+Run `uv audit --locked` for the whole lock and
+`uv audit --locked --no-dev --no-group dapt` for the production dependency set.
+
 ### Configuration
 
 ```bash

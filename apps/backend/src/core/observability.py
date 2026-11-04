@@ -367,7 +367,7 @@ def configure_observability() -> bool:
         logger.warning(
             "Failed to import Azure Monitor OpenTelemetry dependencies: %s. "
             "Installed versions: %s. Ensure compatible opentelemetry-* versions "
-            "are installed (known-safe range for this app is <1.39).",
+            "are installed; restore the tested dependency set with uv sync --locked.",
             exc,
             installed_versions,
         )

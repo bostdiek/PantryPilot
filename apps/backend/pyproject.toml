@@ -31,9 +31,9 @@ dependencies = [
     "numpy>=2.5.4",
     "google-genai>=2.33.0",
     "apscheduler>=3.11.3",
-    "azure-monitor-opentelemetry>=1.8.2",
-    "opentelemetry-api>=1.38,<1.39",
-    "opentelemetry-sdk>=1.38,<1.39",
+    "azure-monitor-opentelemetry>=1.8.11",
+    "opentelemetry-api>=1.45.1,<1.46",
+    "opentelemetry-sdk>=1.45.1,<1.46",
     "httpx2==2.16.0",
 ]
 

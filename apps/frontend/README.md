@@ -108,6 +108,13 @@ Upgrade `vitest`, `@vitest/ui`, and `@vitest/coverage-v8` together.
 
 After updating the lockfile, preserve the optional `@emnapi/core`,
 `@emnapi/runtime`, and `@emnapi/wasi-threads` entries and their dependencies.
+
+Run both `npm audit` and `npm audit --omit=dev` to distinguish tooling findings
+from production dependencies. Zod is patched to 4.6.7. The development-tooling
+[minimatch advisory](https://github.com/advisories/GHSA-g3hv-75wg-m249) remains:
+its fix requires 11.0.1 or later, but current ESLint and typescript-eslint
+consumers require version 10. Do not force a major override or suppress the
+finding; update when upstream consumers support a patched version.
 npm can prune these entries during updates on another platform, causing
 `npm ci` to fail in Linux container builds. Restore pruned entries from the
 previous lockfile, retain public `registry.npmjs.org` resolved URLs, and
