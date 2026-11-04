@@ -248,7 +248,7 @@ resource communicationServiceResource 'Microsoft.Communication/communicationServ
 
 // Store ACS connection string in Key Vault (after both Key Vault and ACS are created)
 // The secret is stored as 'acsConnectionString' for backend email integration
-resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource acsConnectionStringSecret 'Microsoft.KeyVault/vaults/secrets@2026-02-01' = {
   parent: keyVaultResource
   name: 'acsConnectionString'
   properties: {
@@ -340,7 +340,7 @@ module containerApps 'modules/containerapps.bicep' = {
 }
 
 // Reference the Key Vault resource for scoping role assignment
-resource keyVaultResource 'Microsoft.KeyVault/vaults@2023-07-01' existing = {
+resource keyVaultResource 'Microsoft.KeyVault/vaults@2026-02-01' existing = {
   name: resourceNames.keyVault
 }
 
