@@ -40,7 +40,8 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
 # =============================================================================
 # BUILD STAGE
 # =============================================================================
-FROM node:24-alpine AS builder
+# Static assets are architecture-independent; keep Node and Vite off QEMU.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
 # Install system dependencies needed for building
 RUN apk add --no-cache git

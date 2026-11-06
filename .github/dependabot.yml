@@ -6,6 +6,8 @@ updates:
     directory: "/apps/frontend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       # This name appears in the PR title
@@ -23,6 +25,8 @@ updates:
     directory: "/apps/backend"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       # This name appears in the PR title

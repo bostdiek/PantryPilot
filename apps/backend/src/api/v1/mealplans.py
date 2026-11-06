@@ -64,18 +64,17 @@ async def _get_or_create_demo_user(db: AsyncSession) -> User:
 
 
 def _meal_to_out(m: Meal) -> MealEntryOut:
-    # Cast SQLAlchemy-instrumented attributes to runtime types for mypy
     return MealEntryOut(
-        id=cast(UUID, m.id),
-        planned_for_date=cast(date, m.planned_for_date),
-        recipe_id=cast(UUID | None, m.recipe_id),
+        id=m.id,
+        planned_for_date=m.planned_for_date,
+        recipe_id=m.recipe_id,
         meal_type=cast(Literal["dinner"], (m.meal_type or "dinner")),
         is_leftover=bool(m.is_leftover),
         is_eating_out=bool(m.is_eating_out),
-        notes=cast(str | None, m.notes),
-        order_index=cast(int, m.order_index),
+        notes=m.notes,
+        order_index=m.order_index,
         was_cooked=bool(m.was_cooked),
-        cooked_at=cast(datetime | None, m.cooked_at),
+        cooked_at=m.cooked_at,
     )
 
 
@@ -105,7 +104,7 @@ def _apply_cooked_patch(meal: Meal, patch: MealEntryPatch) -> None:
         m_any.was_cooked = True
     if patch.was_cooked is not None:
         m_any.was_cooked = patch.was_cooked
-        current_cooked_at = cast(datetime | None, meal.cooked_at)
+        current_cooked_at = meal.cooked_at
         if patch.was_cooked and current_cooked_at is None:
             m_any.cooked_at = datetime.now(UTC)
         if patch.was_cooked is False:
@@ -167,7 +166,7 @@ async def get_weekly_meal_plan(
     # Bucket meals by day
     by_date: dict[date, list[MealEntryOut]] = {}
     for m in meals:
-        d_planned = cast(date, m.planned_for_date)
+        d_planned = m.planned_for_date
         by_date.setdefault(d_planned, []).append(_meal_to_out(m))
 
     days: list[DayPlanOut] = []
