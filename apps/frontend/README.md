@@ -87,6 +87,18 @@ and manual workflow runs publish the version and `latest` tags.
 The image job has a 35-minute limit, with 15 minutes for the frontend build
 and 20 minutes for the backend build.
 
+## Testing asynchronous store interactions
+
+Component tests that use the real Zustand store must mock API calls triggered by
+user interactions. For example, selecting a conversation reloads its messages;
+mock `fetchMessages` even when the test only checks the selected conversation.
+
+Await asynchronous interactions with React Testing Library's async `act` or
+`waitFor`, and assert that loading has finished before the test ends. Reset store
+state and restore spies between tests. Unfinished requests can log after Vitest
+tears down a worker, failing CI even when every assertion passes. Do not suppress
+unhandled errors or console output to hide this failure.
+
 ## Dependency maintenance
 
 Use the configured npm registry proxy; do not bypass its release quarantine.
