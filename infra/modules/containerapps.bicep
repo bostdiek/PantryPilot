@@ -41,6 +41,12 @@ param tags object = {}
 @description('Allowed CORS origins for the backend API')
 param corsOrigins array = []
 
+@description('Live ingress bindings to preserve, including certificate IDs. Null retains the existing template behavior.')
+param customDomains array?
+
+@description('Use production runtime security settings for HTTPS-hosted dev without changing cookie code.')
+param isSecureDevHosting bool = false
+
 @description('Upstash Redis REST URL for rate limiting (optional)')
 param upstashRedisRestUrl string = ''
 
@@ -158,6 +164,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
         targetPort: 8000
         transport: 'auto'
         allowInsecure: false
+        ...(customDomains == null ? {} : { customDomains: customDomains })
         corsPolicy: {
           allowCredentials: true
           allowedOrigins: empty(corsOrigins) ? ['*'] : corsOrigins
@@ -281,7 +288,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               }
               {
                 name: 'ENVIRONMENT'
-                value: contains(environmentName, 'prod') ? 'production' : 'development'
+                value: contains(environmentName, 'prod') || isSecureDevHosting ? 'production' : 'development'
               }
               {
                 name: 'LOG_LEVEL'

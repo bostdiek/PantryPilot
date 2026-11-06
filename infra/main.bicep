@@ -7,6 +7,12 @@ param environmentName string
 @description('Location for all resources')
 param location string = resourceGroup().location
 
+@description('Existing API domain bindings. Dev requires a live snapshot; null leaves other environments unchanged.')
+param backendCustomDomains array?
+
+@description('Enable dev custom URLs only after independent DNS and TLS bootstrap.')
+param isDevCustomHostingEnabled bool = false
+
 @description('Unique suffix for resource naming')
 param uniqueSuffix string = substring(uniqueString(resourceGroup().id), 0, 6)
 
@@ -275,9 +281,20 @@ module staticWebApp 'modules/staticwebapp.bicep' = {
   }
 }
 
+resource devFrontendDomain 'Microsoft.Web/staticSites/customDomains@2023-12-01' = if (environmentName == 'dev' && isDevCustomHostingEnabled) {
+  parent: staticWebAppResource
+  name: 'dev.smartmealplanner.app'
+  properties: {
+    validationMethod: 'cname-delegation'
+  }
+  dependsOn: [staticWebApp]
+}
+
 // CORS origins for the backend API
 // Use the ACTUAL Static Web App hostname (not the resource name pattern)
-var corsOrigins = concat(
+var corsOrigins = environmentName == 'dev' && isDevCustomHostingEnabled ? [
+  'https://dev.smartmealplanner.app'
+] : concat(
   [
     'https://${staticWebApp.outputs.defaultHostname}'
   ],
@@ -293,7 +310,9 @@ var corsOrigins = concat(
 
 // Frontend URL for email links (verification, password reset)
 // Use custom domain for production, Static Web App default hostname otherwise
-var frontendUrl = environmentName == 'prod' && useFrontendCustomDomains
+var frontendUrl = environmentName == 'dev' && isDevCustomHostingEnabled
+  ? 'https://dev.smartmealplanner.app'
+  : environmentName == 'prod' && useFrontendCustomDomains
   ? 'https://smartmealplanner.app'
   : 'https://${staticWebApp.outputs.defaultHostname}'
 
@@ -307,6 +326,8 @@ module containerApps 'modules/containerapps.bicep' = {
   params: {
     environmentName: resourceNames.containerAppsEnv
     backendAppName: resourceNames.containerAppBackend
+    customDomains: backendCustomDomains
+    isSecureDevHosting: environmentName == 'dev' && isDevCustomHostingEnabled
     location: location
     containerImage: containerImage
     minReplicas: currentSettings.containerMinReplicas
@@ -369,7 +390,9 @@ resource staticWebAppSettings 'Microsoft.Web/staticSites/config@2023-12-01' = {
   parent: staticWebAppResource
   name: 'appsettings'
   properties: {
-    VITE_API_URL: containerApps.outputs.backendUrl
+    VITE_API_URL: environmentName == 'dev' && isDevCustomHostingEnabled
+      ? 'https://api-dev.smartmealplanner.app'
+      : containerApps.outputs.backendUrl
     NODE_ENV: environmentName == 'prod' ? 'production' : 'development'
     VITE_APP_NAME: 'PantryPilot'
     VITE_APP_VERSION: '1.0.0'
