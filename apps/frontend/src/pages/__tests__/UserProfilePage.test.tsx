@@ -1,8 +1,10 @@
 import '@testing-library/jest-dom';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import UserProfilePage from '../UserProfilePage';
+import type { AuthUser } from '../../types/auth';
+import { captureSessionRecovery } from '../../utils/sessionRecovery';
 
 // Mock data
 const mockUser = {
@@ -12,6 +14,12 @@ const mockUser = {
   first_name: 'John',
   last_name: 'Doe',
 };
+let activeUser: AuthUser | null = mockUser;
+
+beforeEach(() => {
+  activeUser = mockUser;
+  sessionStorage.clear();
+});
 
 const mockPreferences = {
   family_size: 4,
@@ -56,7 +64,7 @@ vi.mock('../../stores/useAuthStore', () => {
       (selector?: any) => {
         const state = {
           token: 'tok',
-          user: mockUser,
+          user: activeUser,
           setUser: mockSetUser,
           login: vi.fn(),
           logout: vi.fn(),
@@ -67,7 +75,7 @@ vi.mock('../../stores/useAuthStore', () => {
       },
       {
         // getState used by apiClient
-        getState: vi.fn(() => ({ token: 'tok', user: mockUser })),
+        getState: vi.fn(() => ({ token: 'tok', user: activeUser })),
       }
     ),
     useDisplayName: vi.fn(() => 'John Doe'),
@@ -153,6 +161,68 @@ describe('UserProfilePage', () => {
       updated_by: 'user',
     });
   });
+
+  test.each(['123', 'other-account'])(
+    'restores profile and memory editors only after profile %s loads',
+    async (accountId) => {
+      const { unmount } = render(
+        <MemoryRouter>
+          <UserProfilePage />
+        </MemoryRouter>
+      );
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Edit Profile' })
+      );
+      fireEvent.change(screen.getByLabelText('First Name'), {
+        target: { value: 'Unsaved name' },
+      });
+      fireEvent.change(screen.getByLabelText('City'), {
+        target: { value: 'Seattle' },
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+      fireEvent.change(
+        screen.getByPlaceholderText(/Nibble hasn't learned anything/),
+        {
+          target: { value: 'Unsaved household memory' },
+        }
+      );
+      captureSessionRecovery('123');
+      unmount();
+      activeUser = null;
+      const { rerender } = render(
+        <MemoryRouter>
+          <UserProfilePage />
+        </MemoryRouter>
+      );
+      activeUser = { ...mockUser, id: accountId };
+      rerender(
+        <MemoryRouter>
+          <UserProfilePage />
+        </MemoryRouter>
+      );
+      await screen.findByRole('heading', { name: 'Profile' });
+      if (accountId === '123') {
+        expect(screen.getByLabelText('First Name')).toHaveValue('Unsaved name');
+        expect(screen.getByLabelText('City')).toHaveValue('Seattle');
+        expect(screen.getByLabelText('First Name')).toBeEnabled();
+        expect(
+          screen.getByPlaceholderText(/Nibble hasn't learned anything/)
+        ).toHaveValue('Unsaved household memory');
+        expect(
+          screen.getByRole('button', { name: 'Save Changes' })
+        ).toBeInTheDocument();
+        expect(
+          screen.getByRole('button', { name: 'Save' })
+        ).toBeInTheDocument();
+      } else {
+        expect(screen.getByLabelText('First Name')).toHaveValue('John');
+        expect(screen.getByLabelText('First Name')).toBeDisabled();
+        expect(
+          screen.queryByDisplayValue('Unsaved household memory')
+        ).not.toBeInTheDocument();
+      }
+    }
+  );
 
   test('renders profile page with user information', async () => {
     await renderAndWait();

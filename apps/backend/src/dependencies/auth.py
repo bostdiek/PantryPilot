@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Annotated, Protocol, TypeVar, cast
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from core.security import decode_token
+from core.session import session_has_expired
 from crud.user import get_user_by_id
 from dependencies.db import DbSession
+from models.auth_sessions import AuthSession
 from models.users import User
 
 
@@ -33,6 +37,29 @@ def unauthorized(detail: str = "Could not validate credentials") -> HTTPExceptio
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
+async def _recheck_expired_session(db: DbSession, session_id: UUID) -> None:
+    """Serialize an expiry decision with renewal, releasing the lock before routing."""
+    auth_session = await db.scalar(
+        select(AuthSession)
+        .where(AuthSession.id == session_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    now = datetime.now(UTC)
+    expired = auth_session is not None and session_has_expired(
+        auth_session.created_at, auth_session.last_activity_at, now
+    )
+    if expired and auth_session is not None:
+        auth_session.revoked_at = auth_session.revoked_at or now
+    invalid = auth_session is None or auth_session.revoked_at is not None
+    await db.commit()
+    if invalid:
+        raise unauthorized(
+            "Your session ended because confirmation or a new sign-in is required. "
+            "Please sign in again."
+        )
+
+
 # --------------------------------------------------------------------------- #
 # The dependency
 # --------------------------------------------------------------------------- #
@@ -52,6 +79,25 @@ async def get_current_user(
     # Decode the JWT – `decode_token` raises HTTPException(401) on failure,
     # so allow that to surface instead of catching a broad Exception here.
     token_data = decode_token(token)
+
+    session_id = token_data.sid
+    if session_id:
+        try:
+            session_uuid = UUID(session_id)
+        except ValueError as exc:
+            raise unauthorized() from exc
+
+        auth_session = await db.scalar(
+            select(AuthSession).where(AuthSession.id == session_uuid)
+        )
+        now = datetime.now(UTC)
+        if auth_session is None or auth_session.revoked_at is not None:
+            raise unauthorized("Session expired. Please sign in again.")
+
+        if session_has_expired(
+            auth_session.created_at, auth_session.last_activity_at, now
+        ):
+            await _recheck_expired_session(db, session_uuid)
 
     # Validate the subject claim
     sub = getattr(token_data, "sub", None)
