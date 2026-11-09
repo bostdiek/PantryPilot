@@ -2,7 +2,8 @@
 
 from collections.abc import AsyncIterator
 from datetime import date, timedelta
-from uuid import uuid4
+from decimal import Decimal
+from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
@@ -140,6 +141,33 @@ async def grocery_client() -> AsyncIterator[tuple[AsyncClient, AsyncSession]]:
 
 class TestGroceryListAPI:
     """Test cases for grocery list API endpoints."""
+
+    def test_given_grocery_query_models_when_inspecting_fields_then_preserves_metadata(
+        self,
+    ) -> None:
+        # Arrange
+        ingredient = Ingredient.__table__.c
+        recipe_ingredient = RecipeIngredient.__table__.c
+
+        # Act
+        ingredient_indexed_columns = {
+            column.name
+            for index in Ingredient.__table__.indexes
+            for column in index.columns
+        }
+
+        # Assert
+        assert ingredient.id.type.python_type is UUID
+        assert ingredient.ingredient_name.type.python_type is str
+        assert {"id", "ingredient_name"} <= ingredient_indexed_columns
+        assert recipe_ingredient.recipe_id.nullable is False
+        assert recipe_ingredient.ingredient_id.nullable is False
+        assert recipe_ingredient.quantity_value.type.python_type is Decimal
+        assert recipe_ingredient.quantity_value.nullable is True
+        assert recipe_ingredient.quantity_unit.type.length == 64
+        assert recipe_ingredient.quantity_unit.nullable is True
+        assert recipe_ingredient.is_optional.type.python_type is bool
+        assert recipe_ingredient.is_optional.default.arg is False
 
     @pytest.mark.asyncio
     async def test_generate_grocery_list_success(self, grocery_client):

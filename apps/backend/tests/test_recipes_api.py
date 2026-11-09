@@ -5,8 +5,11 @@ import uuid
 import pytest
 from fastapi import status
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.dialects import postgresql
 
 from api.v1.recipes import _get_or_create_ingredient, list_recipes
+from models.recipes_names import Recipe
 from schemas.recipes import RecipeCategory, RecipeDifficulty
 
 
@@ -65,6 +68,26 @@ class _IngredientSession:
 
     async def flush(self) -> None:
         return None
+
+
+def test_given_recipe_mapping_when_searching_then_preserves_column_contract() -> None:
+    # Arrange
+    table = Recipe.__table__
+    statement = select(Recipe).where(Recipe.name.ilike("%taco%"))
+
+    # Act
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+    indexed_columns = {
+        column.name for index in table.indexes for column in index.columns
+    }
+
+    # Assert
+    assert table.c.id.primary_key
+    assert table.c.user_id.nullable is False
+    assert table.c.name.nullable is False
+    assert table.c.description.nullable is True
+    assert {"id", "user_id", "name"} <= indexed_columns
+    assert "recipe_names.name ILIKE" in compiled
 
 
 @pytest.mark.asyncio

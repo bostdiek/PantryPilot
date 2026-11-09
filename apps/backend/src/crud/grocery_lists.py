@@ -88,7 +88,6 @@ class GroceryListCRUD:
                 )
             )
         )
-
         ingredients_result = await db.execute(ingredients_stmt)
         ingredient_rows = ingredients_result.fetchall()
 
