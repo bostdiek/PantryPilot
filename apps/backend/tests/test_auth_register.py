@@ -524,7 +524,7 @@ async def test_login_invalid_credentials_unit(
     """
     from types import SimpleNamespace
 
-    from fastapi import HTTPException, status  # type: ignore
+    from fastapi import HTTPException, Response, status  # type: ignore
 
     import api.v1.auth as auth_mod  # type: ignore
 
@@ -538,7 +538,7 @@ async def test_login_invalid_credentials_unit(
     form = SimpleNamespace(username="nouser", password="badpass")
 
     with pytest.raises(HTTPException) as excinfo:
-        await auth_mod.login(form, db)
+        await auth_mod.login(form, db, Response())
 
     assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
     assert excinfo.value.detail == "Incorrect username or password"
@@ -565,21 +565,21 @@ async def test_login_success_unit(
         lambda data: "unit-login-token",
     )
 
-    # Build a dummy user with a valid hashed password and is_verified=True
-    class _DummyUser:
-        def __init__(self):
-            self.id = uuid.uuid4()
-            self.hashed_password = auth_mod.get_password_hash("goodpass")
-            self.is_verified = True
-
-    async def _user_ok(db, username: str):
-        return _DummyUser()
-
-    monkeypatch.setattr(auth_mod, "get_user_by_username", _user_ok)
-
     _, db = auth_client
+    db.add(
+        User(
+            id=uuid.uuid4(),
+            username="dummy",
+            email="dummy@example.test",
+            hashed_password=auth_mod.get_password_hash("goodpass"),
+            is_verified=True,
+        )
+    )
+    await db.commit()
     form = SimpleNamespace(username="dummy", password="goodpass")
 
-    token = await auth_mod.login(form, db)
+    from fastapi import Response
+
+    token = await auth_mod.login(form, db, Response())
     assert token.access_token == "unit-login-token"
     assert token.token_type == "bearer"

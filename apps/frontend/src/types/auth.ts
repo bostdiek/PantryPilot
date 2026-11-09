@@ -37,6 +37,8 @@ export interface AuthUser {
 export interface AuthState {
   token: string | null;
   user: AuthUser | null;
+  /** Persist logout intent so other tabs only capture recovery on expiry. */
+  logoutReason?: 'expired' | 'manual' | null;
   hasHydrated: boolean; // hydration guard flag
   login: (token: string, user: AuthUser) => void;
   logout: (reason?: 'expired' | 'manual') => void;

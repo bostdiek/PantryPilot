@@ -12,6 +12,8 @@ interface PasteSplitModalProps {
   onPasteAsSingle: (content: string) => void;
   candidateSteps: string[];
   originalContent: string;
+  /** Keep pending edits in the owning hook for session-expiry recovery. */
+  onStepsChange?: (steps: string[]) => void;
 }
 
 export function PasteSplitModal({
@@ -22,6 +24,7 @@ export function PasteSplitModal({
   onPasteAsSingle,
   candidateSteps,
   originalContent,
+  onStepsChange,
 }: PasteSplitModalProps) {
   const [editableSteps, setEditableSteps] = useState<string[]>(candidateSteps);
 
@@ -39,11 +42,13 @@ export function PasteSplitModal({
     const newSteps = [...editableSteps];
     newSteps[index] = value;
     setEditableSteps(newSteps);
+    onStepsChange?.(newSteps);
   };
 
   const handleRemoveStep = (index: number) => {
     const newSteps = editableSteps.filter((_, i) => i !== index);
     setEditableSteps(newSteps);
+    onStepsChange?.(newSteps);
   };
 
   const handleConfirmMultiple = () => {
