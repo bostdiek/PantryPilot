@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
@@ -198,14 +197,7 @@ test("missing Azure CLI fails instead of producing an empty successful snapshot"
   assert.match(result.stderr, /Dev hosting preflight failed/);
 });
 
-test("only the dev runner receives the byte-identical additive migration", () => {
-  const migration = "20261021_21_add_auth_sessions.py";
-  assert.equal(
-    createHash("sha256")
-      .update(read(`infra/dev-migrations/${migration}`))
-      .digest("hex"),
-    "3ad40beeb25c68fbad69f354661cb882f805260834a6bb7ddf6041407993561a", // pragma: allowlist secret
-  );
+test("hosting deployment uses only the chosen ref's migrations and preserves the rollback", () => {
   const dev = read(".github/workflows/deploy-dev.yml");
   assert.match(dev, /needs: \[inspect-dev-hosting, run-migrations\]/);
   assert.match(dev, /needs: inspect-dev-hosting/);
@@ -217,8 +209,12 @@ test("only the dev runner receives the byte-identical additive migration", () =>
     dev,
     /needs\.inspect-dev-hosting\.outputs\.(backend-domains|snapshot)/,
   );
-  assert.match(dev, /sha256sum --check/);
-  assert.match(dev, /if \[\[ ! -f "\$TARGET" \]\]/);
+  assert.match(dev, /uv run alembic -c src\/alembic.ini upgrade head/);
+  assert.doesNotMatch(dev, /dev-migrations|SOURCE=|TARGET=|sha256sum/);
+  assert.doesNotMatch(dev, /alembic[^\n]*(?:downgrade|stamp)/);
+  assert.match(dev, /SELECT version_num FROM alembic_version/);
+  assert.match(dev, /SELECT to_regclass\('public.auth_sessions'\) IS NULL/);
+  assert.match(dev, /revisions != \["20260928_20"\] or not sessions_absent/);
   assert.doesNotMatch(
     read(".github/workflows/deploy-prod.yml"),
     /dev-migrations/,

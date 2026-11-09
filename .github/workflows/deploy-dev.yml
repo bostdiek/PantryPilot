@@ -226,17 +226,36 @@ jobs:
           echo "::add-mask::$DB_CONNECTION"
           echo "DATABASE_URL=$DB_CONNECTION" >> $GITHUB_ENV
 
-      - name: Preserve the additive session migration already deployed to dev
+      - name: Verify hosting-only deployment preserves the session rollback
+        if: ${{ hashFiles('apps/backend/src/alembic/versions/20261021_21_add_auth_sessions.py') == '' }}
+        working-directory: apps/backend
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}
+          PYTHONPATH: src
         run: |
-          set -euo pipefail
-          SOURCE=infra/dev-migrations/20261021_21_add_auth_sessions.py
-          TARGET=apps/backend/src/alembic/versions/20261021_21_add_auth_sessions.py
-          echo "3ad40beeb25c68fbad69f354661cb882f805260834a6bb7ddf6041407993561a  $SOURCE" | sha256sum --check
-          if [[ ! -f "$TARGET" ]]; then
-            cp "$SOURCE" "$TARGET"
-          else
-            echo "Session migration is already present in the selected code ref."
-          fi
+          uv run python - <<'PY'
+          import asyncio
+          import os
+
+          from sqlalchemy import text
+          from sqlalchemy.ext.asyncio import create_async_engine
+
+          from dependencies.db import _normalize_asyncpg_url
+
+          async def verify() -> None:
+              engine = create_async_engine(_normalize_asyncpg_url(os.environ["DATABASE_URL"]))
+              try:
+                  async with engine.connect() as connection:
+                      revisions = (await connection.execute(text("SELECT version_num FROM alembic_version"))).scalars().all()
+                      sessions_absent = await connection.scalar(text("SELECT to_regclass('public.auth_sessions') IS NULL"))
+                      if revisions != ["20260928_20"] or not sessions_absent:
+                          raise RuntimeError("Hosting-only deployment requires revision 20260928_20 and no auth_sessions table")
+                      print("Verified hosting-only database: 20260928_20; auth_sessions absent")
+              finally:
+                  await engine.dispose()
+
+          asyncio.run(verify())
+          PY
 
       - name: Run Alembic migrations
         working-directory: apps/backend

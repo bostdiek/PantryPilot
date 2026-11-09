@@ -13,8 +13,9 @@ production resources, DNS, workflows, cookie domain scope, or SameSite policy.
 SWA remains on its existing Free SKU; no linked-backend integration is required.
 
 This is the hosting prerequisite for [#635](https://github.com/bostdiek/PantryPilot/pull/635),
-not the session implementation. The session branch is currently deployed to dev.
-Do not merge either PR to perform this test.
+not the session implementation. Dev's session schema was rolled back to
+`20260928_20`; hosting-only deployments must preserve that rollback. This branch
+does not inject #635's migration. Do not merge either PR to perform this test.
 
 > [!WARNING]
 > A main-based dev deployment replaces the session candidate's frontend and
@@ -167,13 +168,13 @@ After separate approval to publish this branch/PR and deploy to dev:
    unmodified workflow. It discovers existing names and snapshots all API
    domain/certificate bindings. A failed query, mismatched resource identity,
    missing ready binding, TLS error or failed migration stops the deployment.
-5. Migrations run before infrastructure. Only the exact additive migration
-   `20261021_21` from #635 commit `246c875137c931af84740a4ea0c7a46379fe9b32`
-   is staged from [infra/dev-migrations/](../infra/dev-migrations/) into the
-   temporary dev runner when absent. Its SHA-256 is checked first.
-   `upgrade head` recognizes the already-applied revision without dropping
-   `auth_sessions` or stamping backward. A migration failure remains fatal.
-   Production's migration tree and workflow do not use this overlay.
+5. Migrations run before infrastructure using only the chosen code ref's
+   migration tree. A hosting-only deployment must leave the database at
+   `20260928_20` with no `auth_sessions` table. No session migration is injected,
+   and no downgrade or backward stamp is run. Stop if the live database is
+   ahead of the chosen ref. The hosted runner verifies the rolled-back revision
+   and absence of the session table before migrations when the chosen ref does
+   not contain #635's real migration. A migration failure remains fatal.
 6. Infrastructure round-trips the **entire** live ACA domain-binding array,
    including existing certificate IDs, rather than resetting it to `[]`.
    SWA's dev hostname is declared only after bootstrap; unrelated child bindings
@@ -230,8 +231,9 @@ retention without the live check.
    custom URLs, exact CORS, security mode and binding-preservation checks.
    Retain #635's session implementation. Its equivalent canonical redirect can
    be retained once, not duplicated.
-2. Run the combined candidate's tests. The dev migration overlay is skipped
-   when #635's real migration already exists. Keep its revision ID unchanged.
+2. Run the combined candidate's tests. Its own session migration is applied
+   only when deploying this separately approved session candidate. Keep its
+   revision ID unchanged.
 3. Obtain approval before publishing the temporary validation branch, building
    or deploying it. Dispatch **Build Container Images** on that branch with
    `environment=dev`. Record the resulting candidate commit and image digest.
@@ -241,8 +243,8 @@ retention without the live check.
    build. Confirm the bundle calls the custom API and no longer the generated
    ACA origin. Complete the browser gate below before accepting #635.
 5. Restore the agreed dev candidate after any intervening main deployment.
-   Remove the dev-only overlay in a later cleanup once #635's identical migration
-   is on main; never remove its database table or deployed Alembic revision.
+   Once the session migration is applied, do not deploy an older migration tree
+   that cannot recognize it, remove its table, or stamp its revision backward.
 
 If rollout fails, stop other deploys and retain DNS/certificates and DB state.
 Redeploy the recorded known-good application candidate with this hosting-aware

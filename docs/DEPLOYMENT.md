@@ -1,4 +1,7 @@
-# Deployment & Local Development Guide
+---
+title: Deployment & Local Development Guide
+description: Local development, Azure deployment, and infrastructure API lifecycle guidance for PantryPilot.
+---
 
 This project uses Docker Compose with environment-specific overrides and a Makefile for common workflows.
 
@@ -65,6 +68,78 @@ Frontend-only (optional, via npm):
 - Configure database credentials in `.env.dev` and `.env.prod`
 
 See the root `README.md` for an overview and quick-start commands, and `docs/API_DESIGN.md` for API details.
+
+## Azure Infrastructure API Versions
+
+The deployment workflows use `infra/main.bicep` directly. Keep Bicep as the
+source of truth; generated ARM JSON under `infra/` is ignored by Git.
+
+| Resource family | Management API version | Retirement addressed |
+|---|---|---|
+| PostgreSQL server, configurations, databases, firewall rules | `2025-08-01` (stable) | `2023-06-01-preview` retires January 30, 2027 |
+| Key Vault vaults and ARM-managed secrets | `2026-02-01` (stable) | Control-plane versions before `2026-02-01` retire February 27, 2027 |
+
+These are management API updates, not a PostgreSQL engine upgrade or a data
+migration. PostgreSQL remains version 15. Resource names, database names,
+permissions, firewall settings, backups and secret references are unchanged.
+Key Vault RBAC remains explicitly configured rather than relying on the newer
+API's default.
+
+The separate January 31, 2027 retirement of Key Vault `2026-03-01-preview`
+does not match any explicitly selected API in this repository. Container Apps
+uses managed Key Vault secret references; deployment and migration scripts read
+secrets through Azure CLI. Keep Azure CLI current, and check other clients
+separately because management and secret-access APIs have independent versions.
+
+### Local Compilation
+
+Use a recent Bicep release with the target resource schemas. Compilation was
+validated with Bicep `0.48.1`; older releases such as `0.39.26` report `BCP081`
+for Key Vault `2026-02-01`. Upgrade rather than suppressing missing-type warnings:
+
+```bash
+az bicep upgrade
+az bicep build --file infra/main.bicep
+az bicep build --file infra/modules/postgresql.bicep
+az bicep build --file infra/modules/keyvault.bicep
+```
+
+These commands compile locally and regenerate ignored JSON; they do not deploy
+or require database credentials. Do not edit or commit the generated files.
+
+### Before Deploying an API Update
+
+1. Select the intended Azure subscription and use the existing environment's
+   resource group and parameter file. Preserve the environment's current suffixes,
+   resource names and settings.
+2. Provide the required environment variables through your existing secure
+   deployment process. Do not substitute validation-only credentials in a real
+   deployment.
+3. Run a what-if for development first:
+
+   ```bash
+   az deployment group what-if \
+     --resource-group "<existing-development-resource-group>" \
+     --template-file infra/main.bicep \
+     --parameters infra/parameters/main.dev.bicepparam
+   ```
+
+4. Review the result for unintended replacements, deletions, permission changes
+   or network changes. Stop and investigate any such changes before deployment.
+5. After an approved development deployment, verify database connectivity,
+   recipe reads, managed secret access and migrations. Repeat what-if with the
+   existing production resource group and `main.prod.bicepparam` before an
+   approved production rollout.
+
+Local compilation alone does not confirm Azure provider acceptance or runtime
+health. No live what-if or rollout is implied by these instructions.
+
+References:
+
+- [PostgreSQL API lifecycle](https://learn.microsoft.com/en-us/rest/api/postgresql/preview-api-lifecycle)
+- [Supported PostgreSQL APIs](https://learn.microsoft.com/en-us/azure/postgresql/flexible-server/release-notes-api)
+- [Key Vault API migration and retirement guidance](https://learn.microsoft.com/en-us/azure/key-vault/general/migrate-api-version)
+- [Key Vault RBAC defaults](https://learn.microsoft.com/en-us/azure/key-vault/general/access-control-default)
 
 ## Azure OpenAI Setup
 
