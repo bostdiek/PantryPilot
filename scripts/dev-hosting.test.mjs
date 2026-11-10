@@ -214,7 +214,15 @@ test("hosting deployment uses only the chosen ref's migrations and preserves the
   assert.doesNotMatch(dev, /alembic[^\n]*(?:downgrade|stamp)/);
   assert.match(dev, /SELECT version_num FROM alembic_version/);
   assert.match(dev, /SELECT to_regclass\('public.auth_sessions'\) IS NULL/);
-  assert.match(dev, /revisions != \["20260928_20"\] or not sessions_absent/);
+  assert.match(
+    dev,
+    /ScriptDirectory.from_config\(Config\("src\/alembic.ini"\)\)/,
+  );
+  assert.match(dev, /validate_dev_migration_state\(scripts, revisions,/);
+  assert.doesNotMatch(dev, /hashFiles\(/);
+  const guard = read("apps/backend/src/core/migration_preflight.py");
+  assert.match(guard, /set\(scripts.get_heads\(\)\) == \{"20260928_20"\}/);
+  assert.match(guard, /scripts.walk_revisions\(\)/);
   assert.doesNotMatch(
     read(".github/workflows/deploy-prod.yml"),
     /dev-migrations/,

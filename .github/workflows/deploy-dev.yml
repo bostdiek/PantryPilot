@@ -226,8 +226,7 @@ jobs:
           echo "::add-mask::$DB_CONNECTION"
           echo "DATABASE_URL=$DB_CONNECTION" >> $GITHUB_ENV
 
-      - name: Verify hosting-only deployment preserves the session rollback
-        if: ${{ hashFiles('apps/backend/src/alembic/versions/20261021_21_add_auth_sessions.py') == '' }}
+      - name: Verify database state against the selected migration graph
         working-directory: apps/backend
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -240,6 +239,9 @@ jobs:
           from sqlalchemy import text
           from sqlalchemy.ext.asyncio import create_async_engine
 
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+          from core.migration_preflight import validate_dev_migration_state
           from dependencies.db import _normalize_asyncpg_url
 
           async def verify() -> None:
@@ -248,9 +250,9 @@ jobs:
                   async with engine.connect() as connection:
                       revisions = (await connection.execute(text("SELECT version_num FROM alembic_version"))).scalars().all()
                       sessions_absent = await connection.scalar(text("SELECT to_regclass('public.auth_sessions') IS NULL"))
-                      if revisions != ["20260928_20"] or not sessions_absent:
-                          raise RuntimeError("Hosting-only deployment requires revision 20260928_20 and no auth_sessions table")
-                      print("Verified hosting-only database: 20260928_20; auth_sessions absent")
+                      scripts = ScriptDirectory.from_config(Config("src/alembic.ini"))
+                      validate_dev_migration_state(scripts, revisions, sessions_absent=bool(sessions_absent))
+                      print("Verified database revisions against selected migration graph:", revisions)
               finally:
                   await engine.dispose()
 

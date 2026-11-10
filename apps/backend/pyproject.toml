@@ -82,6 +82,7 @@ quote-style = "double"
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
+known-third-party = ["alembic"]
 combine-as-imports = true
 lines-after-imports = 2
 

@@ -169,12 +169,15 @@ After separate approval to publish this branch/PR and deploy to dev:
    domain/certificate bindings. A failed query, mismatched resource identity,
    missing ready binding, TLS error or failed migration stops the deployment.
 5. Migrations run before infrastructure using only the chosen code ref's
-   migration tree. A hosting-only deployment must leave the database at
+   migration tree. This hosting-only candidate leaves the database at
    `20260928_20` with no `auth_sessions` table. No session migration is injected,
    and no downgrade or backward stamp is run. Stop if the live database is
-   ahead of the chosen ref. The hosted runner verifies the rolled-back revision
-   and absence of the session table before migrations when the chosen ref does
-   not contain #635's real migration. A migration failure remains fatal.
+   ahead of the chosen ref. The hosted runner enforces the exact rolled-back
+   revision and absence of the session table only when the chosen migration
+   tree still ends at `20260928_20`. For newer trees, it checks that the database
+   revisions belong to that ref's Alembic graph, allowing unrelated migrations
+   and repeat deployments without requiring #635's migration. Alembic applies
+   the selected ref's pending migrations. A migration failure remains fatal.
 6. Infrastructure round-trips the **entire** live ACA domain-binding array,
    including existing certificate IDs, rather than resetting it to `[]`.
    SWA's dev hostname is declared only after bootstrap; unrelated child bindings
