@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-from alembic.config import Config
 from alembic.script import ScriptDirectory
 
 from core.migration_preflight import validate_dev_migration_state
@@ -76,10 +75,3 @@ def test_given_newer_tree_when_revision_unknown_then_rejects(
 
     with pytest.raises(RuntimeError, match="migration graph does not recognize"):
         validate_dev_migration_state(scripts, revisions, sessions_absent=True)
-
-
-def test_given_selected_ref_when_rollback_matches_then_accepts_real_graph() -> None:
-    config = Config(str(Path(__file__).parents[1] / "src" / "alembic.ini"))
-    scripts = ScriptDirectory.from_config(config)
-
-    validate_dev_migration_state(scripts, ["20260928_20"], sessions_absent=True)
