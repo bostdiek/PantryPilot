@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import {
   apiOrigin,
   frontendOrigin,
   prepareSnapshot,
+  runHostingCommand,
   verifySnapshot,
 } from "./dev-hosting.mjs";
 
@@ -194,7 +197,58 @@ test("missing Azure CLI fails instead of producing an empty successful snapshot"
     { env: { PATH: "", AZURE_SUBSCRIPTION_ID: "test" }, encoding: "utf8" },
   );
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /Dev hosting preflight failed/);
+  assert.match(result.stderr, /Dev hosting check failed/);
+});
+
+test("binding snapshots allow recovery while final HTTPS checks reject failures", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "dev-hosting-test-"));
+  const previousOutput = process.env.GITHUB_OUTPUT;
+  const previousEnabled = process.env.DEV_CUSTOM_DOMAINS_ENABLED;
+  const snapshot = prepareSnapshot(sites, backend, hostnames, "true");
+  let apiStatus = 503;
+  let tlsError = false;
+  const fetchMock = t.mock.method(globalThis, "fetch", async (url) => {
+    if (tlsError) throw new Error("TLS validation failed");
+    return new Response(null, {
+      status: url === frontendOrigin ? 200 : apiStatus,
+    });
+  });
+
+  try {
+    process.env.GITHUB_OUTPUT = join(directory, "outputs");
+    process.env.DEV_CUSTOM_DOMAINS_ENABLED = "true";
+    const snapshotPath = join(directory, "snapshot.json");
+    const discoverHosting = () => snapshot;
+
+    await runHostingCommand("snapshot", snapshotPath, discoverHosting);
+    await runHostingCommand("verify", snapshotPath, discoverHosting);
+    assert.equal(fetchMock.mock.callCount(), 0);
+
+    await assert.rejects(
+      runHostingCommand("health"),
+      /TLS\/HTTP readiness failed/,
+    );
+    apiStatus = 200;
+    await runHostingCommand("health");
+    tlsError = true;
+    await assert.rejects(runHostingCommand("health"), /TLS validation failed/);
+    const calls = fetchMock.mock.callCount();
+    process.env.DEV_CUSTOM_DOMAINS_ENABLED = "false";
+    await runHostingCommand("health");
+    assert.equal(fetchMock.mock.callCount(), calls);
+    process.env.DEV_CUSTOM_DOMAINS_ENABLED = "invalid";
+    await assert.rejects(
+      runHostingCommand("health"),
+      /Activation must be true or false/,
+    );
+  } finally {
+    if (previousOutput === undefined) delete process.env.GITHUB_OUTPUT;
+    else process.env.GITHUB_OUTPUT = previousOutput;
+    if (previousEnabled === undefined)
+      delete process.env.DEV_CUSTOM_DOMAINS_ENABLED;
+    else process.env.DEV_CUSTOM_DOMAINS_ENABLED = previousEnabled;
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("hosting deployment uses only the chosen ref's migrations and preserves the rollback", () => {
@@ -255,5 +309,10 @@ test("dev parameters require a live snapshot and build wires both custom origins
   assert.doesNotMatch(
     read("infra/parameters/main.prod.bicepparam"),
     /isDevCustomHostingEnabled|backendCustomDomains/,
+  );
+  assert.ok(
+    dev.indexOf("node scripts/dev-hosting.mjs health") >
+      dev.indexOf("uses: Azure/static-web-apps-deploy@v1"),
+    "HTTPS readiness must be checked after deploying the frontend",
   );
 });

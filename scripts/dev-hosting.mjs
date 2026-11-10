@@ -192,6 +192,10 @@ function discover(enabled) {
 }
 
 async function checkHttps(snapshot) {
+  assert.ok(
+    ["true", "false"].includes(snapshot.enabled),
+    "Activation must be true or false",
+  );
   if (snapshot.enabled !== "true") return;
   for (const url of [frontendOrigin, `${apiOrigin}/api/v1/health`]) {
     const response = await fetch(url, {
@@ -203,17 +207,29 @@ async function checkHttps(snapshot) {
   }
 }
 
-async function main() {
-  const [command, snapshotPath] = process.argv.slice(2);
+export async function runHostingCommand(
+  command,
+  snapshotPath,
+  discoverHosting = discover,
+) {
+  if (command === "health") {
+    const enabled = process.env.DEV_CUSTOM_DOMAINS_ENABLED || "false";
+    await checkHttps({ enabled });
+    console.log(
+      enabled === "true"
+        ? "Dev custom-domain HTTPS readiness verified."
+        : "Dev custom-domain HTTPS readiness skipped: hosting is disabled.",
+    );
+    return;
+  }
   assert.ok(
     snapshotPath,
-    "Usage: node scripts/dev-hosting.mjs snapshot|verify PATH",
+    "Usage: node scripts/dev-hosting.mjs snapshot|verify PATH or health",
   );
   if (command === "snapshot") {
-    const snapshot = discover(
+    const snapshot = discoverHosting(
       process.env.DEV_CUSTOM_DOMAINS_ENABLED || "false",
     );
-    await checkHttps(snapshot);
     writeFileSync(snapshotPath, `${JSON.stringify(snapshot)}\n`);
     const outputs = {
       suffix: snapshot.suffix,
@@ -235,16 +251,16 @@ async function main() {
   } else {
     assert.equal(command, "verify", "Unknown dev hosting command");
     const before = JSON.parse(readFileSync(snapshotPath, "utf8"));
-    const after = discover(before.enabled);
+    const after = discoverHosting(before.enabled);
     verifySnapshot(before, after);
-    await checkHttps(after);
     console.log("All dev hostname and certificate bindings preserved.");
   }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch((error) => {
-    console.error(`Dev hosting preflight failed: ${error.message}`);
+  const [command, snapshotPath] = process.argv.slice(2);
+  runHostingCommand(command, snapshotPath).catch((error) => {
+    console.error(`Dev hosting check failed: ${error.message}`);
     process.exitCode = 1;
   });
 }

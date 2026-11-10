@@ -167,7 +167,8 @@ After separate approval to publish this branch/PR and deploy to dev:
 4. Dispatch **Deploy to Dev** on this prerequisite branch, not main or #635's
    unmodified workflow. It discovers existing names and snapshots all API
    domain/certificate bindings. A failed query, mismatched resource identity,
-   missing ready binding, TLS error or failed migration stops the deployment.
+   missing ready binding or failed migration stops the deployment. Snapshots
+   check Azure binding metadata, not live endpoint availability.
 5. Migrations run before infrastructure using only the chosen code ref's
    migration tree. This hosting-only candidate leaves the database at
    `20260928_20` with no `auth_sessions` table. No session migration is injected,
@@ -183,6 +184,8 @@ After separate approval to publish this branch/PR and deploy to dev:
    SWA's dev hostname is declared only after bootstrap; unrelated child bindings
    and environment certificates remain outside this incremental update.
    A post-deploy comparison checks every prior hostname and certificate binding.
+   After the backend and frontend deploy, the workflow checks both custom HTTPS
+   endpoints and fails on TLS errors or non-200 responses.
 7. The dev build uses `VITE_API_URL=https://api-dev.smartmealplanner.app` and
    `VITE_CANONICAL_ORIGIN=https://dev.smartmealplanner.app`. SWA app settings
    alone cannot configure an already-built Vite bundle. The old SWA hostname

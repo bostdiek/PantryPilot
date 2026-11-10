@@ -373,3 +373,8 @@ jobs:
           app_location: "apps/frontend/dist"
           skip_app_build: true
           skip_api_build: true
+
+      - name: Verify custom-domain HTTPS readiness
+        run: node scripts/dev-hosting.mjs health
+        env:
+          DEV_CUSTOM_DOMAINS_ENABLED: ${{ needs.inspect-dev-hosting.outputs.enabled }}
