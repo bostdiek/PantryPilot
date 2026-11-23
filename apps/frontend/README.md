@@ -120,6 +120,12 @@ Upgrade `vitest`, `@vitest/ui`, and `@vitest/coverage-v8` together.
 
 After updating the lockfile, preserve the optional `@emnapi/core`,
 `@emnapi/runtime`, and `@emnapi/wasi-threads` entries and their dependencies.
+npm can prune these entries on another platform, causing `npm ci` to fail in
+Linux container builds. Restore the versions required by the updated
+dependencies, which may differ from the previous lockfile, and verify a clean
+install. Keep `registry.npmjs.org` tarball URLs in the committed lockfile. If npm
+drops the proxy's `/npm/` prefix when mapping those URLs, rewrite the tarball
+URLs only in a temporary copy used for local validation.
 
 Run both `npm audit` and `npm audit --omit=dev` to distinguish tooling findings
 from production dependencies. Zod is patched to 4.6.7. The development-tooling
@@ -127,7 +133,3 @@ from production dependencies. Zod is patched to 4.6.7. The development-tooling
 its fix requires 11.0.1 or later, but current ESLint and typescript-eslint
 consumers require version 10. Do not force a major override or suppress the
 finding; update when upstream consumers support a patched version.
-npm can prune these entries during updates on another platform, causing
-`npm ci` to fail in Linux container builds. Restore pruned entries from the
-previous lockfile, retain public `registry.npmjs.org` resolved URLs, and
-verify a clean `npm ci` before submitting dependency updates.
