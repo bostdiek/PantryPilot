@@ -312,7 +312,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               }
               {
                 name: 'ACCESS_TOKEN_EXPIRE_MINUTES'
-                value: '30'
+                value: '15'
               }
               {
                 name: 'PORT'

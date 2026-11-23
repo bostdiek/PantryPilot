@@ -32,6 +32,7 @@ from core.security import get_password_hash
 from dependencies.auth import get_current_user
 from dependencies.db import get_db
 from main import app
+from models.auth_sessions import AuthSession
 from models.base import Base
 from models.meal_history import Meal
 from models.users import User
@@ -230,7 +231,8 @@ async def auth_client() -> AsyncGenerator[tuple[AsyncClient, AsyncSession], None
         """)
         await conn.run_sync(
             lambda sync_conn: Base.metadata.create_all(
-                sync_conn, tables=[User.__table__, Meal.__table__]
+                sync_conn,
+                tables=[User.__table__, Meal.__table__, AuthSession.__table__],
             )
         )
 

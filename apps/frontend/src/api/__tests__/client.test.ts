@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useAuthStore } from '../../stores/useAuthStore';
-import type { AuthState } from '../../types/auth';
 import { apiClient } from '../client';
 import {
   createProductTelemetryRequestMetadata,
@@ -19,6 +18,10 @@ describe('ApiClient (unit)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useAuthStore.getState).mockReturnValue({
+      ...useAuthStore.getState(),
+      token: null,
+    });
     vi.stubGlobal('fetch', fetchMock);
   });
 
@@ -43,9 +46,10 @@ describe('ApiClient (unit)', () => {
 
   it('includes Authorization header when token exists', async () => {
     // make getState return a token
-    vi.mocked(useAuthStore.getState).mockReturnValueOnce({
+    vi.mocked(useAuthStore.getState).mockReturnValue({
+      ...useAuthStore.getState(),
       token: 'tok',
-    } as unknown as AuthState);
+    });
 
     fetchMock.mockResolvedValueOnce({
       ok: true,

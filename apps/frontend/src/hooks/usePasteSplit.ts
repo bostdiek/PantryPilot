@@ -1,7 +1,13 @@
 import type { ClipboardEvent } from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { logger } from '../lib/logger';
 import { looksMultiStep, splitSteps } from '../utils/pasteHelpers';
+import { useAuthStore } from '../stores/useAuthStore';
+import {
+  registerEditorDraft,
+  takeRecoveredEditorDraft,
+  type PasteSplitRecoveryDraft,
+} from '../utils/sessionRecovery';
 
 interface UsePasteSplitOptions {
   onInsertSteps: (
@@ -13,24 +19,41 @@ interface UsePasteSplitOptions {
   getCurrentStepValue: (index: number) => string;
 }
 
-interface PasteSplitModalState {
-  isOpen: boolean;
-  targetIndex: number;
-  candidateSteps: string[];
-  originalContent: string;
-}
-
 export function usePasteSplit({
   onInsertSteps,
   onReplaceStep,
   getCurrentStepValue,
 }: UsePasteSplitOptions) {
-  const [pasteSplitModal, setPasteSplitModal] = useState<PasteSplitModalState>({
-    isOpen: false,
-    targetIndex: -1,
-    candidateSteps: [],
-    originalContent: '',
-  });
+  const recoveryUserId = useAuthStore((state) => state.user?.id);
+  const [pasteSplitModal, setPasteSplitModal] =
+    useState<PasteSplitRecoveryDraft>({
+      isOpen: false,
+      targetIndex: -1,
+      candidateSteps: [],
+      originalContent: '',
+    });
+
+  useEffect(() => {
+    if (!recoveryUserId) return;
+    const draft = takeRecoveredEditorDraft(
+      'pasteSplit',
+      window.location.pathname + window.location.search,
+      recoveryUserId
+    );
+    if (draft) setPasteSplitModal(draft);
+  }, [recoveryUserId]);
+
+  useEffect(
+    () =>
+      registerEditorDraft('pasteSplit', () =>
+        pasteSplitModal.isOpen ? pasteSplitModal : undefined
+      ),
+    [pasteSplitModal]
+  );
+
+  const updatePasteSplitSteps = useCallback((steps: string[]) => {
+    setPasteSplitModal((previous) => ({ ...previous, candidateSteps: steps }));
+  }, []);
 
   const handleInstructionPaste = useCallback(
     (e: ClipboardEvent<HTMLTextAreaElement>, idx: number) => {
@@ -121,5 +144,6 @@ export function usePasteSplit({
     handlePasteAsSingle,
     handlePasteSplitCancel,
     closePasteSplitModal,
+    updatePasteSplitSteps,
   };
 }

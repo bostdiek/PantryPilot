@@ -22,7 +22,6 @@ concurrency:
 
 env:
   AZURE_RESOURCE_GROUP: rg-pantrypilot-dev
-  DEPLOY_ENV: dev
 
 jobs:
   determine-deploy-trigger:
@@ -218,11 +217,18 @@ jobs:
 
       - name: Get database connection string from Key Vault
         id: secrets
+        env:
+          AZURE_UNIQUE_SUFFIX: ${{ needs.inspect-dev-hosting.outputs.suffix }}
         run: |
+          set -euo pipefail
           DB_CONNECTION=$(az keyvault secret show \
-            --vault-name "ppkvdev${{ needs.inspect-dev-hosting.outputs.suffix }}" \
+            --vault-name "ppkvdev${AZURE_UNIQUE_SUFFIX}" \
             --name dbConnectionString \
             --query value -o tsv)
+          if [[ -z "$DB_CONNECTION" ]]; then
+            echo "::error::The existing development database connection is required before deployment."
+            exit 1
+          fi
           echo "::add-mask::$DB_CONNECTION"
           echo "DATABASE_URL=$DB_CONNECTION" >> $GITHUB_ENV
 

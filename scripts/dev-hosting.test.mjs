@@ -306,10 +306,9 @@ test("dev parameters require a live snapshot and build wires both custom origins
   );
   assert.match(main, /environmentName == 'dev' && isDevCustomHostingEnabled/);
   assert.match(main, /param backendCustomDomains array\?\s/);
-  assert.doesNotMatch(
-    read("infra/parameters/main.prod.bicepparam"),
-    /isDevCustomHostingEnabled|backendCustomDomains/,
-  );
+  const prodParams = read("infra/parameters/main.prod.bicepparam");
+  assert.doesNotMatch(prodParams, /isDevCustomHostingEnabled|DEV_BACKEND_CUSTOM_DOMAINS/);
+  assert.match(prodParams, /json\(readEnvironmentVariable\('BACKEND_CUSTOM_DOMAINS', '\[\]'\)\)/);
   assert.ok(
     dev.indexOf("node scripts/dev-hosting.mjs health") >
       dev.indexOf("uses: Azure/static-web-apps-deploy@v1"),

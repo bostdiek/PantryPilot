@@ -11,6 +11,7 @@ import type {
 } from '../../types/AIDraft';
 import { ApiErrorImpl } from '../../types/api';
 import { apiClient, getApiBaseUrl } from '../client';
+import { authenticatedFetch } from '../session';
 
 /**
  * Validates that a URL is a safe internal path before navigation.
@@ -302,7 +303,7 @@ export async function extractRecipeStreamFetch(
   const API_BASE_URL = getApiBaseUrl();
 
   try {
-    const response = await fetch(
+    const response = await authenticatedFetch(
       `${API_BASE_URL}/api/v1/ai/extract-recipe-stream?${params.toString()}`,
       {
         method: 'GET',
@@ -442,14 +443,12 @@ export async function extractRecipeFromImageStream(
     // Step 1: Upload the image(s) using POST endpoint to get draft_id
     const formData = createImageUploadFormData(files);
 
-    const uploadResponse = await fetch(
+    const uploadResponse = await authenticatedFetch(
       `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
       {
         method: 'POST',
         headers,
-        // Include cookies for same-origin sessions only to reduce CSRF risk
         // (some deployments use cookie-based session auth rather than Bearer tokens)
-        credentials: 'same-origin',
         body: formData,
         signal: abortController.signal,
       }
@@ -470,15 +469,7 @@ export async function extractRecipeFromImageStream(
         respText
       );
 
-      // If unauthorized, log the user out (consistent with apiClient) and surface error
-      // Only trigger 'expired' if the user was actually logged in
       if (uploadResponse.status === 401) {
-        try {
-          const wasLoggedIn = useAuthStore.getState().token !== null;
-          useAuthStore.getState().logout(wasLoggedIn ? 'expired' : undefined);
-        } catch {
-          /* ignore logout errors */
-        }
         onError(
           new ApiErrorImpl('Unauthorized - please sign in', 401, 'unauthorized')
         );
@@ -511,7 +502,7 @@ export async function extractRecipeFromImageStream(
       draft_id: draftId,
     });
 
-    const streamResponse = await fetch(
+    const streamResponse = await authenticatedFetch(
       `${API_BASE_URL}/api/v1/ai/extract-recipe-image-stream?${params.toString()}`,
       {
         method: 'GET',
@@ -632,13 +623,12 @@ export async function extractRecipeFromImage(
   // auth headers are handled by getAuthHeaders(); no debug logging here
   const API_BASE_URL = getApiBaseUrl();
 
-  const response = await fetch(
+  const response = await authenticatedFetch(
     `${API_BASE_URL}/api/v1/ai/extract-recipe-from-image`,
     {
       method: 'POST',
       headers,
       // Ensure cookies are sent when the backend relies on cookie-based auth
-      credentials: 'same-origin',
       body: formData,
     }
   );
@@ -657,13 +647,6 @@ export async function extractRecipeFromImage(
       respText
     );
     if (response.status === 401) {
-      try {
-        // Only trigger 'expired' if the user was actually logged in
-        const wasLoggedIn = useAuthStore.getState().token !== null;
-        useAuthStore.getState().logout(wasLoggedIn ? 'expired' : undefined);
-      } catch {
-        /* ignore logout errors */
-      }
       throw new ApiErrorImpl(
         'Unauthorized - please sign in',
         401,
