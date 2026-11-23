@@ -21,6 +21,26 @@ from core.observability import (
 )
 
 
+def test_installed_azure_monitor_dependencies_are_importable() -> None:
+    """Catch SDK/exporter incompatibilities hidden by mocked configuration tests."""
+    from azure.monitor.opentelemetry import configure_azure_monitor
+    from azure.monitor.opentelemetry.exporter import (
+        AzureMonitorLogExporter,
+        AzureMonitorMetricExporter,
+        AzureMonitorTraceExporter,
+    )
+
+    assert all(
+        callable(component)
+        for component in (
+            configure_azure_monitor,
+            AzureMonitorLogExporter,
+            AzureMonitorMetricExporter,
+            AzureMonitorTraceExporter,
+        )
+    )
+
+
 class TestIsObservabilityEnabled:
     """Tests for _is_observability_enabled function."""
 

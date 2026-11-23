@@ -1,24 +1,36 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { act } from 'react';
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
+import { fetchMessages } from '../../../api/endpoints/chat';
 import { useChatStore } from '../../../stores/useChatStore';
 import { ConversationList } from '../ConversationList';
 
+vi.mock(import('../../../api/endpoints/chat'), async (importOriginal) => ({
+  ...(await importOriginal()),
+  fetchMessages: vi.fn(),
+}));
+
 describe('ConversationList', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchMessages).mockResolvedValue({
+      messages: [],
+      has_more: false,
+    });
     localStorage.clear();
 
     act(() => {
       useChatStore.setState({
+        ...useChatStore.getInitialState(),
         hasHydrated: true,
-        conversations: [],
-        activeConversationId: null,
-        messagesByConversationId: {},
-        isLoading: false,
       });
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   test('compact mode shows empty state and disables selector when no chats', () => {
@@ -55,13 +67,24 @@ describe('ConversationList', () => {
 
     render(<ConversationList compact />);
 
-    fireEvent.change(screen.getByLabelText('Select a conversation'), {
-      target: { value: 'c2' },
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Select a conversation'), {
+        target: { value: 'c2' },
+      });
     });
 
     expect(switchSpy).toHaveBeenCalledWith('c2');
+    expect(fetchMessages).toHaveBeenCalledWith('c2', 200);
+    expect(useChatStore.getState()).toMatchObject({
+      activeConversationId: 'c2',
+      messagesByConversationId: { c2: [] },
+      isLoading: false,
+      error: null,
+    });
 
-    fireEvent.click(screen.getByRole('button', { name: 'New Chat' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'New Chat' }));
+    });
     expect(createSpy).toHaveBeenCalled();
   });
 
@@ -141,7 +164,7 @@ describe('ConversationList', () => {
     expect(chat1ConversationButton).toHaveAttribute('aria-current', 'page');
   });
 
-  test('desktop list switches conversations when clicking an inactive item', () => {
+  test('desktop list switches conversations when clicking an inactive item', async () => {
     act(() => {
       useChatStore.setState({
         conversations: [
@@ -178,11 +201,17 @@ describe('ConversationList', () => {
     expect(chat2ConversationButton).not.toHaveAttribute('aria-current');
 
     // Click on Chat 2 conversation button (not the delete button)
-    act(() => {
+    await act(async () => {
       fireEvent.click(chat2ConversationButton!);
     });
 
-    expect(useChatStore.getState().activeConversationId).toBe('c2');
+    expect(fetchMessages).toHaveBeenCalledWith('c2', 200);
+    expect(useChatStore.getState()).toMatchObject({
+      activeConversationId: 'c2',
+      messagesByConversationId: { c2: [] },
+      isLoading: false,
+      error: null,
+    });
 
     // After clicking, Chat 2 should now be active
     const chat2ButtonsAfterClick = screen.getAllByRole('button', {

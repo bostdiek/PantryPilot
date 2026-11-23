@@ -9,11 +9,10 @@ vi.mock('react-dom/client', () => ({
 }));
 vi.mock('../App', () => ({ default: () => null }));
 
-describe('production canonical origin', () => {
+describe('canonical hosting origin', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    vi.stubEnv('VITE_CANONICAL_ORIGIN', 'https://smartmealplanner.app');
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -21,23 +20,27 @@ describe('production canonical origin', () => {
   });
 
   it.each([
-    'https://example.azurestaticapps.net',
-    'https://www.smartmealplanner.app',
+    ['https://example.azurestaticapps.net', 'https://dev.smartmealplanner.app'],
+    ['https://smartmealplanner.app', 'https://dev.smartmealplanner.app'],
+    ['https://www.smartmealplanner.app', 'https://dev.smartmealplanner.app'],
+    ['https://example.azurestaticapps.net', 'https://smartmealplanner.app'],
+    ['https://www.smartmealplanner.app', 'https://smartmealplanner.app'],
   ])(
-    'redirects %s before rendering while preserving the full route',
-    async (origin) => {
+    'redirects %s to %s before rendering and preserves the full route',
+    async (origin, canonical) => {
+      vi.stubEnv('VITE_CANONICAL_ORIGIN', canonical);
       vi.stubGlobal('window', {
         location: {
           origin,
           pathname: '/reset-password',
-          search: '?token=example',
+          search: '?token=a%2Bb&next=%2Frecipes',
           hash: '#form',
           replace,
         },
       });
       await import('../main');
       expect(replace).toHaveBeenCalledExactlyOnceWith(
-        'https://smartmealplanner.app/reset-password?token=example#form'
+        `${canonical}/reset-password?token=a%2Bb&next=%2Frecipes#form`
       );
       expect(render).not.toHaveBeenCalled();
     }
@@ -45,8 +48,10 @@ describe('production canonical origin', () => {
 
   it.each([
     ['https://smartmealplanner.app', 'https://smartmealplanner.app'],
+    ['https://dev.smartmealplanner.app', 'https://dev.smartmealplanner.app'],
     ['http://localhost:5173', ''],
-  ])('renders %s without a redirect', async (origin, canonical) => {
+    ['https://smartmealplanner.app', ''],
+  ])('renders %s with canonical value %s', async (origin, canonical) => {
     vi.stubEnv('VITE_CANONICAL_ORIGIN', canonical);
     vi.stubGlobal('window', { location: { origin, replace } });
     await import('../main');

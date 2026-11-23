@@ -38,7 +38,7 @@ param highAvailability string = 'Disabled'
 param allowedIpRanges array = []
 
 // PostgreSQL Flexible Server resource
-resource postgreSQLServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
+resource postgreSQLServer 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
   name: name
   location: location
   tags: tags
@@ -77,7 +77,7 @@ resource postgreSQLServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-
 
 // Enable required PostgreSQL extensions
 // Note: This must complete before other configuration changes to avoid ServerIsBusy errors
-resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2023-06-01-preview' = {
+resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2025-08-01' = {
   parent: postgreSQLServer
   name: 'azure.extensions'
   properties: {
@@ -88,7 +88,7 @@ resource postgresExtensions 'Microsoft.DBforPostgreSQL/flexibleServers/configura
 
 // Create the PantryPilot database
 // Depends on extensions to serialize operations and avoid ServerIsBusy errors
-resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06-01-preview' = {
+resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-01' = {
   parent: postgreSQLServer
   name: 'pantrypilot'
   dependsOn: [postgresExtensions]
@@ -100,7 +100,7 @@ resource postgreSQLDatabase 'Microsoft.DBforPostgreSQL/flexibleServers/databases
 
 // Allow Azure services to connect
 // Depends on database to serialize operations and avoid ServerIsBusy errors
-resource postgreSQLFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = {
+resource postgreSQLFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2025-08-01' = {
   parent: postgreSQLServer
   name: 'AllowAzureServices'
   dependsOn: [postgreSQLDatabase]
@@ -112,7 +112,7 @@ resource postgreSQLFirewallRule 'Microsoft.DBforPostgreSQL/flexibleServers/firew
 
 // Additional firewall rules for specific IP ranges
 // Depends on the base firewall rule to serialize operations
-resource additionalFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = [
+resource additionalFirewallRules 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2025-08-01' = [
   for (ipRange, index) in allowedIpRanges: {
     parent: postgreSQLServer
     name: 'AllowedRange${index}'

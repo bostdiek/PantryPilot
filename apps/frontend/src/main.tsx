@@ -1,7 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
-
 const canonicalOrigin = import.meta.env.VITE_CANONICAL_ORIGIN;
 if (canonicalOrigin && window.location.origin !== canonicalOrigin) {
   window.location.replace(

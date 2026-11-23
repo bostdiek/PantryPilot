@@ -116,9 +116,10 @@ credentials remains required.
 The production build sets `VITE_API_URL` to the custom API URL and
 `VITE_CANONICAL_ORIGIN` to the canonical frontend origin. Opening the default
 Static Web Apps hostname (or `www`) redirects to the canonical origin,
-preserving the path, query, and fragment. Development builds leave the canonical
-origin unset. Authentication state is origin-scoped, so the first visit after
-switching origins may require sign-in again.
+preserving the path, query, and fragment. Hosted development uses its own
+canonical origin when [custom dev domains](./dev-custom-domains.md) are enabled.
+Authentication state is origin-scoped, so the first visit after switching
+origins may require sign-in again.
 
 This keeps Static Web Apps on its existing Free plan. Container Apps supports a
 free managed certificate; there is no intended additional fixed hosting charge
@@ -164,10 +165,12 @@ requires the paid Standard plan and is not enabled here.
 
 ## Development deployment
 
-The development workflow also applies migrations before any infrastructure or
-backend update. It reads the existing `dbConnectionString` from
-`ppkvdevdev001`; missing credentials or failed migrations block publication.
-Bootstrap new environments before using this workflow.
+The development workflow discovers the existing resource suffix and uses it to
+read `dbConnectionString` from the corresponding Key Vault. It checks the
+database against the selected ref's Alembic graph and applies pending migrations
+before updating infrastructure or the backend. Missing credentials or failed
+migrations block publication. Bootstrap new environments before using this
+workflow.
 
 To deploy a PR branch without merging, manually run **Build Container Images**
 on that branch with environment `dev`. After it succeeds, manually run
