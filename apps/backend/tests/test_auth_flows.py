@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -302,7 +302,7 @@ class TestVerifyEmailUnit:
         payload = SimpleNamespace(token="bad-token")
 
         with pytest.raises(HTTPException) as exc:
-            await auth_mod.verify_email(payload, db)
+            await auth_mod.verify_email(payload, db, Response())
 
         assert exc.value.status_code == status.HTTP_400_BAD_REQUEST
         assert exc.value.detail == "Invalid or expired verification token"

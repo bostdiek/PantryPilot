@@ -4,6 +4,7 @@
 
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getApiBaseUrl } from '../client';
+import { authenticatedFetch } from '../session';
 
 /**
  * Feedback types for training data quality signals.
@@ -42,7 +43,7 @@ export async function submitMessageFeedback(
   const API_BASE_URL = getApiBaseUrl();
   const url = `${API_BASE_URL}/api/v1/messages/${messageId}/feedback`;
 
-  const response = await fetch(url, {
+  const response = await authenticatedFetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

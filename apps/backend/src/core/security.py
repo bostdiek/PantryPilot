@@ -105,6 +105,7 @@ def decode_token(token: str) -> TokenData:
     return TokenData(
         sub=str(sub),
         scopes=list(scopes) if isinstance(scopes, list) else [],
+        sid=str(payload["sid"]) if payload.get("sid") else None,
     )
 
 

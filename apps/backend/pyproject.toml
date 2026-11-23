@@ -6,10 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.20.1",
-    "fastapi[standard]>=0.141.1",
+    "fastapi[standard]>=0.163.1",
     "uvicorn>=0.54.0",
-    "gunicorn>=26.2.0",
-    "sqlalchemy>=2.1.6,<2.2",
+    "gunicorn>=27.0.1",
+    "sqlalchemy>=2.1.8,<2.2",
     "asyncpg>=0.32.0",
     "greenlet>=3.5.6",
     "pyjwt[crypto]==2.15.1",
@@ -18,21 +18,21 @@ dependencies = [
     "protobuf>=7.36.2",
     "httpx>=0.28.1",
     "beautifulsoup4>=4.15.0",
-    "pydantic-ai-slim[google,openai]==2.63.0",
-    "openai>=3.42.0",
+    "pydantic-ai-slim[google,openai]==2.66.0",
+    "openai>=3.49.0",
     "pillow>=13.0.0",
     "azure-communication-email>=1.1.0",
     "itsdangerous>=2.2.0",
     "upstash-ratelimit>=1.2.0",
-    "upstash-redis>=1.8.0",
+    "upstash-redis>=1.9.0",
     "timezonefinder>=9.2.0",
     "markdownify>=1.2.3",
     "pgvector>=0.5.1",
     "numpy>=2.5.4",
-    "google-genai>=2.33.0",
+    "google-genai>=2.34.0",
     "apscheduler>=3.11.3",
-    "azure-monitor-opentelemetry>=1.8.11",
-    "opentelemetry-api>=1.45.1,<1.46",
+    "azure-monitor-opentelemetry>=1.8.12",
+    "opentelemetry-api>=1.45.2,<1.46",
     "opentelemetry-sdk>=1.45.1,<1.46",
     "httpx2==2.16.0",
 ]
@@ -42,10 +42,10 @@ dev = [
     "pre-commit>=4.7.0",
     "pytest>=9.2.0",
     "pytest-cov>=7.1.0",
-    "pytest-asyncio>=1.4.1",
+    "pytest-asyncio>=1.4.1.post1",
     "httpx>=0.27.0",
     "aiosqlite>=0.20.0",
-    "ruff>=0.17.3",
+    "ruff>=0.17.4",
     "mypy>=2.4.1",
     "python-json-logger>=4.2.0",
     "detect-secrets>=1.5.0",
@@ -54,7 +54,7 @@ dev = [
     "tqdm>=4.70.1",
 ]
 dapt = [
-    "pandas>=3.1.0",
+    "pandas>=3.1.1",
     "tqdm>=4.70.1",
     "kaggle>=2.2.5",
     "azure-ai-ml>=1.35.1",
@@ -82,6 +82,7 @@ quote-style = "double"
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
+known-third-party = ["alembic"]
 combine-as-imports = true
 lines-after-imports = 2
 
